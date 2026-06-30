@@ -2,11 +2,16 @@
 // neuroviz — animated 2D ERD topomap (inverse-distance interpolation) + waveforms for BCI IV-2a.
 // No build step: serve this dir (`python -m http.server`) and open index.html.
 
-// state.map ∈ {"mu","beta","csp0","csp1",…}; one unified selector instead of view+band+component toggles.
+// state.map ∈ {"mu","beta","csp0…csp5","riemann"}; one unified selector across methods.
 const state = { data:null, map:"mu", cls:null, frame:25, playing:false };
 const $ = (id) => document.getElementById(id);
 const isCsp = () => state.map.startsWith("csp");
+const isRiemann = () => state.map === "riemann";
+const isPerClass = () => !isCsp();          // band power + Riemann are per-class; CSP filters are not
 const cspIdx = () => +state.map.slice(3);
+// method family of the current map + each family's default map (the method dropdown picks the family)
+const family = () => isCsp() ? "csp" : isRiemann() ? "riemann" : "band";
+const FAMILY_DEFAULT = { band:"mu", csp:"csp0", riemann:"riemann" };
 
 // layout / render constants (no magic numbers inline)
 const LAYOUT = {
@@ -33,12 +38,14 @@ const nFrames = () => state.data.frame_times.length;
 function currentValues(){
   const d=state.data;
   if (isCsp()) return d.csp_patterns[cspIdx()];
+  if (isRiemann()) return d.riemann_patterns[state.cls];
   return d.frames[state.map][state.cls][state.frame];
 }
-// stable color scale (CSP: the pattern; band: across the whole animation so playback is comparable)
+// stable color scale (CSP/Riemann: the static pattern; band: across the whole animation so playback is comparable)
 function scaleMax(){
   const d=state.data;
   if (isCsp()) return Math.max(...d.csp_patterns[cspIdx()].map(Math.abs))||1;
+  if (isRiemann()) return Math.max(...d.riemann_patterns[state.cls].map(Math.abs))||1;
   let m=1e-9;
   for (const fr of d.frames[state.map][state.cls]) for (const v of fr) m=Math.max(m,Math.abs(v));
   return m;
@@ -75,6 +82,8 @@ function renderTopo(){
   }
   $("hint").textContent = isCsp()
     ? `CSP component ${cspIdx()+1} — the spatial filter the baseline decoder learned (weight per electrode).`
+    : isRiemann()
+    ? `Riemann discriminant, ${state.cls.replace("_"," ")} — per-channel weight of the tangent-space classifier (covariance is the feature; no spatial filter). Switch class to see the pattern move.`
     : `${state.map} ERD, ${state.cls.replace("_"," ")} — blue = motor cortex desynchronizing; switch class to see the active side move.`;
 }
 
@@ -122,25 +131,36 @@ function play(on){
   if(on) timer=setInterval(()=>{ state.frame=(state.frame+1)%nFrames(); render(); }, LAYOUT.frameMs);
 }
 
-function buildMapbar(){
-  const bar=$("map"); bar.innerHTML="";
-  // signal (band power) — mu / beta as quick buttons
-  const sg=document.createElement("div"); sg.className="mapgroup";
-  const sl=document.createElement("span"); sl.className="glabel"; sl.textContent="signal (band power)"; sg.appendChild(sl);
-  const seg=document.createElement("div"); seg.className="seg";
-  [["mu","mu"],["beta","beta"]].forEach(([k,t])=>{
-    const b=document.createElement("button"); b.textContent=t; b.dataset.k=k;
-    b.onclick=()=>{ state.map=k; sync(); render(); }; seg.appendChild(b);
-  });
-  sg.appendChild(seg); bar.appendChild(sg);
-  // filters (CSP) — a dropdown (6 of them)
-  const fg=document.createElement("div"); fg.className="mapgroup";
-  const fl=document.createElement("span"); fl.className="glabel"; fl.textContent="filters (CSP)"; fg.appendChild(fl);
-  const sel=document.createElement("select"); sel.id="cspsel";
-  const ph=document.createElement("option"); ph.value=""; ph.textContent="CSP filter…"; sel.appendChild(ph);
-  state.data.csp_patterns.forEach((_,i)=>{ const o=document.createElement("option"); o.value="csp"+i; o.textContent="CSP "+(i+1); sel.appendChild(o); });
-  sel.onchange=()=>{ if(sel.value){ state.map=sel.value; sync(); render(); } };
-  fg.appendChild(sel); bar.appendChild(fg);
+// method dropdown (next to subject): band power · CSP · Riemann — picks the map family.
+function buildMethod(){
+  const sel=$("method"); sel.innerHTML="";
+  const opts=[["band","band power"],["csp","CSP"]];
+  if(state.data.riemann_patterns) opts.push(["riemann","Riemann"]);
+  opts.forEach(([k,t])=>{ const o=document.createElement("option"); o.value=k; o.textContent=t; sel.appendChild(o); });
+  sel.onchange=()=>{ state.map=FAMILY_DEFAULT[sel.value]; buildSubmaps(); sync(); render(); };
+}
+// sub-controls for the chosen method: band -> mu/beta buttons; CSP -> filter dropdown; Riemann -> none.
+function buildSubmaps(){
+  const bar=$("map"); bar.innerHTML=""; const f=family();
+  if(f==="band"){
+    const sg=document.createElement("div"); sg.className="mapgroup";
+    const sl=document.createElement("span"); sl.className="glabel"; sl.textContent="band"; sg.appendChild(sl);
+    const seg=document.createElement("div"); seg.className="seg";
+    [["mu","mu"],["beta","beta"]].forEach(([k,t])=>{
+      const b=document.createElement("button"); b.textContent=t; b.dataset.k=k;
+      b.onclick=()=>{ state.map=k; sync(); render(); }; seg.appendChild(b);
+    });
+    sg.appendChild(seg); bar.appendChild(sg);
+  } else if(f==="csp"){
+    const fg=document.createElement("div"); fg.className="mapgroup";
+    const fl=document.createElement("span"); fl.className="glabel"; fl.textContent="filter"; fg.appendChild(fl);
+    const sel=document.createElement("select"); sel.id="cspsel";
+    state.data.csp_patterns.forEach((_,i)=>{ const o=document.createElement("option"); o.value="csp"+i; o.textContent="CSP "+(i+1); sel.appendChild(o); });
+    sel.value=state.map;
+    sel.onchange=()=>{ state.map=sel.value; sync(); render(); };
+    fg.appendChild(sel); bar.appendChild(fg);
+  }
+  // riemann: per-class discriminant, no sub-control (class chosen on the classbar)
 }
 function buildClassbar(){
   const bar=$("classbar"); bar.innerHTML="";
@@ -152,13 +172,14 @@ function buildClassbar(){
   });
 }
 function sync(){
+  $("method").value=family();
   $("map").querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.k===state.map));
-  const sel=$("cspsel"); if(sel) sel.value = isCsp()?state.map:"";   // reset CSP dropdown when a band is active
+  const sel=$("cspsel"); if(sel) sel.value=state.map;
   [...$("classbar").children].forEach(b=>b.classList.toggle("on", b.dataset.c===state.cls));
-  const csp=isCsp();                          // class + time apply only to band-power maps
-  $("classbar").hidden=csp;
-  $("player").hidden=csp;
-  if(csp) play(false);
+  $("classbar").hidden=!isPerClass();         // class applies to band power + Riemann (per-class), not CSP
+  const animated=isPerClass()&&!isRiemann();  // only band power has time frames
+  $("player").hidden=!animated;
+  if(!animated) play(false);
 }
 
 async function loadSubject(s){
@@ -166,7 +187,7 @@ async function loadSubject(s){
   state.cls=state.data.classes.includes("left_hand")?"left_hand":state.data.classes[0];
   state.map="mu"; state.frame=Math.floor(nFrames()/2);
   $("scrub").max=nFrames()-1;
-  buildMapbar(); buildClassbar(); sync(); render();
+  buildMethod(); buildSubmaps(); buildClassbar(); sync(); render();
 }
 
 async function init(){

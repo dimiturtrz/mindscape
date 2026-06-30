@@ -9,8 +9,11 @@ inherently 2D-surface, and topomaps are what the field actually uses.
 **Shows, for a BCI IV-2a subject:**
 - **Band-power topomaps** (mu 8–12 Hz, beta 13–30 Hz) per class — the motor-imagery signature: imagining
   one hand desynchronizes the *contralateral* motor cortex (the hot spot flips C3↔C4 between left/right hand).
-- **CSP spatial patterns** — what the baseline decoder actually learns (should localize over C3/C4 →
-  physiologically real features, not artifacts).
+- **CSP spatial patterns** — what the CSP baseline learns (should localize over C3/C4 → physiologically
+  real features, not artifacts).
+- **Riemannian discriminant** — per-class channel weights of the tangent-space classifier
+  (the strongest baseline, 0.706 within-subject). Here the *covariance* is the feature, so the map shows
+  which channels' power drives each class — a different lens on the same signal than CSP's spatial filters.
 - **Waveforms** — all 22 channels for an example trial, each colored by its contribution to the selected
   map (band power or CSP filter) — so the channels that drive the current view light up, no hardcoded highlight.
 

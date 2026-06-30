@@ -90,6 +90,32 @@ def _csp_patterns(ep, labels, n=N_CSP):
     return [(row / (np.abs(row).max() + 1e-9)).tolist() for row in pat]
 
 
+def _riemann_patterns(ep, labels):
+    """Per-class Riemannian discriminant channel weights — what the tangent-space classifier learned.
+
+    Fits the tangent-space + logistic-regression baseline (baselines/riemann.py), then reads each class's
+    weight vector over the (whitened-log) covariance entries and keeps its DIAGONAL: per-channel weight =
+    how much that channel's own power drives the logit for the class. Parallel to CSP patterns, but here
+    the feature is the covariance itself (no spatial filters). Returns {class: [w per channel]}, normalized.
+    """
+    from baselines import riemann
+    X = ep.get_data() * 1e6
+    clf = riemann.fit(X.astype(np.float64), np.asarray(labels), method="ts")
+    lr = clf.named_steps["logisticregression"]
+    coef = np.atleast_2d(lr.coef_)                         # [n_class, n_tri] over upper-triangular cov entries
+    classes = [str(c) for c in lr.classes_]
+    if coef.shape[0] == 1 and len(classes) == 2:           # binary LR: one row = class[1] vs class[0]
+        coef = np.vstack([-coef[0], coef[0]])
+    n_ch = len(ep.ch_names)
+    iu = np.triu_indices(n_ch)                             # pyriemann vectorization order (row-major upper)
+    diag = iu[0] == iu[1]                                  # the diagonal (per-channel) entries
+    out = {}
+    for c, row in zip(classes, coef):
+        w = np.asarray(row)[diag]
+        out[c] = (w / (np.abs(w).max() + 1e-9)).tolist()
+    return out
+
+
 def _waveforms(ep, labels, per_class=PER_CLASS, n_t=N_WAVE_T):
     """One example trial per class, ALL channels (downsampled to ~n_t points for display).
     The viewer colors each channel by its contribution to the selected view — no hardcoded highlight."""
@@ -126,6 +152,7 @@ def main():
         "frames": {"mu": mu_fr, "beta": beta_fr},
         "frame_times": ftimes,
         "csp_patterns": _csp_patterns(ep, labels),
+        "riemann_patterns": _riemann_patterns(ep, labels),
         "waveforms": _waveforms(ep, labels),
     }
     out = Path(args.out)
