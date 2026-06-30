@@ -17,6 +17,7 @@ import numpy as np
 import polars as pl
 
 from core.data.eeg import braindecode_pre
+from neuroscan import tracking
 from neuroscan.evaluation import metrics
 from neuroscan.models import decoders
 
@@ -69,9 +70,17 @@ def main():
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / f"{args.method}.json").write_text(json.dumps(
-        {"method": args.method, "epochs": args.epochs, "acc_mean": acc, "kappa_mean": kap,
-         "per_subject": rows}, indent=2))
+    report = {"method": args.method, "epochs": args.epochs, "standardize": args.standardize,
+              "batch": args.batch, "seeds": args.seeds, "acc_mean": acc, "kappa_mean": kap,
+              "per_subject": rows}
+    (out / f"{args.method}.json").write_text(json.dumps(report, indent=2))
+    with tracking.run("mindscape", f"reproduce_{args.method}",
+                      params={"method": args.method, "standardize": args.standardize,
+                              "batch": args.batch, "epochs": args.epochs, "seeds": args.seeds},
+                      tags={"kind": "reproduction"}, run_dir=out):
+        tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
+        tracking.per_group("acc_subject", {r["subject"]: r["acc"] for r in rows})
+        tracking.artifact(out / f"{args.method}.json")
     print(f"-> {out}/{args.method}.json")
 
 

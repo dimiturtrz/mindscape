@@ -19,6 +19,7 @@ import polars as pl
 from core import export_onnx
 from core.data import store
 from core.data.eeg.base import EpochCfg
+from neuroscan import tracking
 from neuroscan.evaluation import metrics
 from neuroscan.models import decoders
 
@@ -94,7 +95,18 @@ def main():
     except Exception as e:
         rep["int8_error"] = str(e)
 
+    rep_dir = out / f"{args.method}_sub{sub}"
+    rep_dir.mkdir(parents=True, exist_ok=True)
     (out / f"{args.method}_sub{sub}.json").write_text(json.dumps(rep, indent=2))
+    with tracking.run("mindscape", f"quantize_{args.method}",
+                      params={"method": args.method, "subject": str(sub)},
+                      tags={"kind": "quantize"}, run_dir=rep_dir):
+        a, s, l = rep["accuracy"], rep["size_mb"], rep["latency_ms_cpu"]
+        m = {"acc_torch_fp32": a["torch_fp32"], "acc_onnx_fp32": a["onnx_fp32"],
+             "size_fp32_mb": s["fp32"], "latency_fp32_ms": l["fp32"], "parity_max_dlogit": gap}
+        if "onnx_int8" in a:
+            m.update({"acc_onnx_int8": a["onnx_int8"], "size_int8_mb": s["int8"], "latency_int8_ms": l["int8"]})
+        tracking.metrics(m)
     print(f"\n=== {args.method} edge quantization (subject {sub}) ===")
     print(f"  parity max|Δlogit| {gap:.2e}  (gate < 1e-3) OK")
     a = rep["accuracy"]
