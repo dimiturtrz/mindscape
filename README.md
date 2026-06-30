@@ -60,8 +60,10 @@ whitening), target included and **unsupervised**. We implemented it ([`neuroscan
 | Riemann ACM (time-delay cov) | 0.351 |
 | **Riemann + re-centering** | **0.496** |
 
-**+0.139** over plain tangent space — the displacement *was* the gap. Richer features (ACM) don't transfer;
-removing the per-subject location shift does. (Re-centering is unsupervised on the target → deployment-real.)
+**+0.139** over plain tangent space — the displacement *was* the gap. And it's the *location*, not the
+features: ACM (richer time-delay covariances) scores 0.351 alone and **0.470 even with re-centering** —
+below plain re-centered tangent space (0.496). Removing the per-subject location shift is what transfers;
+adding features on top doesn't. (Re-centering is unsupervised on the target → deployment-real.)
 
 ## The decoders — measured
 We reproduce *standard* architectures (the decoder is commodity); the contribution is the eval rigor and
