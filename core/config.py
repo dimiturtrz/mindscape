@@ -92,7 +92,7 @@ def configure_moabb_download() -> Path:
         pass
     if os.name == "nt":
         # ONLY native Windows needs this — a Windows absolute path has a drive colon that MOABB's
-        # buggy sanitizer strips. Under WSL/POSIX the root is '/mnt/d/...' (no colon) so MOABB works
+        # buggy sanitizer strips. Under WSL/POSIX the root is '/mnt/<drive>/...' (no colon) so MOABB works
         # unpatched; that's the zero-patch native path (see to_native_path).
         _patch_moabb_drive_colon()
     return cache

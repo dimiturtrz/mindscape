@@ -7,6 +7,6 @@
 #
 # Env MINDSCAPE_DATA overrides this file (handy for CI).
 # Cross-platform: a Windows drive path is auto-translated by platform (core.config.to_native_path) —
-# 'D:/data/neural' is used as-is on Windows and as '/mnt/d/data/neural' under WSL/POSIX. So one config
-# works on both. Override the mount with MINDSCAPE_DATA if yours differs.
+# e.g. 'X:/eeg' is used as-is on Windows and as '/mnt/x/eeg' under WSL/POSIX. So one config works on
+# both. Override the mount with MINDSCAPE_DATA if yours differs.
 data: /path/to/neural-data
