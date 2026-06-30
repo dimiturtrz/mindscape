@@ -44,17 +44,27 @@ def _pos2d(info):
     return pos
 
 
-def _bandpower(ep, labels, fmin, fmax):
-    """Per-class mean log band power per channel, z-scored across channels (so the spatial pattern,
-    i.e. the ERD lateralization, is what's visible rather than absolute scale)."""
-    psd = ep.compute_psd(fmin=fmin, fmax=fmax, verbose="error")
-    p = psd.get_data().mean(axis=2)                        # [n_epochs, n_ch] mean power in band
-    p = np.log(p + 1e-20)
-    out = {}
+def _erd_frames(ep, labels, fmin, fmax, n_frames=50, baseline_s=0.5):
+    """Time-resolved ERD per class: band-limited power over the trial, baseline-normalized to the first
+    `baseline_s` (pre-imagery). Negative = event-related DESYNCHRONIZATION (the motor-imagery signature).
+    Returns ({class: [frame][ch]}, frame_times) — averaged across epochs, downsampled to n_frames."""
+    band = ep.copy().filter(fmin, fmax, verbose="error")
+    sf = ep.info["sfreq"]
+    X = band.get_data() * 1e6
+    power = X ** 2                                          # [n_epochs, ch, t]
+    T = power.shape[2]
+    t = np.arange(T) / sf
+    base_mask = t < baseline_s
+    edges = np.linspace(0, T, n_frames + 1).astype(int)
+    frames = {}
     for c in sorted(set(labels)):
-        v = p[labels == c].mean(0)
-        out[str(c)] = ((v - v.mean()) / (v.std() + 1e-9)).tolist()
-    return out
+        p = power[labels == c].mean(0)                     # [ch, t]
+        base = p[:, base_mask].mean(1, keepdims=True) + 1e-20
+        erd = (p - base) / base                            # ERD ratio per channel per time
+        fr = [erd[:, edges[i]:edges[i + 1]].mean(1).tolist() for i in range(n_frames)]
+        frames[str(c)] = fr
+    ftimes = [float((edges[i] + edges[i + 1]) / 2 / sf) for i in range(n_frames)]
+    return frames, ftimes
 
 
 def _csp_patterns(ep, labels, n=4):
@@ -88,13 +98,16 @@ def main():
     ep, labels = _load_epochs(args.subject)
     print(f"subject {args.subject}: {len(ep)} epochs, {len(ep.ch_names)} ch, classes {sorted(set(labels))}")
 
+    mu_fr, ftimes = _erd_frames(ep, labels, *MU)
+    beta_fr, _ = _erd_frames(ep, labels, *BETA)
     data = {
         "subject": str(args.subject),
         "sfreq": float(ep.info["sfreq"]),
         "channels": list(ep.ch_names),
         "pos": _pos2d(ep.info).tolist(),
         "classes": [str(c) for c in sorted(set(labels))],
-        "bandpower": {"mu": _bandpower(ep, labels, *MU), "beta": _bandpower(ep, labels, *BETA)},
+        "frames": {"mu": mu_fr, "beta": beta_fr},
+        "frame_times": ftimes,
         "csp_patterns": _csp_patterns(ep, labels),
         "waveforms": _waveforms(ep, labels, KEY_CHANS),
     }

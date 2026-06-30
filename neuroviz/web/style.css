@@ -19,6 +19,10 @@ canvas { background:transparent; }
 .classbar button, .cspbar button { background:#0e1116; color:var(--mut); border:1px solid var(--line);
   border-radius:999px; padding:4px 12px; cursor:pointer; font:inherit; }
 .classbar button.on, .cspbar button.on { border-color:var(--accent); color:var(--ink); }
+.player { display:flex; align-items:center; gap:10px; width:340px; }
+.player button { background:var(--accent); color:#fff; border:0; border-radius:7px; width:34px; height:30px; cursor:pointer; font-size:13px; }
+.player input[type=range] { flex:1; accent-color:var(--accent); }
+.tlabel { color:var(--mut); font-variant-numeric:tabular-nums; width:46px; text-align:right; }
 .cbar { display:flex; align-items:center; gap:8px; color:var(--mut); font-size:12px; }
 .cgrad { width:160px; height:10px; border-radius:6px;
   background:linear-gradient(90deg,#3b4cc0,#aab8ff,#f2f2f2,#ffb0a0,#b40426); }
