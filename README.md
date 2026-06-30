@@ -59,11 +59,17 @@ single-thread — `python -m neuroscan.models.profile`):
 | model | role | params | FLOPs | CPU latency | within-subj acc | kappa |
 |---|---|---|---|---|---|---|
 | CSP+LDA | baseline | — | — | — | 0.598 | 0.463 |
+| **Riemann (tangent space + LR)** | baseline | — | — | — | **0.706** | **0.609** |
 | **EEGNet** | compact CNN | **3.7K** | 13.7M | 1.5 ms | 0.606 | 0.475 |
 | **ATCNet** | attention + TCN | 114K | **2.8M** | 4.2 ms | 0.619 | 0.492 |
 | EEGConformer | transformer | 871K | 72M | 4.2 ms | — | — |
 
-Two honest findings fall out:
+Three honest findings fall out:
+- **Classical geometry wins within-subject here.** Riemannian tangent-space + LR ([`baselines/riemann.py`](baselines/riemann.py))
+  hits **0.706** — above both deep nets — the textbook BCI-2a result that treating each trial's *covariance*
+  as a point on a curved manifold beats raw-waveform DL when per-subject data is tiny (~288 trials). But its
+  *cross-subject* score is **0.357**, no better than CSP (0.382): plain tangent space doesn't transfer — the
+  manifold **re-centering** that closes that gap is the next step, not implemented yet.
 - **Tiny doesn't cost accuracy here.** The 3.7K-parameter EEGNet is within noise of the 30×-larger
   ATCNet (0.606 vs 0.619) on the same protocol — the edge-deployable model gives up essentially nothing.
 - **Already edge-sized.** These nets are ~26 KB as ONNX with sub-ms inference; the Stage-2 tail exports
@@ -100,6 +106,8 @@ cp paths.example.yaml paths.yaml                     # set the one data root
 # the headline contrast — the same decoder, two regimes:
 uv run python -m neuroscan.experiments.run --method csp_lda --regime within --test-session 1test
 uv run python -m neuroscan.experiments.run --method csp_lda --regime cross_subject   # the OOD gap
+# the strongest classical baseline — covariances on a Riemannian manifold:
+uv run python -m neuroscan.experiments.run --method riemann --regime within
 # a deep decoder, GPU:
 uv run python -m neuroscan.experiments.run --method atcnet --regime within --resample 250 --fmin 4 --fmax 40
 # the neuroviz demo:
