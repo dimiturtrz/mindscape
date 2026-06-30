@@ -90,15 +90,20 @@ def configure_moabb_download() -> Path:
         set_download_dir(native)
     except Exception:
         pass
-    _patch_moabb_drive_colon()
+    if os.name == "nt":
+        # ONLY native Windows needs this — a Windows absolute path has a drive colon that MOABB's
+        # buggy sanitizer strips. Under WSL/POSIX the root is '/mnt/d/...' (no colon) so MOABB works
+        # unpatched; that's the zero-patch native path (see to_native_path).
+        _patch_moabb_drive_colon()
     return cache
 
 
 def _patch_moabb_drive_colon() -> None:
-    """Work around a MOABB Windows bug: its `_sanitize_path` translates ':' -> '-' over the WHOLE path,
-    clobbering the drive colon ('D:\\...' -> 'D-\\...'), so downloads become RELATIVE and leak into the
-    repo cwd (the recurring `D-/` folder) + re-download every time. We replace it with a version that
-    preserves a leading drive letter and only sanitizes the rest. Idempotent."""
+    """Compat shim for a MOABB *Windows* bug (no upstream fix as of 1.5.0; no config flag avoids it,
+    and no colon-free absolute Windows path exists). MOABB's `_sanitize_path` translates ':' -> '-' over
+    the WHOLE path, clobbering the drive colon ('D:\\...' -> 'D-\\...'), so downloads become RELATIVE and
+    leak into the repo cwd (the recurring `D-/`) + re-download every time. We restore a leading drive and
+    sanitize only the rest (behavior-preserving otherwise). Idempotent. TODO: file/track upstream PR."""
     try:
         from pathlib import Path as _P
 
