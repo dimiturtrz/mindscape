@@ -14,53 +14,55 @@ import argparse
 import json
 from pathlib import Path
 
+from core import reference
 from core.data import store
 from core.data.eeg.base import EpochCfg
+from neuroscan import models
 from neuroscan.evaluation import harness
-from neuroscan.models import decoders
-
-
-def _method(name):
-    """(fit_fn, score_fn, n_classes) for a method name."""
-    if name == "csp_lda":
-        from baselines import csp_lda
-        return csp_lda.fit, csp_lda.score, 4
-    fit, score = decoders.make(name)
-    return fit, score, 4
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="bnci2014_001")
-    ap.add_argument("--method", default="csp_lda",
-                    choices=["csp_lda", *sorted(decoders.MODELS)])
+    ap.add_argument("--method", default="csp_lda", choices=models.method_names())
     ap.add_argument("--regime", default="within", choices=["within", "cross_subject"])
     ap.add_argument("--test-session", default=None,
                     help="within-subject: hold out this session as test (the standard 2a protocol)")
     ap.add_argument("--resample", type=float, default=128.0,
                     help="epoch resample rate (Hz); strong nets prefer native 250")
+    ap.add_argument("--fmin", type=float, default=8.0, help="band low cut (Hz); 4 = broadband for DL")
+    ap.add_argument("--fmax", type=float, default=32.0, help="band high cut (Hz); 40 = broadband for DL")
     ap.add_argument("--out", default=None, help="write aggregate.json here")
     args = ap.parse_args()
 
-    cfg = EpochCfg(resample=args.resample)
+    cfg = EpochCfg(resample=args.resample, fmin=args.fmin, fmax=args.fmax)
     meta = store.load(args.dataset, cfg)
     print(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · "
           f"sessions {sorted(meta['session'].unique().to_list())} · recipe {cfg.key()}")
 
     test_sessions = [args.test_session] if (args.regime == "within" and args.test_session) else ()
     folds = harness.folds_for(meta, args.regime, test_sessions=test_sessions)
-    fit_fn, score_fn, n_classes = _method(args.method)
+    fit_fn, score_fn = models.get_method(args.method)
+    n_classes = 4
+
+    run_dir = Path(args.out) if args.out else Path("runs") / f"{args.method}_{args.regime}_{args.dataset}"
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n=== {args.method} · {args.regime} · {args.dataset} ({len(folds)} folds) ===")
     res = harness.run(args.method, fit_fn, score_fn, folds, n_classes, regime=args.regime,
                       params={"method": args.method, "regime": args.regime,
-                              "dataset": args.dataset, "resample": args.resample})
+                              "dataset": args.dataset, "resample": args.resample},
+                      run_dir=run_dir)
 
-    out = Path(args.out) if args.out else Path("runs") / f"{args.method}_{args.regime}_{args.dataset}.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
+    out = run_dir / "aggregate.json"
     out.write_text(json.dumps(res, indent=2))
+    from neuroscan.evaluation import modelcard
+    modelcard.write(res, args.dataset, args.regime, run_dir / "CARD.md")
+    ref_regime = "within_subject" if args.regime == "within" else "cross_subject"
     print(f"\nfold-mean acc {res['fold_mean']['acc']:.3f} | pooled acc {res['pooled']['acc']:.3f} "
-          f"| ece {res['fold_mean']['ece']:.3f}\n-> {out}")
+          f"| ece {res['fold_mean']['ece']:.3f}")
+    print("  vs reference: " + reference.compare(res["fold_mean"]["acc"], args.dataset, ref_regime, args.method))
+    print(f"-> {out}")
 
 
 if __name__ == "__main__":

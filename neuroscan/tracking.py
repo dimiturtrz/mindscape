@@ -1,13 +1,17 @@
-"""Optional MLflow tracking — a thin, GUARDED layer (mirrors the siblings').
+"""MLflow experiment tracking — a thin, GUARDED layer (mirrors the siblings').
 
-If mlflow is absent or MINDSCAPE_NO_MLFLOW is set, every call is a no-op, so the harness never depends
-on it. It's the cross-run comparison UI (`mlflow ui`), not the source of truth — the aggregate.json
-artifact each run writes stays authoritative.
+Local sqlite backend (mlflow.db) + mlruns/ artifact store. If mlflow is absent or MINDSCAPE_NO_MLFLOW
+is set, every call is a no-op, so the harness never depends on it. It's the cross-run comparison UI
+(`mlflow ui --backend-store-uri sqlite:///mlflow.db`), not the source of truth — the runs/<name>/
+aggregate.json each run writes stays authoritative.
 
-    with tracking.run("mindscape", method, params={...}):
-        tracking.metrics({"acc_mean": 0.72})
-        tracking.per_group("acc_subject", {"1": 0.81, ...})
-        tracking.artifact_json("aggregate.json", res)
+    with tracking.run("mindscape", name, params={...}, tags={...}, run_dir="runs/x"):
+        tracking.metrics({"acc_mean": 0.58})
+        tracking.per_group("acc_subject", {"1": 0.75, ...})
+        tracking.artifact_json("aggregate.json", res)     # or tracking.artifact("runs/x/aggregate.json")
+
+`run_dir` enables resume: a later step (quantize / calibrate) reopening the same run_dir logs INTO the
+train run, so the UI shows the Stage-2 numbers next to the decode numbers — the sibling pattern.
 """
 from __future__ import annotations
 
@@ -46,8 +50,10 @@ def _flat(d: dict, prefix: str = "") -> dict:
 
 
 @contextmanager
-def run(experiment: str, run_name: str, params: dict | None = None):
-    """Open a tracked run (local mlruns/). No-op context if tracking is off; never breaks the caller."""
+def run(experiment: str, run_name: str, params: dict | None = None, tags: dict | None = None,
+        run_dir: str | Path | None = None):
+    """Open a tracked run (local mlruns/). No-op context if tracking is off; never breaks the caller.
+    If `run_dir` holds a .mlflow_run_id, resume that run (log into it); else start fresh and persist the id."""
     global _active
     mlflow = _mlflow()
     if mlflow is None:
@@ -57,9 +63,23 @@ def run(experiment: str, run_name: str, params: dict | None = None):
         _MLRUNS.mkdir(exist_ok=True)
         mlflow.set_tracking_uri(_DB_URI)
         mlflow.set_experiment(experiment)
-        mlflow.start_run(run_name=run_name)
-        if params:
-            mlflow.log_params(_flat(params))
+        try:
+            mlflow.enable_system_metrics_logging()      # GPU/CPU/mem (psutil + pynvml if present)
+        except Exception:
+            pass
+        idf = Path(run_dir) / ".mlflow_run_id" if run_dir else None
+        rid = idf.read_text().strip() if (idf and idf.exists()) else None
+        if rid:
+            mlflow.start_run(run_id=rid)                 # resume — don't re-log params
+        else:
+            mlflow.start_run(run_name=run_name)
+            if params:
+                mlflow.log_params(_flat(params))
+            if idf:
+                idf.parent.mkdir(parents=True, exist_ok=True)
+                idf.write_text(mlflow.active_run().info.run_id)
+        for k, v in (tags or {}).items():
+            mlflow.set_tag(k, str(v))
         _active = mlflow
         yield
     except Exception:
@@ -73,12 +93,12 @@ def run(experiment: str, run_name: str, params: dict | None = None):
         _active = None
 
 
-def metrics(d: dict) -> None:
+def metrics(d: dict, step: int | None = None) -> None:
     if _active is None:
         return
     for k, v in d.items():
         try:
-            _active.log_metric(k, float(v))
+            _active.log_metric(k, float(v), step=step)
         except Exception:
             pass
 
@@ -86,6 +106,27 @@ def metrics(d: dict) -> None:
 def per_group(prefix: str, d: dict) -> None:
     """Log a per-group scalar dict as <prefix>_<group> (e.g. acc_subject_1)."""
     metrics({f"{prefix}_{g}": v for g, v in d.items()})
+
+
+def set_tags(d: dict) -> None:
+    if _active is None:
+        return
+    for k, v in (d or {}).items():
+        try:
+            _active.set_tag(k, str(v))
+        except Exception:
+            pass
+
+
+def artifact(path: str | Path) -> None:
+    """Log an existing file as a run artifact."""
+    if _active is None:
+        return
+    try:
+        if Path(path).exists():
+            _active.log_artifact(str(path))
+    except Exception:
+        pass
 
 
 def artifact_json(name: str, obj) -> None:
@@ -97,3 +138,38 @@ def artifact_json(name: str, obj) -> None:
         _active.log_artifact(str(p))
     except Exception:
         pass
+
+
+def log_model(net, name: str) -> None:
+    """Log a torch module to the run (best-effort; guarded)."""
+    if _active is None:
+        return
+    try:
+        import mlflow.pytorch
+        mlflow.pytorch.log_model(net, name=name)
+    except Exception:
+        pass
+
+
+def backfill(experiment: str = "mindscape") -> None:
+    """One-shot: log existing runs/<name>/aggregate.json as runs, so the UI has history.
+    Skips runs already tracked (have .mlflow_run_id).  `python -m neuroscan.tracking`."""
+    runs_dir = _ROOT / "runs"
+    n = 0
+    for aj in sorted(runs_dir.glob("**/aggregate.json")):
+        rd = aj.parent
+        if (rd / ".mlflow_run_id").exists():
+            continue
+        res = json.loads(aj.read_text())
+        with run(experiment, rd.name, params={k: res.get(k) for k in ("method", "regime", "n_classes")},
+                 run_dir=rd):
+            fm = res.get("fold_mean", {})
+            metrics({f"{k}_mean": v for k, v in fm.items()})
+            artifact(aj)
+        n += 1
+        print(f"backfilled {rd.name}")
+    print(f"backfilled {n} run(s)")
+
+
+if __name__ == "__main__":
+    backfill()

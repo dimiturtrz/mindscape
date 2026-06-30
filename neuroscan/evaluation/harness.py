@@ -64,13 +64,18 @@ def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str 
 
 
 def run(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str = "",
-        params: dict | None = None) -> dict:
-    """aggregate + log to MLflow (guarded)."""
+        params: dict | None = None, run_dir=None) -> dict:
+    """aggregate + log to MLflow (guarded). `run_dir` (a runs/<name>/ dir) enables resume + artifacts."""
     res = aggregate(method, fit_fn, score_fn, folds, n_classes, regime)
-    with tracking.run("mindscape", f"{method}_{regime}", params=params or {"method": method, "regime": regime}):
-        tracking.metrics({"acc_mean": res["fold_mean"]["acc"], "kappa_mean": res["fold_mean"]["kappa"],
-                          "ece_mean": res["fold_mean"]["ece"], "acc_pooled": res["pooled"]["acc"],
-                          "acc_std": res["acc_spread"]["std"]})
+    fm, pooled = res["fold_mean"], res["pooled"]
+    tags = {"method": method, "regime": regime, "dataset": (params or {}).get("dataset", "")}
+    with tracking.run("mindscape", f"{method}_{regime}", params=params or {"method": method, "regime": regime},
+                      tags=tags, run_dir=run_dir):
+        tracking.metrics({"acc_mean": fm["acc"], "kappa_mean": fm["kappa"], "ece_mean": fm["ece"],
+                          "acc_pooled": pooled["acc"], "kappa_pooled": pooled["kappa"],
+                          "ece_pooled": pooled["ece"], "acc_std": res["acc_spread"]["std"],
+                          "acc_min": res["acc_spread"]["min"], "acc_max": res["acc_spread"]["max"]})
         tracking.per_group("acc_subject", {r["fold"]: r["acc"] for r in res["per_fold"]})
+        tracking.per_group("ece_subject", {r["fold"]: r["ece"] for r in res["per_fold"]})
         tracking.artifact_json("aggregate.json", res)
     return res
