@@ -18,6 +18,13 @@ projects, same engine/eval-first, honest-where-it-fails philosophy, different do
 [systole](https://github.com/dimiturtrz/cardiac-seg) (cardiac MRI → ejection fraction) and
 [mirage](https://github.com/dimiturtrz/synthscape) (3D surface-defect anomaly).
 
+## See the signal the decoder reads
+![neuroviz — mu/beta ERD animated over a motor-imagery trial; the contralateral motor cortex desynchronizes, the C3↔C4 hot spot flipping by imagined hand](neuroviz/docs/media/demo.gif)
+
+Imagining one hand **desynchronizes the opposite motor cortex** (mu/beta power drop over C3↔C4) — the
+motor-imagery signature, animated over the trial. [`neuroviz/`](neuroviz/): field-standard 2D topomaps +
+CSP patterns + waveforms, dependency-free.
+
 ## The honest question
 A motor-imagery decoder that scores well on a subject's *own* recordings — how far does it fall on a
 subject it never saw? That gap, not the headline accuracy, is what this measures.

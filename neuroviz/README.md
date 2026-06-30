@@ -4,6 +4,8 @@ The motor-imagery EEG viewer — the field-standard 2D views of the signal the d
 (the EEG analogue of the siblings' `cardioview`). 2D topographic maps, not a 3D head: EEG scalp data is
 inherently 2D-surface, and topomaps are what the field actually uses.
 
+![neuroviz demo — animated mu/beta ERD topomap + waveforms](docs/media/demo.gif)
+
 **Shows, for a BCI IV-2a subject:**
 - **Band-power topomaps** (mu 8–12 Hz, beta 13–30 Hz) per class — the motor-imagery signature: imagining
   one hand desynchronizes the *contralateral* motor cortex (the hot spot flips C3↔C4 between left/right hand).
