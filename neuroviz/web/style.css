@@ -13,16 +13,15 @@ main { display:grid; grid-template-columns:minmax(360px,420px) 1fr; gap:18px; pa
 #waves { flex:1; width:100%; min-height:0; }
 h2 { margin:0 0 10px; font-size:14px; font-weight:600; color:var(--mut); }
 .mut { color:var(--mut); font-weight:400; }
-.controls { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:12px; }
+.controls { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; margin-bottom:12px; }
 label { color:var(--mut); display:flex; gap:6px; align-items:center; }
-select { background:#0e1116; color:var(--ink); border:1px solid var(--line); border-radius:7px; padding:5px 8px; }
-.seg { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
-.seg.wrap { flex-wrap:wrap; overflow:visible; }
-.seg.wrap button { border-right:1px solid var(--line); }
+select { background:#0e1116; color:var(--ink); border:1px solid var(--line); border-radius:7px;
+  padding:0 8px; height:30px; }
+.seg { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; height:30px; }
 .mapsel { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; }
 .mapgroup { display:flex; flex-direction:column; gap:4px; }
 .glabel { font-size:10.5px; color:var(--mut); letter-spacing:.3px; }
-.seg button { background:transparent; color:var(--mut); border:0; padding:6px 12px; cursor:pointer; font:inherit; }
+.seg button { background:transparent; color:var(--mut); border:0; height:30px; padding:0 12px; box-sizing:border-box; cursor:pointer; font:inherit; }
 .seg button.on { background:var(--accent); color:#fff; }
 .topo-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; }
 canvas { background:transparent; }
