@@ -1,5 +1,5 @@
 """neuroviz data export — compute the field-standard motor-imagery views for one subject and write a
-self-contained JSON the web viewer loads. The EEG analogue of the siblings' export_web (cardioview).
+self-contained JSON the web viewer loads (a static export -> dependency-free in-browser viewer).
 
 Views (all 2D, the conventions a neuro audience expects):
   - topomaps: mu (8-12 Hz) + beta (13-30 Hz) band power per class -> the contralateral ERD pattern

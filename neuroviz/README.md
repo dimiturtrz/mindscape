@@ -1,7 +1,7 @@
 # neuroviz
 
 The motor-imagery EEG viewer — the field-standard 2D views of the signal the decoder reads
-(the EEG analogue of the siblings' `cardioview`). 2D topographic maps, not a 3D head: EEG scalp data is
+(an in-browser viewer of the data the model consumes). 2D topographic maps, not a 3D head: EEG scalp data is
 inherently 2D-surface, and topomaps are what the field actually uses.
 
 ![neuroviz demo — animated mu/beta ERD topomap + waveforms](docs/media/demo.gif)
