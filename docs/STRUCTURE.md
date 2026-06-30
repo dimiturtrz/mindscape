@@ -9,7 +9,7 @@ against.
 ```
 core/            the reusable engine — dataset- and decoder-agnostic plumbing
 neuroscan/       the science/contribution layer — harness, metrics, calibration, decoders, tracking
-baselines/       the quarantine ceiling — the standard reported method (CSP+LDA), kept separate
+baselines/       the quarantine ceiling — standard reported methods (CSP+LDA, Riemannian), kept separate
 ```
 
 ### `core/` — the engine
@@ -34,13 +34,14 @@ baselines/       the quarantine ceiling — the standard reported method (CSP+LD
 | `evaluation/modelcard.py` | an honest per-run card (headline, vs-reference, per-subject spread, where-it-fails) |
 | `models/decoders.py` | one GPU trainer (AdamW + cosine, bf16, crop augmentation, early stopping, seed-averaging) behind the braindecode nets (EEGNet … ATCNet, EEGConformer) |
 | `models/transforms.py` | standardizers (z-score / EMS / identity) + sliding-window crops, independently testable |
-| `models/__init__.py` | `get_method(name)` — one registry unifying the CSP baseline and the nets |
-| `tracking.py` | guarded local-sqlite MLflow (no-op if absent) |
-| `experiments/` | thin CLIs: `run` (decode under a regime), `quantize` (Stage 2), `reproduce_atcnet` (faithful reproduction) |
+| `models/__init__.py` | `get_method(name)` — one registry unifying the CSP / Riemann baselines and the nets |
+| `tracking.py` | guarded local-sqlite MLflow (no-op if absent); `save_model` persists trained models (torch `.pt` / sklearn `.joblib`) to `runs/<name>/models/` + as an artifact |
+| `experiments/` | thin CLIs: `run` (decode under a regime), `align` (cross-subject Riemannian re-centering), `quantize` (Stage 2), `reproduce_atcnet` (faithful reproduction) |
 
 ### `baselines/` and the rest
 - `baselines/csp_lda.py` — CSP + LDA, the standard motor-imagery reference, isolated from the decoders under test.
-- `neuroviz/` — the 2D motor-imagery viewer (topomaps + CSP patterns + waveforms); Python export → dependency-free web app.
+- `baselines/riemann.py` — Riemannian methods: tangent-space + LR, MDM, ACM (time-delay covariances), and `recenter_covariances` (cross-subject manifold re-centering). The strongest classical baseline + the transfer fix.
+- `neuroviz/` — the 2D motor-imagery viewer (topomaps + CSP patterns + Riemann discriminant + waveforms); Python export → dependency-free web app.
 - `tests/` — a pyramid: `unit/` (equivalence-class per module) + `integration/` (module chains: data→splits→harness, decoder→export→parity).
 
 ## The one idea everything hangs off — split-as-criteria

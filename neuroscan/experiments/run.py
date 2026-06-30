@@ -4,9 +4,10 @@
     python -m neuroscan.experiments.run --method atcnet  --regime within --resample 250
     python -m neuroscan.experiments.run --method eegnet  --regime cross_subject
 
-Methods: csp_lda (the baseline ceiling) + the braindecode decoders (eegnet, shallow_fbcsp, deep4,
-atcnet, eegconformer) — commodity → near-SOTA. The within/cross_subject contrast IS the headline:
-the gap between them is the honest out-of-distribution number.
+Methods: csp_lda + riemann + riemann_acm (the classical baselines) and the braindecode decoders (eegnet,
+shallow_fbcsp, deep4, atcnet, eegconformer) — commodity → near-SOTA. The within/cross_subject contrast IS
+the headline: the gap between them is the honest out-of-distribution number. For the cross-subject *fix*
+(Riemannian re-centering), see `experiments/align.py`.
 """
 from __future__ import annotations
 
