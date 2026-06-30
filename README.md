@@ -140,6 +140,3 @@ learn as I go.
 - **ATCNet** — Altaheri et al., *Physics-informed attention temporal CNN for EEG-based MI classification*, IEEE TII 2023.
 - **MOABB** — Jayaram & Barachant, *MOABB: trustworthy algorithm benchmarking for BCIs*, J. Neural Eng. 2018.
 - **Braindecode** — the PyTorch EEG-decoding library the deep models are built on.
-
-## License
-MIT — see [LICENSE](LICENSE).
