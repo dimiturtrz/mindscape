@@ -16,8 +16,12 @@ import polars as pl
 
 def get_data(dataset_name: str = "BNCI2014_001", subjects: list[int] | None = None,
              fmin: float = 4.0, fmax: float = 38.0, trial_start_offset_s: float = -0.5,
-             factor_new: float = 1e-3, init_block_size: int = 1000):
-    """Return (X [n,ch,t] float32, y [n] int, meta polars{subject,session,run}) — EMS-preprocessed."""
+             factor_new: float = 1e-3, init_block_size: int = 1000, ems: bool = True):
+    """Return (X [n,ch,t] float32, y [n] int, meta polars{subject,session,run}).
+
+    `ems=True` applies continuous exponential-moving standardization here (braindecode default recipe);
+    `ems=False` returns bandpassed microvolts only — use with the trainer's z-score (StandardScaler),
+    which is what the published ATCNet pipeline actually does."""
     from braindecode.datasets import MOABBDataset
     from braindecode.preprocessing import (
         Preprocessor, create_windows_from_events, exponential_moving_standardize, preprocess)
@@ -27,12 +31,15 @@ def get_data(dataset_name: str = "BNCI2014_001", subjects: list[int] | None = No
 
     ds = MOABBDataset(dataset_name=dataset_name, subject_ids=subjects)
     sfreq = ds.datasets[0].raw.info["sfreq"]
-    preprocess(ds, [
+    steps = [
         Preprocessor("pick_types", eeg=True, meg=False, stim=False),
         Preprocessor(lambda d: d * 1e6),                                  # V -> microvolts
         Preprocessor("filter", l_freq=fmin, h_freq=fmax),
-        Preprocessor(exponential_moving_standardize, factor_new=factor_new, init_block_size=init_block_size),
-    ])
+    ]
+    if ems:
+        steps.append(Preprocessor(exponential_moving_standardize, factor_new=factor_new,
+                                  init_block_size=init_block_size))
+    preprocess(ds, steps)
 
     start = int(round(trial_start_offset_s * sfreq))
     windows = create_windows_from_events(ds, trial_start_offset_samples=start,

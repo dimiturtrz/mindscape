@@ -28,11 +28,17 @@ def main():
     ap.add_argument("--epochs", type=int, default=500)
     ap.add_argument("--patience", type=int, default=0, help="0 = no early stop (their recipe)")
     ap.add_argument("--seeds", type=int, default=1, help="runs per subject to average (published = 10-run mean)")
+    ap.add_argument("--standardize", default="zscore", choices=["zscore", "none"],
+                    help="zscore = StandardScaler (the published ATCNet recipe); none = continuous EMS")
+    ap.add_argument("--batch", type=int, default=64, help="batch size (Altaheri uses 64)")
     ap.add_argument("--out", default="runs/reproduce")
     args = ap.parse_args()
 
-    print(f"preprocessing (continuous EMS) {args.method} ...")
-    X, y, meta = braindecode_pre.get_data("BNCI2014_001", subjects=args.subjects)
+    # zscore: bandpassed uV from preprocessing + trainer z-score (== Altaheri StandardScaler).
+    # none:   continuous EMS applied in preprocessing, trainer passes through.
+    use_ems = args.standardize == "none"
+    print(f"preprocessing ({'continuous EMS' if use_ems else 'bandpass uV + z-score'}) {args.method} ...")
+    X, y, meta = braindecode_pre.get_data("BNCI2014_001", subjects=args.subjects, ems=use_ems)
     print(f"X {X.shape} · sessions {sorted(meta['session'].unique().to_list())}")
 
     fit, _ = decoders.make(args.method)
@@ -45,7 +51,7 @@ def main():
         tr, te = sess == a, sess == b
         accs, kaps = [], []
         for seed in range(args.seeds):
-            clf = fit(Xs[tr], ys[tr], standardize="none", crop_frac=None,
+            clf = fit(Xs[tr], ys[tr], standardize=args.standardize, crop_frac=None, batch=args.batch,
                       epochs=args.epochs, patience=args.patience, log_every=0, seed=seed)
             pred = clf.predict_proba(Xs[te]).argmax(1)
             accs.append(metrics.accuracy(ys[te], pred))
