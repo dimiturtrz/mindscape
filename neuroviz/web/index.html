@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>neuroviz — motor-imagery EEG</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>neuroviz</h1>
+    <p class="sub">BCI IV-2a motor imagery — the scalp signature the decoder reads.
+      Imagining one hand <b>desynchronizes the opposite motor cortex</b> (mu/beta power drop over C3↔C4).</p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="controls">
+        <label>subject
+          <select id="subject"></select>
+        </label>
+        <div class="seg" id="view">
+          <button data-view="bandpower" class="on">band power</button>
+          <button data-view="csp">CSP patterns</button>
+        </div>
+        <div class="seg" id="band">
+          <button data-band="mu" class="on">mu 8–12 Hz</button>
+          <button data-band="beta">beta 13–30 Hz</button>
+        </div>
+      </div>
+
+      <div class="topo-wrap">
+        <canvas id="topo" width="360" height="360"></canvas>
+        <div class="classbar" id="classbar"></div>
+        <div class="cspbar" id="cspbar" hidden></div>
+        <div class="cbar"><span>low</span><div class="cgrad"></div><span>high</span></div>
+      </div>
+      <p class="hint" id="hint"></p>
+    </section>
+
+    <section class="panel">
+      <h2>waveforms — C3 · Cz · C4</h2>
+      <canvas id="waves" width="520" height="300"></canvas>
+      <p class="hint">One example trial of the selected class at the three motor-cortex electrodes.</p>
+    </section>
+  </main>
+
+  <footer>commodity model, honest eval — the contribution is the measured generalization, not the topomap.</footer>
+  <script src="app.js"></script>
+</body>
+</html>
