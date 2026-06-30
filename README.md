@@ -51,16 +51,26 @@ calibration fix survives the session shift — rather than a single in-distribut
 The plan's first rule: **don't chase the leaderboard** — reproduce a standard method, contribute the eval
 rigor + the efficient deployable. The decoder is commodity; we say so.
 
-| method | within-subject acc | kappa | source |
-|---|---|---|---|
-| **CSP+LDA** (our baseline) | 0.598 | 0.463 | single-band CSP → LDA |
-| **ATCNet** (our reproduction) | 0.619 | 0.492 | braindecode + the published recipe |
-| FBCSP | 0.65 | 0.57 | Ang et al. 2012 (BCI IV winner) |
-| EEGNet | 0.70 | 0.61 | Lawhern et al. 2018 |
-| ShallowConvNet | 0.74 | 0.65 | Schirrmeister et al. 2017 |
-| ATCNet (published) | 0.81 | 0.76 | Altaheri et al. 2023 (10-run mean) |
-| transformer SOTA | 0.88 | 0.84 | Sci. Rep. 2025 |
-| cross-subject SOTA | 0.74 | — | EEGEncoder 2024 |
+### Deployable vs near-SOTA — both ours, measured
+Params + FLOPs at the real 2a input (22 ch × 1125 samples, batch 1; FLOPs via fvcore, latency torch CPU
+single-thread — `python -m neuroscan.models.profile`):
+
+| model | params | FLOPs | CPU latency | within-subj acc | kappa |
+|---|---|---|---|---|---|
+| CSP+LDA (baseline) | — | — | — | 0.598 | 0.463 |
+| **EEGNet** (edge-deployable) | **3.7K** | 13.7M | 1.5 ms | 0.606 | 0.475 |
+| **ATCNet** (near-SOTA) | 114K | **2.8M** | 4.2 ms | **0.619** | 0.492 |
+| EEGConformer | 871K | 72M | 4.2 ms | — | — |
+
+**The 3.7K-parameter EEGNet ties the 30×-larger ATCNet** (0.606 vs 0.619) on our honest protocol — the
+edge-deployable model gives up ~nothing in accuracy, at ~26 KB ONNX and sub-ms inference (ONNX runtime).
+ATCNet carries more parameters but is the most FLOP-efficient (2.8M, its sliding-window TCN).
+
+### vs published ceilings (cited, not chased)
+| FBCSP | EEGNet | ShallowConvNet | ATCNet | transformer SOTA | cross-subject SOTA |
+|---|---|---|---|---|---|
+| 0.65 / κ0.57 | 0.70 / κ0.61 | 0.74 / κ0.65 | 0.81 / κ0.76 | 0.88 / κ0.84 | 0.74 |
+| Ang 2012 | Lawhern 2018 | Schirrmeister 2017 | Altaheri 2023 | Sci. Rep. 2025 | EEGEncoder 2024 |
 
 **We sit ~19 points under the published ATCNet, transparently.** The reproduction is honest about *why*:
 matching the real recipe (continuous-signal exponential-moving standardization vs per-epoch, `StandardScaler`
