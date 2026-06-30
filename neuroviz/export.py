@@ -28,7 +28,7 @@ N_CLASSES = 4                 # left/right hand, feet, tongue
 # --- view parameters ---
 N_FRAMES = 50                 # ERD animation frames per trial
 BASELINE_S = 0.5              # s — pre-imagery window for ERD baseline-normalization
-N_CSP = 4                     # CSP spatial patterns to export
+N_CSP = 6                     # CSP spatial patterns to export (matches baselines/csp_lda.py n_components)
 N_WAVE_T = 300                # downsampled time points for waveform display
 PER_CLASS = 1                 # example trials per class in the waveform panel
 

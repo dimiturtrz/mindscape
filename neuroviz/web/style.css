@@ -19,6 +19,9 @@ select { background:#0e1116; color:var(--ink); border:1px solid var(--line); bor
 .seg { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
 .seg.wrap { flex-wrap:wrap; overflow:visible; }
 .seg.wrap button { border-right:1px solid var(--line); }
+.mapsel { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; }
+.mapgroup { display:flex; flex-direction:column; gap:4px; }
+.glabel { font-size:10.5px; color:var(--mut); letter-spacing:.3px; }
 .seg button { background:transparent; color:var(--mut); border:0; padding:6px 12px; cursor:pointer; font:inherit; }
 .seg button.on { background:var(--accent); color:#fff; }
 .topo-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; }

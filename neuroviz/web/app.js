@@ -124,13 +124,19 @@ function play(on){
 
 function buildMapbar(){
   const bar=$("map"); bar.innerHTML="";
-  const maps=[["mu","mu"],["beta","beta"]].concat(state.data.csp_patterns.map((_,i)=>["csp"+i,"CSP "+(i+1)]));
-  maps.forEach(([k,label])=>{
-    const b=document.createElement("button");
-    b.textContent=label; b.dataset.k=k; b.className=k===state.map?"on":"";
-    b.onclick=()=>{ state.map=k; sync(); render(); };
-    bar.appendChild(b);
-  });
+  const group=(label, items)=>{
+    const g=document.createElement("div"); g.className="mapgroup";
+    const l=document.createElement("span"); l.className="glabel"; l.textContent=label; g.appendChild(l);
+    const seg=document.createElement("div"); seg.className="seg wrap";
+    items.forEach(([k,t])=>{
+      const b=document.createElement("button"); b.textContent=t; b.dataset.k=k;
+      b.className=k===state.map?"on":""; b.onclick=()=>{ state.map=k; sync(); render(); };
+      seg.appendChild(b);
+    });
+    g.appendChild(seg); bar.appendChild(g);
+  };
+  group("signal (band power)", [["mu","mu"],["beta","beta"]]);
+  group("filters (CSP)", state.data.csp_patterns.map((_,i)=>["csp"+i,(i+1).toString()]));
 }
 function buildClassbar(){
   const bar=$("classbar"); bar.innerHTML="";
@@ -142,7 +148,7 @@ function buildClassbar(){
   });
 }
 function sync(){
-  [...$("map").children].forEach(b=>b.classList.toggle("on", b.dataset.k===state.map));
+  $("map").querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.k===state.map));
   [...$("classbar").children].forEach(b=>b.classList.toggle("on", b.dataset.c===state.cls));
   const csp=isCsp();                          // class + time apply only to band-power maps
   $("classbar").hidden=csp;
