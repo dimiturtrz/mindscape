@@ -19,26 +19,18 @@
         <label>subject
           <select id="subject"></select>
         </label>
-        <div class="seg" id="view">
-          <button data-view="bandpower" class="on">band power</button>
-          <button data-view="csp">CSP patterns</button>
-        </div>
-        <div class="seg" id="band">
-          <button data-band="mu" class="on">mu 8–12 Hz</button>
-          <button data-band="beta">beta 13–30 Hz</button>
-        </div>
+        <div class="seg wrap" id="map"><!-- mu · beta · CSP 1–4, built in JS --></div>
       </div>
 
       <div class="topo-wrap">
         <canvas id="topo" width="360" height="360"></canvas>
+        <div class="classbar" id="classbar"></div>
         <div class="player" id="player">
           <button id="play">▶</button>
           <input id="scrub" type="range" min="0" max="49" value="25" step="1" />
           <span id="tlabel" class="tlabel">0.0 s</span>
         </div>
-        <div class="classbar" id="classbar"></div>
-        <div class="cspbar" id="cspbar" hidden></div>
-        <div class="cbar"><span>desync (ERD)</span><div class="cgrad"></div><span>sync (ERS)</span></div>
+        <div class="cbar"><span>−</span><div class="cgrad"></div><span>+</span></div>
       </div>
       <p class="hint" id="hint"></p>
     </section>

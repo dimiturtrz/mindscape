@@ -2,8 +2,11 @@
 // neuroviz — animated 2D ERD topomap (inverse-distance interpolation) + waveforms for BCI IV-2a.
 // No build step: serve this dir (`python -m http.server`) and open index.html.
 
-const state = { data:null, view:"bandpower", band:"mu", cls:null, comp:0, frame:25, playing:false };
+// state.map ∈ {"mu","beta","csp0","csp1",…}; one unified selector instead of view+band+component toggles.
+const state = { data:null, map:"mu", cls:null, frame:25, playing:false };
 const $ = (id) => document.getElementById(id);
+const isCsp = () => state.map.startsWith("csp");
+const cspIdx = () => +state.map.slice(3);
 
 // layout / render constants (no magic numbers inline)
 const LAYOUT = {
@@ -29,15 +32,15 @@ const nFrames = () => state.data.frame_times.length;
 
 function currentValues(){
   const d=state.data;
-  if (state.view==="csp") return d.csp_patterns[state.comp];
-  return d.frames[state.band][state.cls][state.frame];
+  if (isCsp()) return d.csp_patterns[cspIdx()];
+  return d.frames[state.map][state.cls][state.frame];
 }
-// stable color scale across the whole animation of the current class/band (so playback is comparable)
+// stable color scale (CSP: the pattern; band: across the whole animation so playback is comparable)
 function scaleMax(){
   const d=state.data;
-  if (state.view==="csp") return Math.max(...d.csp_patterns[state.comp].map(Math.abs))||1;
+  if (isCsp()) return Math.max(...d.csp_patterns[cspIdx()].map(Math.abs))||1;
   let m=1e-9;
-  for (const fr of d.frames[state.band][state.cls]) for (const v of fr) m=Math.max(m,Math.abs(v));
+  for (const fr of d.frames[state.map][state.cls]) for (const v of fr) m=Math.max(m,Math.abs(v));
   return m;
 }
 
@@ -70,9 +73,9 @@ function renderTopo(){
     ctx.fillStyle="#0e1116";ctx.fill();
     ctx.strokeStyle=`rgba(230,233,239,${0.2+0.7*c})`;ctx.lineWidth=1;ctx.stroke();
   }
-  $("hint").textContent = state.view==="csp"
-    ? `CSP component ${state.comp+1} — the spatial filter the baseline decoder uses (expect weight over C3/C4).`
-    : `${state.band} ERD, ${state.cls.replace("_"," ")} — blue = motor cortex desynchronizing; flip left↔right hand to see C3↔C4 swap.`;
+  $("hint").textContent = isCsp()
+    ? `CSP component ${cspIdx()+1} — the spatial filter the baseline decoder learned (weight per electrode).`
+    : `${state.map} ERD, ${state.cls.replace("_"," ")} — blue = motor cortex desynchronizing; switch class to see the active side move.`;
 }
 
 function renderWaves(){
@@ -119,40 +122,40 @@ function play(on){
   if(on) timer=setInterval(()=>{ state.frame=(state.frame+1)%nFrames(); render(); }, LAYOUT.frameMs);
 }
 
+function buildMapbar(){
+  const bar=$("map"); bar.innerHTML="";
+  const maps=[["mu","mu"],["beta","beta"]].concat(state.data.csp_patterns.map((_,i)=>["csp"+i,"CSP "+(i+1)]));
+  maps.forEach(([k,label])=>{
+    const b=document.createElement("button");
+    b.textContent=label; b.dataset.k=k; b.className=k===state.map?"on":"";
+    b.onclick=()=>{ state.map=k; sync(); render(); };
+    bar.appendChild(b);
+  });
+}
 function buildClassbar(){
-  const bar=$("classbar");bar.innerHTML="";
+  const bar=$("classbar"); bar.innerHTML="";
   state.data.classes.forEach(c=>{
     const b=document.createElement("button");
-    b.textContent=c.replace("_"," ");b.className=c===state.cls?"on":"";
-    b.onclick=()=>{state.cls=c;syncBars();render();};
+    b.textContent=c.replace("_"," "); b.dataset.c=c; b.className=c===state.cls?"on":"";
+    b.onclick=()=>{ state.cls=c; sync(); render(); };
     bar.appendChild(b);
   });
 }
-function buildCspbar(){
-  const bar=$("cspbar");bar.innerHTML="";
-  state.data.csp_patterns.forEach((_,i)=>{
-    const b=document.createElement("button");
-    b.textContent="comp "+(i+1);b.className=i===state.comp?"on":"";
-    b.onclick=()=>{state.comp=i;syncBars();render();};
-    bar.appendChild(b);
-  });
-}
-function syncBars(){
-  [...$("classbar").children].forEach(b=>b.className=b.textContent===state.cls.replace("_"," ")?"on":"");
-  [...$("cspbar").children].forEach((b,i)=>b.className=i===state.comp?"on":"");
-  const csp = state.view==="csp";
-  $("classbar").hidden=csp; $("cspbar").hidden=!csp;
-  $("player").style.opacity=csp?0.35:1; $("scrub").disabled=csp; $("play").disabled=csp;
-  $("band").style.opacity=csp?0.4:1;
+function sync(){
+  [...$("map").children].forEach(b=>b.classList.toggle("on", b.dataset.k===state.map));
+  [...$("classbar").children].forEach(b=>b.classList.toggle("on", b.dataset.c===state.cls));
+  const csp=isCsp();                          // class + time apply only to band-power maps
+  $("classbar").hidden=csp;
+  $("player").hidden=csp;
   if(csp) play(false);
 }
 
 async function loadSubject(s){
   state.data=await (await fetch(`data/subject${s}.json`)).json();
   state.cls=state.data.classes.includes("left_hand")?"left_hand":state.data.classes[0];
-  state.comp=0; state.frame=Math.floor(nFrames()/2);
+  state.map="mu"; state.frame=Math.floor(nFrames()/2);
   $("scrub").max=nFrames()-1;
-  buildClassbar();buildCspbar();syncBars();render();
+  buildMapbar(); buildClassbar(); sync(); render();
 }
 
 async function init(){
@@ -160,16 +163,6 @@ async function init(){
   const sel=$("subject");
   man.subjects.forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent="subject "+s;sel.appendChild(o);});
   sel.onchange=()=>{play(false);loadSubject(sel.value);};
-  $("view").querySelectorAll("button").forEach(b=>b.onclick=()=>{
-    state.view=b.dataset.view;
-    $("view").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
-    syncBars();render();
-  });
-  $("band").querySelectorAll("button").forEach(b=>b.onclick=()=>{
-    state.band=b.dataset.band;
-    $("band").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
-    render();
-  });
   $("play").onclick=()=>play(!state.playing);
   $("scrub").oninput=()=>{play(false);state.frame=+$("scrub").value;render();};
   let rz; window.addEventListener("resize",()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(state.data) render(); },120); });
