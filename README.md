@@ -46,6 +46,23 @@ before/after on the *cross-session* test (ATCNet): test ECE **0.113 → 0.084**.
 whether an in-session calibration fix survives the session shift — not a single in-distribution ECE.
 ([`neuroscan/evaluation/calibrate.py`](neuroscan/evaluation/calibrate.py))
 
+**Closing the cross-subject gap — measured, identified, fixed.** The collapse is a *domain shift*: each
+subject's covariance cloud sits at a different location on the SPD manifold, so a classifier trained on
+others misses them — not because the ERD contrast differs, but because the cloud is *displaced*. The
+field's fix is **Riemannian re-centering** (Zanini et al. 2018): congruence-transport every subject's
+covariances to the identity by their own Riemannian mean (`C → M⁻¹ᐟ² C M⁻¹ᐟ²` — the manifold version of
+whitening), target included and **unsupervised**. We implemented it ([`neuroscan/experiments/align.py`](neuroscan/experiments/align.py)):
+
+| method (leave-one-subject-out) | cross-subject acc |
+|---|---|
+| CSP+LDA | 0.382 |
+| Riemann (tangent space) | 0.357 |
+| Riemann ACM (time-delay cov) | 0.351 |
+| **Riemann + re-centering** | **0.496** |
+
+**+0.139** over plain tangent space — the displacement *was* the gap. Richer features (ACM) don't transfer;
+removing the per-subject location shift does. (Re-centering is unsupervised on the target → deployment-real.)
+
 ## The decoders — measured
 We reproduce *standard* architectures (the decoder is commodity); the contribution is the eval rigor and
 the efficient deployable, not a leaderboard number. **All our numbers sit below the published ceilings —
