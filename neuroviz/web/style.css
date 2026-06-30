@@ -4,9 +4,15 @@ body { margin:0; font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:
 header { padding:24px 24px 8px; }
 h1 { margin:0; font-size:22px; letter-spacing:.5px; }
 .sub { color:var(--mut); max-width:760px; margin:6px 0 0; }
-main { display:flex; flex-wrap:wrap; gap:18px; padding:18px 24px; }
-.panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+main { display:grid; grid-template-columns:minmax(360px,420px) 1fr; gap:18px; padding:18px 24px;
+  height:calc(100vh - 132px); }
+@media (max-width:900px){ main{ grid-template-columns:1fr; height:auto; } }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px;
+  display:flex; flex-direction:column; min-height:0; min-width:0; }
+.panel.waves { flex:1; }
+#waves { flex:1; width:100%; min-height:0; }
 h2 { margin:0 0 10px; font-size:14px; font-weight:600; color:var(--mut); }
+.mut { color:var(--mut); font-weight:400; }
 .controls { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:12px; }
 label { color:var(--mut); display:flex; gap:6px; align-items:center; }
 select { background:#0e1116; color:var(--ink); border:1px solid var(--line); border-radius:7px; padding:5px 8px; }

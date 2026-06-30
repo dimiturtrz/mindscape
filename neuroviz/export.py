@@ -16,9 +16,22 @@ from pathlib import Path
 
 import numpy as np
 
-MU = (8.0, 12.0)
-BETA = (13.0, 30.0)
-KEY_CHANS = ["C3", "Cz", "C4"]
+# --- bands + channels ---
+MU = (8.0, 12.0)              # Hz — sensorimotor mu rhythm
+BETA = (13.0, 30.0)           # Hz — sensorimotor beta rhythm
+KEY_CHANS = ["C3", "Cz", "C4"]  # motor trio (right-hand / feet / left-hand areas), highlighted in the viewer
+
+# --- preprocessing recipe (the broad band the viewer's power is computed in) ---
+PROC_BAND = (4.0, 40.0)       # Hz — broadband for epoching before per-band power
+SFREQ = 250.0                 # Hz — resample target
+N_CLASSES = 4                 # left/right hand, feet, tongue
+
+# --- view parameters ---
+N_FRAMES = 50                 # ERD animation frames per trial
+BASELINE_S = 0.5              # s — pre-imagery window for ERD baseline-normalization
+N_CSP = 4                     # CSP spatial patterns to export
+N_WAVE_T = 300                # downsampled time points for waveform display
+PER_CLASS = 1                 # example trials per class in the waveform panel
 
 
 def _load_epochs(subject: int):
@@ -29,7 +42,8 @@ def _load_epochs(subject: int):
 
     from core.config import configure_moabb_download
     configure_moabb_download()
-    para = MotorImagery(n_classes=4, fmin=4.0, fmax=40.0, tmin=0.0, tmax=None, resample=250.0)
+    para = MotorImagery(n_classes=N_CLASSES, fmin=PROC_BAND[0], fmax=PROC_BAND[1],
+                        tmin=0.0, tmax=None, resample=SFREQ)
     ep, labels, _ = para.get_data(dataset=BNCI2014_001(), subjects=[subject], return_epochs=True)
     ep.set_montage(mne.channels.make_standard_montage("standard_1020"),
                    match_case=False, on_missing="ignore")
@@ -44,7 +58,7 @@ def _pos2d(info):
     return pos
 
 
-def _erd_frames(ep, labels, fmin, fmax, n_frames=50, baseline_s=0.5):
+def _erd_frames(ep, labels, fmin, fmax, n_frames=N_FRAMES, baseline_s=BASELINE_S):
     """Time-resolved ERD per class: band-limited power over the trial, baseline-normalized to the first
     `baseline_s` (pre-imagery). Negative = event-related DESYNCHRONIZATION (the motor-imagery signature).
     Returns ({class: [frame][ch]}, frame_times) — averaged across epochs, downsampled to n_frames."""
@@ -67,7 +81,7 @@ def _erd_frames(ep, labels, fmin, fmax, n_frames=50, baseline_s=0.5):
     return frames, ftimes
 
 
-def _csp_patterns(ep, labels, n=4):
+def _csp_patterns(ep, labels, n=N_CSP):
     from mne.decoding import CSP
     X = ep.get_data() * 1e6
     csp = CSP(n_components=n, reg="ledoit_wolf", log=True)
@@ -77,16 +91,21 @@ def _csp_patterns(ep, labels, n=4):
     return [(row / (np.abs(row).max() + 1e-9)).tolist() for row in pat]
 
 
-def _waveforms(ep, labels, chans, per_class=1):
-    names = ep.ch_names
-    idx = [names.index(c) for c in chans if c in names]
+def _waveforms(ep, labels, key_chans, per_class=PER_CLASS, n_t=N_WAVE_T):
+    """One example trial per class, ALL channels (downsampled to ~n_t points for display).
+    Flags the motor trio (C3/Cz/C4) so the viewer can highlight them among the full montage."""
+    names = list(ep.ch_names)
     X = ep.get_data() * 1e6                                # [n, ch, t] microvolts
-    t = (np.arange(X.shape[2]) / ep.info["sfreq"]).tolist()
+    T = X.shape[2]
+    step = max(1, T // n_t)
+    ti = np.arange(0, T, step)
+    t = (ti / ep.info["sfreq"]).tolist()
     out = {}
     for c in sorted(set(labels)):
         ei = np.where(labels == c)[0][:per_class]
-        out[str(c)] = {names[i]: X[ei[0], i, :].tolist() for i in idx}
-    return {"t": t, "trials": out, "chans": [names[i] for i in idx]}
+        out[str(c)] = {names[i]: X[ei[0], i, ti].tolist() for i in range(len(names))}
+    motor = [n for n in key_chans if n in names]
+    return {"t": t, "trials": out, "chans": names, "motor": motor}
 
 
 def main():

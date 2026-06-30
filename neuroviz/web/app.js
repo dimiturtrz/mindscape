@@ -5,6 +5,17 @@
 const state = { data:null, view:"bandpower", band:"mu", cls:null, comp:0, frame:25, playing:false };
 const $ = (id) => document.getElementById(id);
 
+// layout / render constants (no magic numbers inline)
+const LAYOUT = {
+  headRadiusFrac: 0.42,   // head-circle radius as a fraction of canvas width
+  electrodeR: 2.2,        // electrode dot radius (px)
+  electrodeRHot: 4,       // motor-trio electrode dot radius (px)
+  idwEps: 1e-3,           // inverse-distance interpolation epsilon (avoid /0 at electrodes)
+  wavePad: 34,            // waveform panel left padding (px, room for channel labels)
+  waveAmp: 0.42,          // trace amplitude as a fraction of its row height
+  frameMs: 90,            // animation frame interval (ms)
+};
+
 // diverging colormap (RdBu_r): t in [0,1] -> [r,g,b]
 const STOPS = [[59,76,192],[170,184,255],[242,242,242],[255,176,160],[180,4,38]];
 function cmap(t){
@@ -32,7 +43,7 @@ function scaleMax(){
 
 function renderTopo(){
   const d=state.data, cv=$("topo"), ctx=cv.getContext("2d");
-  const W=cv.width,H=cv.height,cx=W/2,cy=H/2,R=W*0.42;
+  const W=cv.width,H=cv.height,cx=W/2,cy=H/2,R=W*LAYOUT.headRadiusFrac;
   const vals=currentValues(), m=scaleMax();
   const pos=d.pos.map(([x,y])=>[cx+x*R, cy-y*R]);
   ctx.clearRect(0,0,W,H);
@@ -41,7 +52,7 @@ function renderTopo(){
     const dx=xx-cx,dy=yy-cy,o=(yy*W+xx)*4;
     if(dx*dx+dy*dy>R*R){px[o+3]=0;continue;}
     let num=0,den=0;
-    for(let i=0;i<pos.length;i++){const ex=pos[i][0]-xx,ey=pos[i][1]-yy,w=1/(ex*ex+ey*ey+1e-3);num+=w*vals[i];den+=w;}
+    for(let i=0;i<pos.length;i++){const ex=pos[i][0]-xx,ey=pos[i][1]-yy,w=1/(ex*ex+ey*ey+LAYOUT.idwEps);num+=w*vals[i];den+=w;}
     const c=cmap((num/den+m)/(2*m));
     px[o]=c[0];px[o+1]=c[1];px[o+2]=c[2];px[o+3]=235;
   }
@@ -54,7 +65,7 @@ function renderTopo(){
   const key=new Set(["C3","Cz","C4"]);
   for(let i=0;i<pos.length;i++){
     const [ex,ey]=pos[i],name=d.channels[i],hot=key.has(name);
-    ctx.beginPath();ctx.arc(ex,ey,hot?4:2.2,0,7);
+    ctx.beginPath();ctx.arc(ex,ey,hot?LAYOUT.electrodeRHot:LAYOUT.electrodeR,0,7);
     ctx.fillStyle=hot?"#0e1116":"rgba(20,24,32,.6)";ctx.fill();
     if(hot){ctx.strokeStyle="#e6e9ef";ctx.lineWidth=1.5;ctx.stroke();
       ctx.fillStyle="#e6e9ef";ctx.font="11px system-ui";ctx.fillText(name,ex+6,ey-6);}
@@ -68,23 +79,29 @@ function renderWaves(){
   const d=state.data, cv=$("waves"), ctx=cv.getContext("2d");
   const W=cv.width,H=cv.height;ctx.clearRect(0,0,W,H);
   const cls=state.cls||d.classes[0], wf=d.waveforms.trials[cls], chans=d.waveforms.chans, t=d.waveforms.t;
-  const rowH=H/chans.length, pad=28;
-  // time cursor (current animation frame)
-  const tc = state.data.frame_times[state.frame], cx = pad+(W-pad-6)*(tc/t[t.length-1]);
-  ctx.font="11px system-ui";
+  const motor=new Set(d.waveforms.motor||[]);
+  const pad=LAYOUT.wavePad, rowH=H/chans.length, tc=d.frame_times[state.frame], cx=pad+(W-pad-6)*(tc/t[t.length-1]);
+  ctx.font="10px system-ui"; ctx.textBaseline="middle";
   chans.forEach((ch,r)=>{
-    const y0=r*rowH+rowH/2, trace=wf[ch], m=Math.max(...trace.map(Math.abs))||1;
-    ctx.strokeStyle="#2a3140";ctx.beginPath();ctx.moveTo(pad,y0);ctx.lineTo(W-6,y0);ctx.stroke();
-    ctx.strokeStyle="#5b8def";ctx.lineWidth=1.2;ctx.beginPath();
-    for(let i=0;i<trace.length;i++){const x=pad+(W-pad-6)*i/(trace.length-1),y=y0-(trace[i]/m)*(rowH*0.4);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+    const y0=r*rowH+rowH/2, trace=wf[ch], m=Math.max(...trace.map(Math.abs))||1, hot=motor.has(ch);
+    ctx.strokeStyle="#222937";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,y0);ctx.lineTo(W-6,y0);ctx.stroke();
+    ctx.strokeStyle=hot?"#ffb86b":"#4a6aa5";ctx.lineWidth=hot?1.4:0.9;ctx.beginPath();
+    for(let i=0;i<trace.length;i++){const x=pad+(W-pad-6)*i/(trace.length-1),y=y0-(trace[i]/m)*(rowH*LAYOUT.waveAmp);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
     ctx.stroke();
-    ctx.fillStyle="#e6e9ef";ctx.fillText(ch,4,y0-rowH*0.32);
+    ctx.fillStyle=hot?"#ffb86b":"#8b94a3";ctx.fillText(ch,3,y0);
   });
-  ctx.strokeStyle="#ffb0a0";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,H);ctx.stroke();
-  ctx.fillStyle="#8b94a3";ctx.fillText(`${t[t.length-1].toFixed(1)} s`,W-34,H-4);
+  ctx.strokeStyle="#ff6a5a";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,H);ctx.stroke();
+  ctx.fillStyle="#8b94a3";ctx.textBaseline="alphabetic";ctx.fillText(`${t[t.length-1].toFixed(1)} s`,W-34,H-4);
+}
+
+function fitCanvas(cv){
+  const r=cv.getBoundingClientRect();
+  const w=Math.max(120,Math.floor(r.width)), h=Math.max(120,Math.floor(r.height));
+  if(cv.width!==w||cv.height!==h){ cv.width=w; cv.height=h; }
 }
 
 function render(){
+  fitCanvas($("waves"));
   renderTopo(); renderWaves();
   $("scrub").value=state.frame;
   $("tlabel").textContent=`${state.data.frame_times[state.frame].toFixed(1)} s`;
@@ -94,7 +111,7 @@ let timer=null;
 function play(on){
   state.playing=on; $("play").textContent=on?"❚❚":"▶";
   if(timer){clearInterval(timer);timer=null;}
-  if(on) timer=setInterval(()=>{ state.frame=(state.frame+1)%nFrames(); render(); }, 90);
+  if(on) timer=setInterval(()=>{ state.frame=(state.frame+1)%nFrames(); render(); }, LAYOUT.frameMs);
 }
 
 function buildClassbar(){
@@ -150,6 +167,7 @@ async function init(){
   });
   $("play").onclick=()=>play(!state.playing);
   $("scrub").oninput=()=>{play(false);state.frame=+$("scrub").value;render();};
+  let rz; window.addEventListener("resize",()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(state.data) render(); },120); });
   await loadSubject(man.subjects[0]);
 }
 init().catch(e=>{document.body.insertAdjacentHTML("beforeend",
