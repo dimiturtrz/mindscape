@@ -23,7 +23,7 @@ def to_native_path(path_str: str) -> str:
     """Translate a configured path to the current platform so ONE paths.yaml works on Windows + WSL.
 
     Windows drive 'X:/...' <-> POSIX/WSL '/mnt/x/...'. A bare Windows drive path on POSIX would
-    otherwise be treated as relative and leak the data tree into the repo (the systole leak); a POSIX
+    otherwise be treated as relative and leak the data tree into the repo; a POSIX
     mount path on Windows would be unresolvable. There's no solid pip lib for this (wslpath is WSL-only),
     so this small, tested mapping is the dependency-free fix. The default WSL mount is /mnt/<drive>;
     MINDSCAPE_DATA can always override with an explicit native path.

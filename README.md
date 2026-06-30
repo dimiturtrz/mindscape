@@ -3,20 +3,17 @@
 **Personal learning project — non-invasive neural decoding: reading intent and meaning from brain
 signals, evaluated honestly, with an efficient on-device bias. Edge-deployable.**
 
-> Working name `mindscape` (the terrain of the mind). Sibling in name and philosophy to
-> [synthscape/mirage](https://github.com/dimiturtrz/synthscape) — the `-scape` is deliberate.
+> Working name `mindscape` (the terrain of the mind).
 
-mindscape decodes **non-invasive neural signals** (EEG / MEG, public data) — training decoders and,
-as in the sibling projects, treating the **honest evaluation** as the contribution rather than a
-leaderboard number. The second through-line is **deployability**: an *efficient* decoder — the
-edge-inference discipline (quantization / distillation) the field tends to underweight.
+mindscape decodes **non-invasive neural signals** (EEG / MEG, public data) — training decoders and
+treating the **honest evaluation** as the contribution rather than a leaderboard number. The second
+through-line is **deployability**: an *efficient* decoder — the edge-inference discipline (quantization /
+distillation) the field tends to underweight.
 
 It's also how I'm ramping into neural decoding. The signal-processing, time-series modeling,
-calibration / evaluation discipline, and edge-inference work carry over from prior
-acoustic-detection work; the **neuroscience and the decoding methods I learn as I go.** Sibling
-projects, same engine/eval-first, honest-where-it-fails philosophy, different domain:
-[systole](https://github.com/dimiturtrz/cardiac-seg) (cardiac MRI → ejection fraction) and
-[mirage](https://github.com/dimiturtrz/synthscape) (3D surface-defect anomaly).
+calibration / evaluation discipline, and edge-inference work carry over from prior ML projects of mine
+(same eval-first, honest-where-it-fails philosophy, different domain); the **neuroscience and the
+decoding methods I learn as I go.**
 
 ## See the signal the decoder reads
 ![neuroviz — mu/beta ERD animated over a motor-imagery trial; the contralateral motor cortex desynchronizes, the C3↔C4 hot spot flipping by imagined hand](neuroviz/docs/media/demo.gif)
@@ -91,9 +88,8 @@ uv run pytest -q                         # the eval logic is unit + integration 
 ## How it's built
 Agent-driven build, human-owned judgment — coding agents scaffold the plumbing; the modeling
 decisions, the measurement correctness, and the evaluation are mine. Architecture (two-layer engine +
-science, split-as-criteria, dataset-adapter registry) is lifted from the mature sibling
-[systole](https://github.com/dimiturtrz/cardiac-seg); see [`docs/STRUCTURE.md`](docs/STRUCTURE.md).
-The neuroscience and decoding specifics I learn as I go.
+science, split-as-criteria, dataset-adapter registry) is carried from a mature prior project of mine;
+see [`docs/STRUCTURE.md`](docs/STRUCTURE.md). The neuroscience and decoding specifics I learn as I go.
 
 ## License
 TBD (code will be permissively licensed). Any datasets used are **not** included and carry their own
