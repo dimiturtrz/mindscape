@@ -16,10 +16,9 @@ from pathlib import Path
 
 import numpy as np
 
-# --- bands + channels ---
+# --- bands ---
 MU = (8.0, 12.0)              # Hz — sensorimotor mu rhythm
 BETA = (13.0, 30.0)           # Hz — sensorimotor beta rhythm
-KEY_CHANS = ["C3", "Cz", "C4"]  # motor trio (right-hand / feet / left-hand areas), highlighted in the viewer
 
 # --- preprocessing recipe (the broad band the viewer's power is computed in) ---
 PROC_BAND = (4.0, 40.0)       # Hz — broadband for epoching before per-band power
@@ -91,9 +90,9 @@ def _csp_patterns(ep, labels, n=N_CSP):
     return [(row / (np.abs(row).max() + 1e-9)).tolist() for row in pat]
 
 
-def _waveforms(ep, labels, key_chans, per_class=PER_CLASS, n_t=N_WAVE_T):
+def _waveforms(ep, labels, per_class=PER_CLASS, n_t=N_WAVE_T):
     """One example trial per class, ALL channels (downsampled to ~n_t points for display).
-    Flags the motor trio (C3/Cz/C4) so the viewer can highlight them among the full montage."""
+    The viewer colors each channel by its contribution to the selected view — no hardcoded highlight."""
     names = list(ep.ch_names)
     X = ep.get_data() * 1e6                                # [n, ch, t] microvolts
     T = X.shape[2]
@@ -104,8 +103,7 @@ def _waveforms(ep, labels, key_chans, per_class=PER_CLASS, n_t=N_WAVE_T):
     for c in sorted(set(labels)):
         ei = np.where(labels == c)[0][:per_class]
         out[str(c)] = {names[i]: X[ei[0], i, ti].tolist() for i in range(len(names))}
-    motor = [n for n in key_chans if n in names]
-    return {"t": t, "trials": out, "chans": names, "motor": motor}
+    return {"t": t, "trials": out, "chans": names}
 
 
 def main():
@@ -128,7 +126,7 @@ def main():
         "frames": {"mu": mu_fr, "beta": beta_fr},
         "frame_times": ftimes,
         "csp_patterns": _csp_patterns(ep, labels),
-        "waveforms": _waveforms(ep, labels, KEY_CHANS),
+        "waveforms": _waveforms(ep, labels),
     }
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)

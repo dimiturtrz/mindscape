@@ -62,13 +62,13 @@ function renderTopo(){
   ctx.beginPath();ctx.moveTo(cx-12,cy-R+3);ctx.lineTo(cx,cy-R-14);ctx.lineTo(cx+12,cy-R+3);ctx.stroke();
   ctx.beginPath();ctx.arc(cx-R,cy,10,1.6,4.7);ctx.stroke();
   ctx.beginPath();ctx.arc(cx+R,cy,10,-1.6,1.6);ctx.stroke();
-  const key=new Set(["C3","Cz","C4"]);
+  // electrode dots sized + outlined by their CONTRIBUTION to the current view (|value|/max), not hardcoded
   for(let i=0;i<pos.length;i++){
-    const [ex,ey]=pos[i],name=d.channels[i],hot=key.has(name);
-    ctx.beginPath();ctx.arc(ex,ey,hot?LAYOUT.electrodeRHot:LAYOUT.electrodeR,0,7);
-    ctx.fillStyle=hot?"#0e1116":"rgba(20,24,32,.6)";ctx.fill();
-    if(hot){ctx.strokeStyle="#e6e9ef";ctx.lineWidth=1.5;ctx.stroke();
-      ctx.fillStyle="#e6e9ef";ctx.font="11px system-ui";ctx.fillText(name,ex+6,ey-6);}
+    const [ex,ey]=pos[i], c=Math.min(1,Math.abs(vals[i])/m);
+    const rr=LAYOUT.electrodeR+(LAYOUT.electrodeRHot-LAYOUT.electrodeR)*c;
+    ctx.beginPath();ctx.arc(ex,ey,rr,0,7);
+    ctx.fillStyle="#0e1116";ctx.fill();
+    ctx.strokeStyle=`rgba(230,233,239,${0.2+0.7*c})`;ctx.lineWidth=1;ctx.stroke();
   }
   $("hint").textContent = state.view==="csp"
     ? `CSP component ${state.comp+1} — the spatial filter the baseline decoder uses (expect weight over C3/C4).`
@@ -79,16 +79,21 @@ function renderWaves(){
   const d=state.data, cv=$("waves"), ctx=cv.getContext("2d");
   const W=cv.width,H=cv.height;ctx.clearRect(0,0,W,H);
   const cls=state.cls||d.classes[0], wf=d.waveforms.trials[cls], chans=d.waveforms.chans, t=d.waveforms.t;
-  const motor=new Set(d.waveforms.motor||[]);
+  // color each channel by its CONTRIBUTION to the current view (the same per-channel values the topomap uses)
+  const vals=currentValues(), mm=scaleMax(), idxOf={};
+  d.channels.forEach((n,i)=>idxOf[n]=i);
   const pad=LAYOUT.wavePad, rowH=H/chans.length, tc=d.frame_times[state.frame], cx=pad+(W-pad-6)*(tc/t[t.length-1]);
   ctx.font="10px system-ui"; ctx.textBaseline="middle";
   chans.forEach((ch,r)=>{
-    const y0=r*rowH+rowH/2, trace=wf[ch], m=Math.max(...trace.map(Math.abs))||1, hot=motor.has(ch);
+    const y0=r*rowH+rowH/2, trace=wf[ch], m=Math.max(...trace.map(Math.abs))||1;
+    const vi=idxOf[ch], c=(vi==null)?0:Math.min(1,Math.abs(vals[vi])/mm);   // contribution 0..1
+    const col=cmap((vi==null?0:vals[vi])/(2*mm)+0.5);                       // sign-aware color (matches topomap)
+    const R=Math.round(70+(col[0]-70)*c), G=Math.round(78+(col[1]-78)*c), B=Math.round(95+(col[2]-95)*c);
     ctx.strokeStyle="#222937";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,y0);ctx.lineTo(W-6,y0);ctx.stroke();
-    ctx.strokeStyle=hot?"#ffb86b":"#4a6aa5";ctx.lineWidth=hot?1.4:0.9;ctx.beginPath();
+    ctx.strokeStyle=`rgb(${R},${G},${B})`;ctx.lineWidth=0.7+1.3*c;ctx.beginPath();
     for(let i=0;i<trace.length;i++){const x=pad+(W-pad-6)*i/(trace.length-1),y=y0-(trace[i]/m)*(rowH*LAYOUT.waveAmp);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
     ctx.stroke();
-    ctx.fillStyle=hot?"#ffb86b":"#8b94a3";ctx.fillText(ch,3,y0);
+    ctx.fillStyle=`rgba(230,233,239,${0.4+0.5*c})`;ctx.fillText(ch,3,y0);
   });
   ctx.strokeStyle="#ff6a5a";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,H);ctx.stroke();
   ctx.fillStyle="#8b94a3";ctx.textBaseline="alphabetic";ctx.fillText(`${t[t.length-1].toFixed(1)} s`,W-34,H-4);
