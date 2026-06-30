@@ -124,19 +124,23 @@ function play(on){
 
 function buildMapbar(){
   const bar=$("map"); bar.innerHTML="";
-  const group=(label, items)=>{
-    const g=document.createElement("div"); g.className="mapgroup";
-    const l=document.createElement("span"); l.className="glabel"; l.textContent=label; g.appendChild(l);
-    const seg=document.createElement("div"); seg.className="seg wrap";
-    items.forEach(([k,t])=>{
-      const b=document.createElement("button"); b.textContent=t; b.dataset.k=k;
-      b.className=k===state.map?"on":""; b.onclick=()=>{ state.map=k; sync(); render(); };
-      seg.appendChild(b);
-    });
-    g.appendChild(seg); bar.appendChild(g);
-  };
-  group("signal (band power)", [["mu","mu"],["beta","beta"]]);
-  group("filters (CSP)", state.data.csp_patterns.map((_,i)=>["csp"+i,(i+1).toString()]));
+  // signal (band power) — mu / beta as quick buttons
+  const sg=document.createElement("div"); sg.className="mapgroup";
+  const sl=document.createElement("span"); sl.className="glabel"; sl.textContent="signal (band power)"; sg.appendChild(sl);
+  const seg=document.createElement("div"); seg.className="seg";
+  [["mu","mu"],["beta","beta"]].forEach(([k,t])=>{
+    const b=document.createElement("button"); b.textContent=t; b.dataset.k=k;
+    b.onclick=()=>{ state.map=k; sync(); render(); }; seg.appendChild(b);
+  });
+  sg.appendChild(seg); bar.appendChild(sg);
+  // filters (CSP) — a dropdown (6 of them)
+  const fg=document.createElement("div"); fg.className="mapgroup";
+  const fl=document.createElement("span"); fl.className="glabel"; fl.textContent="filters (CSP)"; fg.appendChild(fl);
+  const sel=document.createElement("select"); sel.id="cspsel";
+  const ph=document.createElement("option"); ph.value=""; ph.textContent="CSP filter…"; sel.appendChild(ph);
+  state.data.csp_patterns.forEach((_,i)=>{ const o=document.createElement("option"); o.value="csp"+i; o.textContent="CSP "+(i+1); sel.appendChild(o); });
+  sel.onchange=()=>{ if(sel.value){ state.map=sel.value; sync(); render(); } };
+  fg.appendChild(sel); bar.appendChild(fg);
 }
 function buildClassbar(){
   const bar=$("classbar"); bar.innerHTML="";
@@ -149,6 +153,7 @@ function buildClassbar(){
 }
 function sync(){
   $("map").querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.k===state.map));
+  const sel=$("cspsel"); if(sel) sel.value = isCsp()?state.map:"";   // reset CSP dropdown when a band is active
   [...$("classbar").children].forEach(b=>b.classList.toggle("on", b.dataset.c===state.cls));
   const csp=isCsp();                          // class + time apply only to band-power maps
   $("classbar").hidden=csp;

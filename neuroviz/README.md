@@ -11,7 +11,8 @@ inherently 2D-surface, and topomaps are what the field actually uses.
   one hand desynchronizes the *contralateral* motor cortex (the hot spot flips C3↔C4 between left/right hand).
 - **CSP spatial patterns** — what the baseline decoder actually learns (should localize over C3/C4 →
   physiologically real features, not artifacts).
-- **Waveforms** at C3/Cz/C4 for an example trial.
+- **Waveforms** — all 22 channels for an example trial, each colored by its contribution to the selected
+  map (band power or CSP filter) — so the channels that drive the current view light up, no hardcoded highlight.
 
 ## Run
 ```bash
