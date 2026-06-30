@@ -1,0 +1,20 @@
+# Published reference ceilings — what we quarantine against, NOT targets.
+# Honesty rule: cite prior art, reproduce a known method, contribute the eval rigor + efficient deploy;
+# do not chase these numbers. Keyed by dataset -> regime -> method. Numbers are representative figures
+# from the cited sources (within-subject = the standard train-session -> eval-session 2a protocol).
+
+bnci2014_001:                       # BCI Competition IV-2a, 4-class, 9 subjects
+  within_subject:
+    fbcsp:        {acc: 0.65, kappa: 0.57, source: "Ang et al. 2012, FBCSP (BCI IV winner)"}
+    eegnet:       {acc: 0.70, kappa: 0.61, source: "Lawhern et al. 2018, EEGNet"}
+    shallow_convnet: {acc: 0.74, kappa: 0.65, source: "Schirrmeister et al. 2017, Braindecode"}
+    deep_convnet: {acc: 0.70, kappa: 0.60, source: "Schirrmeister et al. 2017, Braindecode"}
+    eegconformer: {acc: 0.82, kappa: 0.76, source: "Song et al. 2023, EEG Conformer"}
+    atcnet:       {acc: 0.81, kappa: 0.76, source: "Altaheri et al. 2023, ATCNet (10-run mean, 500ep no early-stop, hold-out T->E)"}
+    sota:         {acc: 0.88, kappa: 0.84, source: "two-stage transformer, Sci. Rep. 2025"}
+  cross_subject:
+    eegnet:       {acc: 0.51, source: "Springer 2025 DL benchmark (EEGNet v4, LOSO)"}
+    sota:         {acc: 0.74, source: "EEGEncoder, subject-independent, 2024"}
+
+# Non-invasive brain-to-text north star (Stage 1, cited not reproduced):
+#   Meta Brain2Qwerty 2025: MEG CER 32% (best 19%), word acc ~61%; EEG far worse (CER 67%).
