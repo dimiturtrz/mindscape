@@ -48,3 +48,31 @@ def test_aggregate_shape_and_separable_signal(monkeypatch):
     assert np.array(res["pooled"]["confusion"]).shape == (4, 4)
     assert 0.0 <= res["fold_mean"]["ece"] <= 1.0
     assert res["fold_mean"]["acc"] > 0.8        # separable signal must decode
+
+
+def test_run_persists_a_model_per_fold(monkeypatch, tmp_path):
+    """harness.run must save each fold's trained model under run_dir/models/ (mlflow off)."""
+    monkeypatch.setenv("MINDSCAPE_NO_MLFLOW", "1")
+    rng = np.random.default_rng(3)
+
+    def fake_gather(df):
+        n = len(df)
+        y = np.tile([0, 1, 2, 3], n // 4)[:n]
+        X = rng.normal(size=(n, 4, 8)).astype(np.float32) + (y[:, None, None] * 2.0).astype(np.float32)
+        return X, y
+
+    monkeypatch.setattr("core.data.store.gather", fake_gather)
+
+    def fit(X, y):
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+        return LinearDiscriminantAnalysis().fit(X.reshape(len(X), -1), y)
+
+    def score(clf, X):
+        return clf.predict_proba(X.reshape(len(X), -1))
+
+    folds = [_fake_fold("1", seed=1), _fake_fold("2", seed=2)]
+    harness.run("lda_stub", fit, score, folds, n_classes=4, regime="within", run_dir=tmp_path)
+
+    saved = sorted((tmp_path / "models").glob("*.joblib"))
+    assert len(saved) == 2                       # one model per fold
+    assert {p.stem for p in saved} == {"model_lda_stub_1", "model_lda_stub_2"}

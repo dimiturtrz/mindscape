@@ -140,15 +140,32 @@ def artifact_json(name: str, obj) -> None:
         pass
 
 
-def log_model(net, name: str) -> None:
-    """Log a torch module to the run (best-effort; guarded)."""
-    if _active is None:
-        return
+def save_model(clf, name: str, run_dir: str | Path | None = None) -> Path | None:
+    """Persist a trained model (best-effort, guarded) and log it as a run artifact.
+
+    Handles both decoder kinds behind the harness contract:
+      - braindecode nets (a `BraindecodeClf` with a `.net` torch module) -> `<name>.pt` (whole module,
+        reloadable via torch.load)
+      - sklearn baselines (CSP+LDA, Riemann pipelines) -> `<name>.joblib`
+
+    Writes into `run_dir/models/` when given (so runs/<name>/ stays the authoritative store, mlflow or
+    not), then logs the file to the active MLflow run if one is open. Returns the path (or None on failure)."""
     try:
-        import mlflow.pytorch
-        mlflow.pytorch.log_model(net, name=name)
+        out_dir = (Path(run_dir) / "models") if run_dir else Path(tempfile.gettempdir())
+        out_dir.mkdir(parents=True, exist_ok=True)
+        net = getattr(clf, "net", None)
+        if net is not None:                                  # torch decoder
+            import torch
+            path = out_dir / f"{name}.pt"
+            torch.save(net, path)
+        else:                                                # sklearn pipeline (baseline)
+            import joblib
+            path = out_dir / f"{name}.joblib"
+            joblib.dump(clf, path)
     except Exception:
-        pass
+        return None
+    artifact(path)                                           # no-op if no active run
+    return path
 
 
 def backfill(experiment: str = "mindscape") -> None:

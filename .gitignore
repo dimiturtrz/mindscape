@@ -38,6 +38,8 @@ D:/
 *.npz
 *.bin
 *.pth
+*.pt
+*.joblib
 *.onnx
 *.engine
 mlflow.db

@@ -43,7 +43,7 @@ def main():
     print(f"X {X.shape} · sessions {sorted(meta['session'].unique().to_list())}")
 
     fit, _ = decoders.make(args.method)
-    rows = []
+    rows, models = [], []
     for s in sorted(meta["subject"].unique().to_list()):
         idx = (meta["subject"] == s).to_numpy()
         Xs, ys = X[idx], y[idx]
@@ -57,6 +57,7 @@ def main():
             pred = clf.predict_proba(Xs[te]).argmax(1)
             accs.append(metrics.accuracy(ys[te], pred))
             kaps.append(metrics.kappa(ys[te], pred))
+        models.append((str(s), clf))                      # keep the last-seed model per subject to persist
         r = {"subject": str(s), "acc": float(np.mean(accs)), "kappa": float(np.mean(kaps)),
              "acc_std": float(np.std(accs)), "seeds": args.seeds, "n": int(te.sum())}
         rows.append(r)
@@ -81,6 +82,8 @@ def main():
         tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
         tracking.per_group("acc_subject", {r["subject"]: r["acc"] for r in rows})
         tracking.artifact(out / f"{args.method}.json")
+        for subj, clf in models:                          # persist the trained net per subject
+            tracking.save_model(clf, f"model_{args.method}_s{subj}", run_dir=out)
     print(f"-> {out}/{args.method}.json")
 
 

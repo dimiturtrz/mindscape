@@ -35,13 +35,19 @@ def folds_for(meta, regime: str, test_sessions=()):
     return out
 
 
-def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str = "") -> dict:
-    """Pure: run the method over folds, compute the metrics. No MLflow, no side effects."""
+def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str = "",
+              models_out: list | None = None) -> dict:
+    """Pure: run the method over folds, compute the metrics. No MLflow, no side effects.
+    If `models_out` is given, each fold's fitted clf is appended as (fold_name, clf) for the caller to
+    persist — keeps this function side-effect-free while letting `run` save the trained models."""
     per, P, Y, G = [], [], [], []
     for name, train, test in folds:
         Xtr, ytr = store.gather(train)
         Xte, yte = store.gather(test)
-        probs = np.asarray(score_fn(fit_fn(Xtr, ytr), Xte), dtype=float)
+        clf = fit_fn(Xtr, ytr)
+        if models_out is not None:
+            models_out.append((str(name), clf))
+        probs = np.asarray(score_fn(clf, Xte), dtype=float)
         pred = probs.argmax(1)
         row = {"fold": str(name), "n": int(len(yte)),
                "acc": metrics.accuracy(yte, pred), "kappa": metrics.kappa(yte, pred),
@@ -64,9 +70,11 @@ def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str 
 
 
 def run(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str = "",
-        params: dict | None = None, run_dir=None) -> dict:
-    """aggregate + log to MLflow (guarded). `run_dir` (a runs/<name>/ dir) enables resume + artifacts."""
-    res = aggregate(method, fit_fn, score_fn, folds, n_classes, regime)
+        params: dict | None = None, run_dir=None, save_models: bool = True) -> dict:
+    """aggregate + log to MLflow (guarded). `run_dir` (a runs/<name>/ dir) enables resume + artifacts.
+    `save_models` persists each fold's trained model (run_dir/models/ + MLflow artifact)."""
+    models: list = [] if save_models else None
+    res = aggregate(method, fit_fn, score_fn, folds, n_classes, regime, models_out=models)
     fm, pooled = res["fold_mean"], res["pooled"]
     tags = {"method": method, "regime": regime, "dataset": (params or {}).get("dataset", "")}
     with tracking.run("mindscape", f"{method}_{regime}", params=params or {"method": method, "regime": regime},
@@ -78,4 +86,6 @@ def run(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str = "",
         tracking.per_group("acc_subject", {r["fold"]: r["acc"] for r in res["per_fold"]})
         tracking.per_group("ece_subject", {r["fold"]: r["ece"] for r in res["per_fold"]})
         tracking.artifact_json("aggregate.json", res)
+        for fold_name, clf in (models or []):
+            tracking.save_model(clf, f"model_{method}_{fold_name}", run_dir=run_dir)
     return res
