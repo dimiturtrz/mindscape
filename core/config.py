@@ -101,7 +101,7 @@ def configure_moabb_download() -> Path:
 def _patch_moabb_drive_colon() -> None:
     """Compat shim for a MOABB *Windows* bug (no upstream fix as of 1.5.0; no config flag avoids it,
     and no colon-free absolute Windows path exists). MOABB's `_sanitize_path` translates ':' -> '-' over
-    the WHOLE path, clobbering the drive colon ('D:\\...' -> 'D-\\...'), so downloads become RELATIVE and
+    the WHOLE path, clobbering the drive colon ('<drive>:\\...' -> '<drive>-\\...'), so downloads go RELATIVE and
     leak into the repo cwd (the recurring `D-/`) + re-download every time. We restore a leading drive and
     sanitize only the rest (behavior-preserving otherwise). Idempotent. TODO: file/track upstream PR."""
     try:
