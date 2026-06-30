@@ -12,18 +12,41 @@ We also point MOABB/MNE at <data>/raw so downloads land inside the one root, not
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from omegaconf import OmegaConf
 
 _REPO = Path(__file__).resolve().parent.parent
 
 
+def to_native_path(path_str: str) -> str:
+    """Translate a configured path to the current platform so ONE paths.yaml works on Windows + WSL.
+
+    Windows drive 'X:/...' <-> POSIX/WSL '/mnt/x/...'. A bare Windows drive path on POSIX would
+    otherwise be treated as relative and leak the data tree into the repo (the systole leak); a POSIX
+    mount path on Windows would be unresolvable. There's no solid pip lib for this (wslpath is WSL-only),
+    so this small, tested mapping is the dependency-free fix. The default WSL mount is /mnt/<drive>;
+    MINDSCAPE_DATA can always override with an explicit native path.
+    """
+    # Parse with PurePath (robust to '\\', mixed slashes, 'D:' w/o slash); only the /mnt mapping is
+    # explicit (no lib does the WSL drive<->mount convention).
+    drive = PureWindowsPath(path_str).drive              # 'D:' for a drive path, '' otherwise
+    if len(drive) == 2 and drive.endswith(":"):
+        rest = "/".join(PureWindowsPath(path_str).parts[1:])
+        if os.name == "nt":
+            return f"{drive}/{rest}".rstrip("/")
+        return f"/mnt/{drive[0].lower()}/{rest}".rstrip("/")
+    parts = PurePosixPath(path_str).parts                # /mnt/<x>/... on Windows -> drive
+    if os.name == "nt" and len(parts) >= 3 and parts[1] == "mnt" and len(parts[2]) == 1:
+        return f"{parts[2].upper()}:/" + "/".join(parts[3:])
+    return path_str
+
+
 def data_root(sub: str | None = None) -> Path:
-    """The single data root, or a named subdir under it (`raw` / `processed`)."""
+    """The single data root (platform-translated), or a named subdir under it (`raw` / `processed`)."""
     env = os.environ.get("MINDSCAPE_DATA")
     if env:
-        root = Path(env)
+        raw = env
     else:
         cfg = _REPO / "paths.yaml"
         if not cfg.exists():
@@ -31,7 +54,8 @@ def data_root(sub: str | None = None) -> Path:
                 f"{cfg} not found — copy paths.example.yaml -> paths.yaml and set `data:` "
                 f"(or set the MINDSCAPE_DATA env var)."
             )
-        root = Path(OmegaConf.load(cfg).data)
+        raw = str(OmegaConf.load(cfg).data)
+    root = Path(to_native_path(raw))
     return root / sub if sub else root
 
 
@@ -44,11 +68,53 @@ def processed_dir() -> Path:
 
 
 def configure_moabb_download() -> Path:
-    """Point MOABB/MNE's download cache at <data>/raw so recordings stay inside the one root.
-    Idempotent; returns the cache dir. Call before any MOABB dataset access."""
-    cache = raw_dir()
+    """Point MOABB/MNE's download cache at <data>/raw so recordings stay inside the one root (never the
+    repo). Idempotent; returns the cache dir. Call before any MOABB dataset access.
+
+    The path is resolved to an ABSOLUTE native path and asserted — a relative value here is how raw
+    downloads once leaked into the repo as a stray `D-/` dir (a drive-letter mangle). We also persist
+    it to MNE's own config (set_config), not just the env, so a child process can't fall back."""
+    cache = raw_dir().resolve()
+    assert cache.is_absolute(), f"data root must be absolute, got {cache!r} (fix paths.yaml)"
     cache.mkdir(parents=True, exist_ok=True)
-    # MNE reads MNE_DATA; MOABB reads MNE_DATA for most datasets.
-    os.environ.setdefault("MNE_DATA", str(cache))
-    os.environ.setdefault("MOABB_RESULTS", str(processed_dir() / "moabb_results"))
+    native = os.fspath(cache)                          # native Windows path (no forward-slash mangling)
+    os.environ["MNE_DATA"] = native                   # overwrite, don't setdefault — be authoritative
+    os.environ["MOABB_RESULTS"] = os.fspath(processed_dir() / "moabb_results")
+    try:
+        import mne
+        mne.set_config("MNE_DATA", native, set_env=True)
+    except Exception:
+        pass
+    try:
+        from moabb.utils import set_download_dir
+        set_download_dir(native)
+    except Exception:
+        pass
+    _patch_moabb_drive_colon()
     return cache
+
+
+def _patch_moabb_drive_colon() -> None:
+    """Work around a MOABB Windows bug: its `_sanitize_path` translates ':' -> '-' over the WHOLE path,
+    clobbering the drive colon ('D:\\...' -> 'D-\\...'), so downloads become RELATIVE and leak into the
+    repo cwd (the recurring `D-/` folder) + re-download every time. We replace it with a version that
+    preserves a leading drive letter and only sanitizes the rest. Idempotent."""
+    try:
+        from pathlib import Path as _P
+
+        from moabb.datasets import download as _dl
+    except Exception:
+        return
+    if getattr(_dl._sanitize_path, "_mindscape_patched", False):
+        return
+    _bad = ':*?"<>|'
+
+    def _safe(path):
+        s = str(path)
+        if len(s) >= 2 and s[1] == ":" and s[0].isalpha():        # 'D:...' -> keep 'D:', clean rest
+            drive, rest = s[:2], s[2:]
+            return _P(drive + rest.translate({ord(c): "-" for c in _bad}))
+        return _P(s.translate({ord(c): "-" for c in _bad}))
+
+    _safe._mindscape_patched = True
+    _dl._sanitize_path = _safe
