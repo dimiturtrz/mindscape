@@ -24,7 +24,7 @@ def _cov_dataset(n_per_class=40, n_ch=4, n_t=128, seed=0):
     return np.asarray(X, dtype=np.float64), np.asarray(y)
 
 
-@pytest.mark.parametrize("method", ["ts", "mdm"])
+@pytest.mark.parametrize("method", ["ts", "mdm", "acm"])
 def test_riemann_decodes_covariance_signal(method):
     X, y = _cov_dataset(seed=1)
     clf = riemann.fit(X, y, method=method)
@@ -39,3 +39,14 @@ def test_unknown_method_raises():
     X, y = _cov_dataset(n_per_class=8, seed=2)
     with pytest.raises(ValueError):
         riemann.fit(X, y, method="nope")
+
+
+def test_recenter_makes_domain_mean_identity():
+    # recentering a domain by its own Riemannian mean must move that mean to the identity
+    from pyriemann.utils.mean import mean_riemann
+    rng = np.random.default_rng(0)
+    shift = (lambda A: A @ A.T + 4 * np.eye(4))(rng.normal(size=(4, 4)))   # an SPD location far from I
+    C = np.stack([shift @ (B @ B.T / 8) @ shift                            # covs centered away from I
+                  for B in rng.normal(size=(30, 4, 8))])
+    M = mean_riemann(riemann.recenter_covariances(C))
+    assert np.allclose(M, np.eye(4), atol=1e-4)

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 def method_names() -> list[str]:
     from neuroscan.models.decoders import MODELS
-    return ["csp_lda", "riemann", *sorted(MODELS)]
+    return ["csp_lda", "riemann", "riemann_acm", *sorted(MODELS)]
 
 
 def get_method(name: str):
@@ -21,5 +21,10 @@ def get_method(name: str):
     if name == "riemann":
         from baselines import riemann
         return riemann.fit, riemann.score
+    if name == "riemann_acm":
+        import functools
+
+        from baselines import riemann
+        return functools.partial(riemann.fit, method="acm"), riemann.score
     from neuroscan.models.decoders import make
     return make(name)

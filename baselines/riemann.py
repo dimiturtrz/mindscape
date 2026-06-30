@@ -19,26 +19,62 @@ from __future__ import annotations
 import numpy as np
 
 
-def fit(X: np.ndarray, y: np.ndarray, method: str = "ts", estimator: str = "oas"):
-    """Fit a Riemannian classifier. `method`: "ts" (tangent space + LR) or "mdm". `estimator`: the
-    covariance shrinkage estimator (OAS keeps the matrices SPD on short/noisy trials)."""
+def _augment(X: np.ndarray, order: int, lag: int) -> np.ndarray:
+    """Time-delay embedding (Augmented Covariance Method): stack `order` lagged copies of each trial so
+    the covariance becomes [ch*order, ch*order] and encodes temporal dynamics, not just spatial structure.
+    X [n, ch, t] -> [n, ch*order, t-(order-1)*lag]. This is the SOTA-flavoured Riemannian trick — it folds
+    *time* into the SPD matrix without the instability of a short sliding window (Carrara & Papadopoulo)."""
+    n, ch, t = X.shape
+    L = t - (order - 1) * lag
+    if L <= 0:
+        raise ValueError(f"order*lag too large for trial length {t} (order={order}, lag={lag})")
+    return np.concatenate([X[:, :, k * lag:k * lag + L] for k in range(order)], axis=1)
+
+
+def recenter_covariances(C: np.ndarray) -> np.ndarray:
+    """Congruence-transport one domain's covariances to the identity: C -> M^{-1/2} C M^{-1/2}, where M
+    is the domain's Riemannian (Fréchet) mean. Removes the per-domain LOCATION shift on the SPD manifold
+    (Zanini et al. 2018 recentering) while preserving the relative class geometry — the manifold version
+    of the M2 whitening (C^{-1/2}), applied per subject to kill the between-subject nuisance.
+
+    Cross-subject EEG fails because each subject's whole covariance cloud sits at a different point on the
+    manifold (head/skin/electrode/noise) — a domain shift, not a difference in the shared ERD contrast.
+    Recentering every subject (train AND the unlabeled target) to a common origin aligns the clouds so the
+    shared discriminative structure lines up. Unsupervised for the target -> deployment-friendly."""
+    from pyriemann.utils.base import invsqrtm
+    from pyriemann.utils.mean import mean_riemann
+
+    C = np.asarray(C, dtype=np.float64)
+    W = invsqrtm(mean_riemann(C))
+    return np.einsum("ij,njk,kl->nil", W, C, W)
+
+
+def fit(X: np.ndarray, y: np.ndarray, method: str = "ts", estimator: str = "oas",
+        order: int = 4, lag: int = 8):
+    """Fit a Riemannian classifier. `method`:
+      - "ts"  : tangent space + LR (strong classical reference)
+      - "mdm" : Minimum Distance to Mean (parameter-free)
+      - "acm" : Augmented Covariance Method — time-delay-embedded covariance (`order` lagged copies at
+                stride `lag`) + tangent space + LR. Folds temporal dynamics into the SPD matrix.
+    `estimator`: covariance shrinkage (OAS keeps matrices SPD on short/noisy trials)."""
     from pyriemann.classification import MDM
     from pyriemann.estimation import Covariances
     from pyriemann.tangentspace import TangentSpace
     from sklearn.linear_model import LogisticRegression
     from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import FunctionTransformer
 
     cov = Covariances(estimator=estimator)
+    ts_lr = [TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0)]
     if method == "mdm":
         pipe = make_pipeline(cov, MDM(metric="riemann"))
     elif method == "ts":
-        pipe = make_pipeline(
-            cov,
-            TangentSpace(metric="riemann"),
-            LogisticRegression(max_iter=500, C=1.0),
-        )
+        pipe = make_pipeline(cov, *ts_lr)
+    elif method == "acm":
+        aug = FunctionTransformer(_augment, kw_args={"order": order, "lag": lag}, validate=False)
+        pipe = make_pipeline(aug, cov, *ts_lr)
     else:
-        raise ValueError(f"unknown riemann method {method!r}; use 'ts' or 'mdm'")
+        raise ValueError(f"unknown riemann method {method!r}; use 'ts', 'mdm', or 'acm'")
     pipe.fit(X.astype(np.float64), y)
     return pipe
 
