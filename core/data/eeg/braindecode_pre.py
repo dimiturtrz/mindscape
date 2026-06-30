@@ -1,0 +1,55 @@
+"""Braindecode-canonical preprocessing: continuous-signal EMS done RIGHT (before epoching), then window.
+
+This is the correct exponential-moving-standardization path — running stats stabilize over the whole
+recording, not per-epoch (the per-epoch version regressed; see research/2026-06-30_2a_sota_recipe.md).
+Returns (X, y, meta) in mindscape's schema so it feeds the same harness/decoders.
+
+Recipe (braindecode 2a example / Schirrmeister 2017): pick EEG -> V to uV -> bandpass 4-38 Hz ->
+exponential_moving_standardize(factor_new=1e-3, init_block_size=1000) on the CONTINUOUS signal ->
+windows from events with a -0.5 s trial-start offset.
+"""
+from __future__ import annotations
+
+import numpy as np
+import polars as pl
+
+
+def get_data(dataset_name: str = "BNCI2014_001", subjects: list[int] | None = None,
+             fmin: float = 4.0, fmax: float = 38.0, trial_start_offset_s: float = -0.5,
+             factor_new: float = 1e-3, init_block_size: int = 1000):
+    """Return (X [n,ch,t] float32, y [n] int, meta polars{subject,session,run}) — EMS-preprocessed."""
+    from braindecode.datasets import MOABBDataset
+    from braindecode.preprocessing import (
+        Preprocessor, create_windows_from_events, exponential_moving_standardize, preprocess)
+
+    from core.config import configure_moabb_download
+    configure_moabb_download()
+
+    ds = MOABBDataset(dataset_name=dataset_name, subject_ids=subjects)
+    sfreq = ds.datasets[0].raw.info["sfreq"]
+    preprocess(ds, [
+        Preprocessor("pick_types", eeg=True, meg=False, stim=False),
+        Preprocessor(lambda d: d * 1e6),                                  # V -> microvolts
+        Preprocessor("filter", l_freq=fmin, h_freq=fmax),
+        Preprocessor(exponential_moving_standardize, factor_new=factor_new, init_block_size=init_block_size),
+    ])
+
+    start = int(round(trial_start_offset_s * sfreq))
+    windows = create_windows_from_events(ds, trial_start_offset_samples=start,
+                                         trial_stop_offset_samples=0, preload=True)
+
+    Xs, ys, subj, sess, run = [], [], [], [], []
+    for wds in windows.datasets:
+        d = wds.description
+        arr = np.stack([wds[i][0] for i in range(len(wds))]).astype(np.float32)   # [n, ch, t]
+        lab = np.array([wds[i][1] for i in range(len(wds))], dtype=np.int64)        # braindecode int labels
+        Xs.append(arr); ys.append(lab)
+        n = len(lab)
+        subj += [str(d["subject"])] * n
+        sess += [str(d["session"])] * n
+        run += [str(d.get("run", "0"))] * n
+
+    X = np.concatenate(Xs).astype(np.float32)
+    y = np.concatenate(ys).astype(np.int64)
+    meta = pl.DataFrame({"subject": subj, "session": sess, "run": run})
+    return X, y, meta
