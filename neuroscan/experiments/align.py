@@ -43,6 +43,27 @@ def _recenter_by_group(C, groups):
     return out
 
 
+def _run_fold(s, tr, te, augment, order, lag):
+    """One LOSO fold: re-center train (per subject) + target (unsupervised), tangent-space + LR, score.
+    Module-level so joblib can ship it to a worker process — folds are independent, so they parallelize."""
+    from pyriemann.tangentspace import TangentSpace
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import make_pipeline
+
+    Xtr, ytr = store.gather(tr)
+    Xte, yte = store.gather(te)
+    groups = tr["subject"].to_numpy()
+    Ctr = _recenter_by_group(_covariances(Xtr, augment, order, lag), groups)
+    Cte = riemann.recenter_covariances(_covariances(Xte, augment, order, lag))
+    clf = make_pipeline(TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0))
+    clf.fit(Ctr, ytr)
+    probs = np.asarray(clf.predict_proba(Cte), dtype=float)
+    pred = probs.argmax(1)
+    row = {"fold": str(s), "n": int(len(yte)), "acc": metrics.accuracy(yte, pred),
+           "kappa": metrics.kappa(yte, pred), "ece": metrics.ece_from_probs(probs, yte)}
+    return row, probs, yte
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="bnci2014_001")
@@ -52,36 +73,24 @@ def main():
     ap.add_argument("--resample", type=float, default=128.0)
     ap.add_argument("--fmin", type=float, default=8.0)
     ap.add_argument("--fmax", type=float, default=32.0)
+    ap.add_argument("--jobs", type=int, default=-1, help="parallel LOSO folds (joblib; -1 = all cores)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    from pyriemann.tangentspace import TangentSpace
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.pipeline import make_pipeline
+    from joblib import Parallel, delayed
 
     cfg = EpochCfg(resample=args.resample, fmin=args.fmin, fmax=args.fmax)
     meta = store.load(args.dataset, cfg)
     tag = "acm" if args.augment else "ts"
     print(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · recipe {cfg.key()} · recentered {tag}")
 
+    folds = [(s, tr, te) for s, tr, _val, te in splits.leave_one_subject_out(meta)]
+    print(f"\n=== riemann recentered ({tag}) · cross_subject · {args.dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
+    out_folds = Parallel(n_jobs=args.jobs)(
+        delayed(_run_fold)(s, tr, te, args.augment, args.order, args.lag) for s, tr, te in folds)
+
     rows, P, Y = [], [], []
-    print(f"\n=== riemann recentered ({tag}) · cross_subject · {args.dataset} ===")
-    for s, tr, _val, te in splits.leave_one_subject_out(meta):
-        Xtr, ytr = store.gather(tr)
-        Xte, yte = store.gather(te)
-        groups = tr["subject"].to_numpy()
-
-        Ctr = _covariances(Xtr, args.augment, args.order, args.lag)
-        Cte = _covariances(Xte, args.augment, args.order, args.lag)
-        Ctr = _recenter_by_group(Ctr, groups)                 # each train subject -> identity
-        Cte = riemann.recenter_covariances(Cte)               # target subject -> identity (unsupervised)
-
-        clf = make_pipeline(TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0))
-        clf.fit(Ctr, ytr)
-        probs = np.asarray(clf.predict_proba(Cte), dtype=float)
-        pred = probs.argmax(1)
-        row = {"fold": str(s), "n": int(len(yte)), "acc": metrics.accuracy(yte, pred),
-               "kappa": metrics.kappa(yte, pred), "ece": metrics.ece_from_probs(probs, yte)}
+    for row, probs, yte in sorted(out_folds, key=lambda r: r[0]["fold"]):
         rows.append(row); P.append(probs); Y.append(yte)
         print(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  ece {row['ece']:.3f}  (n={row['n']})")
 
