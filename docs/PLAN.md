@@ -4,7 +4,7 @@
 
 Working name `mindscape` (the terrain of the mind). Folder/repo may differ; rename freely.
 
-Sibling projects — same build philosophy, different domain: **[systole](https://github.com/dimiturtrz/cardiac-seg)** (cardiac MRI → ejection fraction → honest cross-scanner eval) and **[mirage](https://github.com/dimiturtrz/synthscape)** (3D surface-defect anomaly → honest sim-to-real eval). mindscape is the same *spine-first, honest-eval* pattern applied to neural signal. The structural and honesty conventions below are lifted from them deliberately.
+mindscape applies a *spine-first, honest-eval* pattern — the same one carried from prior ML projects of mine (honest cross-distribution evaluation as the contribution, not a leaderboard number) — to neural signal. The structural and honesty conventions below are lifted from that prior work deliberately.
 
 > **Status: initialization (2026-06-30).** Thesis + shape set; the spine (first task, eval harness, dataset) lands next. No results yet — when there are, they're reported as the *measured contrast + where it fails*, not a leaderboard number.
 
@@ -15,9 +15,9 @@ Sibling projects — same build philosophy, different domain: **[systole](https:
 
 **signal → preprocessing → decode → honest evaluation (calibration / out-of-distribution) → efficient on-device deployment.**
 
-- **Decoding + evaluation rigor = the leverage** (signature strength). The recurring contribution across the siblings: separate genuine generalization from overfitting on real, uncontrolled signal.
+- **Decoding + evaluation rigor = the leverage** (signature strength). The recurring contribution across the prior projects: separate genuine generalization from overfitting on real, uncontrolled signal.
 - **Efficient / on-device decoding = the second through-line** (carried edge-inference: quantization / distillation) — the deployable angle the field underweights.
-- **Neuroscience + the decoding methods = the new domain** (the genuinely new skill; treat as a ramp, the same move systole/mirage made).
+- **Neuroscience + the decoding methods = the new domain** (the genuinely new skill; treat as a ramp, the same move prior projects made).
 
 ## What we're building (one line)
 A non-invasive neural decoder, the honest measurement of how it holds up on signal it never trained on, and an efficient edge-deployable version of it.
@@ -25,27 +25,27 @@ A non-invasive neural decoder, the honest measurement of how it holds up on sign
 ---
 
 ## The spine: one honest, bounded capability
-systole's power is one through-line — *segment the heart → measure EF → show where it fails* — with the **honest-hard-part as the contribution**, not a leaderboard number. mirage mirrors it (synthetic defects → detect → quantify the sim-to-real gap). mindscape:
+The pattern: one through-line — *take a signal → produce a measured result → show where it fails* — with the **honest-hard-part as the contribution**, not a leaderboard number. mindscape:
 
 **decode a non-invasive neural signal → measure it honestly (calibration, out-of-distribution) → show where it fails → run it efficiently on the edge.**
 
-### Headline numbers — decided up front (the siblings' lesson)
+### Headline numbers — decided up front
 Concrete numbers tied to a bar, committed early:
-- **Decoding accuracy** on a public benchmark vs the reported/reproduced ceiling (the standard result is the baseline to quarantine against — the role nnU-Net played in systole, the SOTA memory-bank played in mirage).
+- **Decoding accuracy** on a public benchmark vs the reported/reproduced ceiling (the standard result is the baseline to quarantine against — here the published ATCNet / FBCSP ceiling).
 - **Calibration / robustness under shift** (ECE / reliability across subjects/sessions) — the rare-class + calibration signature, carried.
 - **Efficiency** — latency / model size / (where measurable) power for the on-device decoder, vs the full-precision model. The deployable number.
-Per-condition diagnostics stratify the failure (by subject, session, signal quality), the way systole stratified EF error by pathology/vendor.
+Per-condition diagnostics stratify the failure (by subject, session, signal quality) — the axis that hides the mean's lie.
 
 ---
 
 ## The ramp (real spine first, then the angle)
-1. **Stage 0 — Warm-up, real data.** Stand up a standard non-invasive decoding task (e.g. motor-imagery on a public benchmark) through a *verified* eval harness (accuracy + calibration + per-subject/session diagnostics). Prove the spine before anything novel. **First commit = dataset + eval harness.** = systole's Gate 1 (presentable) = **the public-flip trigger.**
+1. **Stage 0 — Warm-up, real data.** Stand up a standard non-invasive decoding task (e.g. motor-imagery on a public benchmark) through a *verified* eval harness (accuracy + calibration + per-subject/session diagnostics). Prove the spine before anything novel. **First commit = dataset + eval harness.** = the first presentable gate = **the public-flip trigger.**
 2. **Stage 1 — Toward communication / semantic decoding.** Move to the harder, more meaningful target — decoding intended communication from non-invasive signal. This is where the real-world / cross-subject / cross-session evaluation traps live (a decoder that scores well on its own recordings can mean little out of distribution). Reproduce ONE known method and *measure* it honestly — don't chase the leaderboard. Calibration + out-of-distribution gap = the headline honest number.
 3. **Stage 2 — Efficient on-device decoder (the differentiator).** Quantization / distillation toward a real-time decoder on commodity edge hardware; ONNX → runtime, latency/size/(power) benchmark. Target minimal accuracy loss vs full precision. The edge-inference discipline carried from prior work, applied to neural decoding — what the field underweights.
 4. **After the spine — expansion axes** (modality breadth · decoding depth). Optional, sequenced *after* the public flip — mapped so the ladder isn't lost, not pulled forward.
 
 ## Comparisons (the honest triad IS the contribution)
-Like systole's nnU-Net baseline and mirage's SOTA memory-bank, report honestly:
+Against the published ceiling (reproduced through the same harness), report honestly:
 1. Reproduced ceiling (standard method on the standard split).
 2. Cross-subject / cross-session (the out-of-distribution gap).
 3. Efficient/quantized version vs full-precision (the deployment cost).
@@ -54,19 +54,19 @@ That triad + calibration + per-condition diagnostics is the defensible result �
 
 ---
 
-## Structure — three pieces, general → specific (the siblings' shape)
-The siblings' memorability is the visualizers that make them demonstrable (systole's `mri-sim` + `cardioview`; mirage's synth-gen viz + point-cloud viewer). mindscape clones the three-piece shape. **A piece is added only when it's real — no empty speculative folders.**
+## Structure — three pieces, general → specific
+Memorability comes from a visualizer that makes the work demonstrable. mindscape's three pieces, general → specific. **A piece is added only when it's real — no empty speculative folders.**
 
-| systole / mirage | mindscape | role |
-|---|---|---|
-| `mri-sim` / synth-gen viz | **signal viz** — the neural recording the model consumes (channels, spectra, epochs) | *understand the data the model consumes* |
-| `cardioview` / point-cloud viewer | **decode viewer** — the decoder's output on held-out signal, in-browser (ONNX) | *see the model work* |
-| `cardioseg` / pipeline | **pipeline** — data → preprocess → decode → eval harness | *the science layer — the eval harness is the contribution* |
+| piece | role |
+|---|---|
+| **signal viz** (`neuroviz/`) — the neural recording the model consumes (topomaps, spectra, epochs) | *understand the data the model consumes* |
+| **decode viewer** — the decoder's output on held-out signal, in-browser (ONNX) | *see the model work* |
+| **pipeline** (`core/` + `neuroscan/`) — data → preprocess → decode → eval harness | *the science layer — the eval harness is the contribution* |
 
-### learning/ track (the siblings' "how I ramp into the field")
+### learning/ track — how I ramp into the field
 Mirror the `learning/<date>_<topic>.md` + glossary + on-demand self-quizzes, and the circuit: **research (grounds it → `research/`) → theory writeup (`learning/`) → quiz → sharpen the plan.** Neuroscience + neural-decoding theory is where the ramp effort goes. Build log = git history; theory artifacts = `learning/`.
 
-### Reuse from the siblings + the acoustic engine wholesale (don't reinvent)
+### Reuse the engine conventions + carry the acoustic-work discipline (don't reinvent)
 - **`paths.yaml` one-root config** + data-out-of-repo + per-source adapters → a common schema.
 - **Calibration + eval harness** — accuracy, Brier/ECE, KS-test domain-gap, distribution-shift detection — carried, retargeted to neural decoding.
 - **Model cards + auto-ONNX-export at train-end** (per-run, parity-gated quantization).
@@ -90,7 +90,7 @@ Mirror the `learning/<date>_<topic>.md` + glossary + on-demand self-quizzes, and
 3. **Cite prior art** (the benchmark papers, the decoding methods, the libs) — informed, not naive.
 4. **Verify every ⚠️** against a primary source before it lands in the README.
 5. Thesis framing: *"honest, efficient non-invasive neural decoding,"* not *"I built a BCI."*
-6. **Honest-limits section, measured not assumed** (the siblings' standard): claim edge deploy (real), never clinical/production-grade; neuroscience is a ramp — say so; state the gaps as numbers.
+6. **Honest-limits section, measured not assumed** (the prior projects' standard): claim edge deploy (real), never clinical/production-grade; neuroscience is a ramp — say so; state the gaps as numbers.
 7. Build private → **flip public at Stage 0** (warm-up + eval harness presentable, prior art cited); steady real commits after.
 
 ---
