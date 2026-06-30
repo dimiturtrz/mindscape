@@ -42,6 +42,26 @@ per-subject diagnostics) · efficient deployment (ONNX, quantization). This is t
 - [x] the cross-subject gap + why it happens; efficiency/deploy (`03`)
 - [ ] (Stage 1) semantic / speech decoding — when we get there
 
+## Task ladder — what each EEG task needs (and what's covered)
+The fields above are shared; each *task* (see [`research/.../tasks_datasets_landscape.md`](../research/deep_dives/2026-06-30_tasks_datasets_landscape.md))
+adds its own signal + method knowledge. What the lessons cover vs what a task would add:
+
+| task | the signal (extra to learn) | the method (extra) | status |
+|---|---|---|---|
+| **Motor imagery** (Stage 0) | **ERD** (mu/beta, contralateral) — lessons 01–02 | **CSP** + EEGNet/ATCNet — lessons 02–03 | ✅ **covered** |
+| efficiency / on-device (Stage 2) | — | ONNX, quantization, parity — lesson 03.5 | ✅ covered |
+| **Visual / semantic** (Stage 1) | visual-evoked responses; CLIP-style representational decoding | contrastive / embedding regression, zero-shot retrieval | ⬜ Stage 1 |
+| **Speech / language** (Stage 1+) | cortical speech tracking; MEG ≫ EEG here | seq2seq, contrastive decoding | ⬜ Stage 1+ |
+| P300 / ERP | the P300 oddball ERP (time-domain, not band power) | template / Riemannian (xDAWN) | ⬜ cite-only (pruned) |
+| SSVEP / cVEP | steady-state response to flicker frequency | CCA / FBCCA (frequency match) | ⬜ cite-only (pruned) |
+| affective / AAD | longer-window state; auditory envelope tracking | classification / stimulus-reconstruction | ⬜ cite-only (pruned) |
+
+**Read:** the *foundations* (F) and the *honest-eval / decoding stack* (D) transfer across **all** tasks —
+that's why the cross-subject-gap + calibration + efficiency lessons are paradigm-general. The *neuroscience-
+enough* (N) layer is **per-task**: ERD is MI-specific; Stage 1 swaps in visual-evoked / speech-tracking
+signal knowledge. So the curriculum covers our chosen ladder (MI → efficiency → the Stage-1 target), not the
+pruned paradigms — which we cite, not build.
+
 ## The interview bar (what to be able to say cold)
 1. **The task** in one sentence + why imagery (BCI for people who can't move).
 2. **The signal**: ERD — mu/beta power drops over contralateral motor cortex during (imagined) movement.
