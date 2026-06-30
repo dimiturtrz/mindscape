@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.env
+
+# Local machine config — the data root lives outside the repo
+paths.yaml
+
+# Private/local-only docs (generic pattern — reveals no intent in the ignore list itself)
+*.local.md
+.local/
+
+# Data / weights / artifacts (never commit large or licensed data)
+data/raw/
+data/processed/
+datasets/
+# misplaced/relative data roots (paths.yaml bug — data must live OUTSIDE the repo)
+D-/
+D:/
+# neural recordings (EEG/MEG) + arrays + dataset archives
+*.edf
+*.bdf
+*.gdf
+*.set
+*.fif
+*.vhdr
+*.eeg
+*.mat
+*.gz
+*.zip
+*.npy
+*.npz
+*.bin
+*.pth
+*.onnx
+*.engine
+mlflow.db
+mlartifacts/
+mlruns/
+runs/
+checkpoints/
+logs/
+wandb/
+# MOABB / MNE download caches (point here via paths.yaml; never commit recordings)
+mne_data/
+.mne/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

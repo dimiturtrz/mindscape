@@ -1,0 +1,46 @@
+[project]
+name = "mindscape"
+version = "0.1.0"
+description = "Honest, efficient non-invasive neural decoding (EEG/MEG) — decode, evaluate under shift, deploy on the edge."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "scipy",
+    "scikit-learn",          # CSP+LDA baseline, metrics (kappa), splits
+    "polars",                # the data store + splits (core/data/{store,splits}.py)
+    "pydantic>=2",           # validated preprocessing / hparam configs
+    "omegaconf",             # paths.yaml loader (core/config.py)
+    "mne>=1.6",              # EEG/MEG IO, filtering, epoching
+    "moabb>=1.0",            # standardized BCI datasets + paradigms (the verified harness backbone)
+    # torch >=2.7 for NVIDIA Blackwell (sm_120, RTX 5090). CPU build is fine for BCI IV-2a (tiny);
+    # CUDA build comes from the PyTorch index below, not plain PyPI.
+    "torch>=2.7",
+    "braindecode>=0.8",      # PyTorch EEG decoders (EEGNet, ShallowFBCSPNet, Deep4Net)
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+export = ["onnx", "onnxruntime"]   # ONNX export + parity check (Stage 2; core/export_onnx.py)
+track = ["mlflow"]                 # optional experiment tracking (neuroscan/tracking.py); guarded, local
+all = ["pytest", "onnx", "onnxruntime", "mlflow"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there so uv resolves the cu130 wheel
+# (RTX 5090) instead of the CPU build. `explicit` = only packages pinned in [tool.uv.sources] use it.
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["core*", "neuroscan*"]
