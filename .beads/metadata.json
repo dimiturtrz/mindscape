@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "mindscape",
+  "project_id": "0423a983-85e0-491a-859f-effde83d93e4"
+}
