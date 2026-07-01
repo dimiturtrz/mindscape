@@ -164,17 +164,22 @@ function play(on){
   if(on) timer=setInterval(()=>{ state.frame=(state.frame+1)%nFrames(); render(); }, LAYOUT.frameMs);
 }
 
-// method dropdown: each signal map (mu/beta or HbO/HbR — both shown, they're one signal not a choice) +
-// whatever decoder views the data carries (CSP/Riemann/LDA). Flat — no signal/chromophore grouping level.
+// TWO separate axes: `view` = the SIGNAL being looked at (the raw response — mu/beta or the HbO response);
+// `method` = the DECODER (CSP/Riemann/LDA), whose learned pattern the topomap can show. They are not the
+// same thing, so they get their own dropdowns.
+function buildView(){
+  const d=state.data, sel=$("view"); sel.innerHTML="";
+  Object.keys(d.frames).forEach(k=>{ const o=document.createElement("option"); o.value=k; o.textContent=k; sel.appendChild(o); });
+  sel.onchange=()=>{ state.map=sel.value; buildSubmaps(); sync(); render(); };   // -> a signal topomap
+}
 function buildMethod(){
   const d=state.data, sel=$("method"); sel.innerHTML="";
   const opts=[];
-  Object.keys(d.frames).forEach(k=>opts.push([k,k]));       // mu, beta / HbO, HbR — direct entries
   if(d.csp_patterns) opts.push(["csp","CSP"]);
   if(d.riemann_patterns) opts.push(["riemann","Riemann"]);
   if(d.lda_patterns) opts.push(["lda","LDA"]);
   opts.forEach(([k,t])=>{ const o=document.createElement("option"); o.value=k; o.textContent=t; sel.appendChild(o); });
-  sel.onchange=()=>{ state.map = sel.value==="csp" ? "csp0" : sel.value; buildSubmaps(); sync(); render(); };
+  sel.onchange=()=>{ state.map = sel.value==="csp" ? "csp0" : sel.value; buildSubmaps(); sync(); render(); };  // -> the decoder's pattern
 }
 // only CSP needs a sub-control (which of its 6 filters); signal maps + Riemann/LDA have none.
 function buildSubmaps(){
@@ -199,7 +204,9 @@ function buildClassbar(){
   });
 }
 function sync(){
-  $("method").value = isCsp() ? "csp" : state.map;   // frame map / decoder view maps directly to a dropdown entry
+  // the active axis updates its own dropdown; the other keeps its last value
+  if(isSignal()) $("view").value=state.map;
+  else $("method").value = isCsp() ? "csp" : state.map;
   const sel=$("cspsel"); if(sel) sel.value=state.map;
   [...$("classbar").children].forEach(b=>b.classList.toggle("on", b.dataset.c===state.cls));
   $("classbar").hidden=!isPerClass();         // class applies to signal + Riemann + LDA (per-class), not CSP
@@ -215,7 +222,7 @@ async function loadSubject(modality, s){
   state.cls=state.data.classes.includes("left_hand")?"left_hand":state.data.classes[0];
   state.map=firstSignal(); state.frame=Math.floor(nFrames()/2);
   $("scrub").max=nFrames()-1;
-  buildMethod(); buildSubmaps(); buildClassbar(); sync(); render();
+  buildView(); buildMethod(); buildSubmaps(); buildClassbar(); sync(); render();
 }
 
 async function init(){
