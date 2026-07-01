@@ -6,7 +6,7 @@ fitted object IS the model the harness carries), and `.predict_proba(X)` returns
 method IS the type, its hyperparameters are constructor arguments, and its pipeline lives inside it.
 
 `Baseline` is the shared ABC for the *classical* side (it lets variants share fit/predict_proba — e.g.
-_RiemannBaseline). It structurally satisfies the general `neuroscan.models.base.Decoder` contract (same
+_RiemannBaseline). It structurally satisfies the general `core.decoder.Decoder` contract (same
 `fit` + `predict_proba`) that the braindecode nets also satisfy, so the harness treats every method the
 same way — but we don't import Decoder here, keeping baselines/ standalone. The data configs
 (EpochCfg/FnirsCfg) already follow this "config/logic lives with the object" shape; this is the decoder

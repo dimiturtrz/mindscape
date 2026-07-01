@@ -48,7 +48,7 @@ def _take(Xs, y, idx, cl, n_crops):
 
 
 class BraindecodeClf:
-    """A braindecode net wrapped as a Decoder (see neuroscan/models/base.Decoder): `fit(X, y) -> self`
+    """A braindecode net wrapped as a Decoder (see core.decoder.Decoder): `fit(X, y) -> self`
     and `predict_proba(X) -> probs`, the same contract the classical baselines satisfy — so the harness
     runs nets and baselines through one path."""
 
