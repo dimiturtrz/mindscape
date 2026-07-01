@@ -106,17 +106,27 @@ function renderWaves(){
   d.channels.forEach((n,i)=>idxOf[n]=i);
   const pad=LAYOUT.wavePad, rowH=H/chans.length, tc=d.frame_times[state.frame], cx=pad+(W-pad-6)*(tc/t[t.length-1]);
   ctx.font="10px system-ui"; ctx.textBaseline="middle";
+  const twoTrace = wf[chans[0]] && !Array.isArray(wf[chans[0]]);    // fNIRS: {hbo,hbr} per channel
   chans.forEach((ch,r)=>{
-    const y0=r*rowH+rowH/2, trace=wf[ch], m=Math.max(...trace.map(Math.abs))||1;
-    const vi=idxOf[ch], c=(vi==null)?0:Math.min(1,Math.abs(vals[vi])/mm);   // contribution 0..1
-    const col=cmap((vi==null?0:vals[vi])/(2*mm)+0.5);                       // sign-aware color (matches topomap)
-    const R=Math.round(70+(col[0]-70)*c), G=Math.round(78+(col[1]-78)*c), B=Math.round(95+(col[2]-95)*c);
+    const y0=r*rowH+rowH/2, raw=wf[ch];
+    const line=(trace,m,col,w)=>{ ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();
+      for(let i=0;i<trace.length;i++){const x=pad+(W-pad-6)*i/(trace.length-1),y=y0-(trace[i]/m)*(rowH*LAYOUT.waveAmp);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+      ctx.stroke(); };
     ctx.strokeStyle="#222937";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,y0);ctx.lineTo(W-6,y0);ctx.stroke();
-    ctx.strokeStyle=`rgb(${R},${G},${B})`;ctx.lineWidth=0.7+1.3*c;ctx.beginPath();
-    for(let i=0;i<trace.length;i++){const x=pad+(W-pad-6)*i/(trace.length-1),y=y0-(trace[i]/m)*(rowH*LAYOUT.waveAmp);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
-    ctx.stroke();
-    ctx.fillStyle=`rgba(230,233,239,${0.4+0.5*c})`;ctx.fillText(ch,3,y0);
+    if(twoTrace){                                                   // both chromophores, one scale, fixed colors
+      const m=Math.max(...raw.hbo.map(Math.abs),...raw.hbr.map(Math.abs))||1;
+      line(raw.hbr,m,"#5b9dff",1.0);                               // HbR cool
+      line(raw.hbo,m,"#ff7a5c",1.2);                               // HbO warm (on top)
+      ctx.fillStyle="rgba(230,233,239,0.55)";ctx.fillText(ch,3,y0);
+    } else {                                                        // EEG single trace, colored by contribution
+      const m=Math.max(...raw.map(Math.abs))||1;
+      const vi=idxOf[ch], c=(vi==null)?0:Math.min(1,Math.abs(vals[vi])/mm);
+      const col=cmap((vi==null?0:vals[vi])/(2*mm)+0.5);
+      line(raw, m, `rgb(${Math.round(70+(col[0]-70)*c)},${Math.round(78+(col[1]-78)*c)},${Math.round(95+(col[2]-95)*c)})`, 0.7+1.3*c);
+      ctx.fillStyle=`rgba(230,233,239,${0.4+0.5*c})`;ctx.fillText(ch,3,y0);
+    }
   });
+  if(twoTrace){ ctx.fillStyle="#ff7a5c";ctx.fillText("HbO",pad,10); ctx.fillStyle="#5b9dff";ctx.fillText("HbR",pad+30,10); }
   ctx.strokeStyle="#ff6a5a";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,H);ctx.stroke();
   ctx.fillStyle="#8b94a3";ctx.textBaseline="alphabetic";ctx.fillText(`${t[t.length-1].toFixed(1)} s`,W-34,H-4);
 }
@@ -127,9 +137,22 @@ function fitCanvas(cv){
   if(cv.width!==w||cv.height!==h){ cv.width=w; cv.height=h; }
 }
 
+// the honest output: ground truth of the shown example trial vs the decoder's prediction + the LOSO score
+function renderResult(){
+  const d=state.data, el=$("result");
+  if(!d.predictions || !d.score){ el.textContent=""; return; }
+  const s=d.score, p=d.predictions[state.cls];
+  const head=`${s.decoder} · ${s.regime} acc <b>${s.acc}</b> (chance ${s.chance})`;
+  if(!p){ el.innerHTML=head; return; }
+  const nm=(x)=>x.replace("_"," ");
+  el.innerHTML=`<span class="rlabel">example ${nm(state.cls)} trial</span> — truth <b>${nm(p.truth)}</b> · `+
+    `predicted <b class="${p.correct?'ok':'no'}">${nm(p.pred)}</b> ${p.correct?'✓':'✗'}`+
+    `<span class="rmut">  ·  ${head}</span>`;
+}
+
 function render(){
   fitCanvas($("waves"));
-  renderTopo(); renderWaves();
+  renderTopo(); renderWaves(); renderResult();
   $("scrub").value=state.frame;
   $("tlabel").textContent=`${state.data.frame_times[state.frame].toFixed(1)} s`;
 }

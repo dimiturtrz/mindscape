@@ -28,11 +28,12 @@
           <select id="subject"></select>
         </div>
         <div class="mapgroup">
-          <span class="glabel">method</span>
+          <span class="glabel">view</span>
           <select id="method"></select>
         </div>
-        <div class="mapsel" id="map"><!-- method sub-controls (band mu·beta / CSP 1–6), built in JS --></div>
+        <div class="mapsel" id="map"><!-- sub-controls (CSP filter dropdown), built in JS --></div>
       </div>
+      <div class="result" id="result"><!-- ground truth vs decoder prediction + score, built in JS --></div>
 
       <div class="topo-wrap">
         <canvas id="topo" width="360" height="360"></canvas>

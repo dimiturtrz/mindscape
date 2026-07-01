@@ -132,6 +132,32 @@ def _waveforms(ep, labels, per_class=PER_CLASS, n_t=N_WAVE_T):
     return {"t": t, "trials": out, "chans": names}
 
 
+def _predictions(subject: int):
+    """Honest per-trial output: train CSP+LDA on the OTHER subjects (LOSO), predict THIS subject's trials.
+    Returns ({class: {truth, pred, probs, correct}} for a shown example trial) + the subject's fold accuracy."""
+    import polars as pl
+
+    from baselines import csp_lda
+    from core.data import store
+    from core.data.eeg.base import CANONICAL_MI_NAMES, EpochCfg
+
+    meta = store.load("bnci2014_001", EpochCfg())
+    Xtr, ytr = store.gather(meta.filter(pl.col("subject") != str(subject)))
+    Xte, yte = store.gather(meta.filter(pl.col("subject") == str(subject)))
+    clf = csp_lda.fit(Xtr, ytr)
+    probs = np.asarray(csp_lda.score(clf, Xte))
+    pred = probs.argmax(1)
+    per = {}
+    for c in sorted(set(yte.tolist())):
+        i = int(np.where(yte == c)[0][0])
+        per[CANONICAL_MI_NAMES[c]] = {"truth": CANONICAL_MI_NAMES[c], "pred": CANONICAL_MI_NAMES[int(pred[i])],
+                                      "probs": [round(float(p), 3) for p in probs[i]],
+                                      "correct": bool(pred[i] == c)}
+    score = {"acc": round(float((pred == yte).mean()), 3), "chance": 0.25,
+             "regime": "cross-subject (LOSO)", "decoder": "CSP+LDA"}
+    return per, score
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--subject", type=int, default=1)
@@ -155,6 +181,9 @@ def main():
         "riemann_patterns": _riemann_patterns(ep, labels),
         "waveforms": _waveforms(ep, labels),
     }
+    per, score = _predictions(args.subject)
+    data["predictions"] = per                              # ground truth vs decoder prediction (per shown trial)
+    data["score"] = score                                  # the honest cross-subject decoder accuracy
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / f"subject{args.subject}.json").write_text(json.dumps(data))

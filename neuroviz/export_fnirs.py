@@ -68,7 +68,8 @@ def _lda_patterns(X, y):
 
 
 def _waveforms(X, y, names, n_t=300):
-    """One example trial per class — HbO channels over the epoch (downsampled)."""
+    """One example trial per class — BOTH chromophores per optode (the raw data): {chan:{hbo,hbr}}.
+    HbO = channels 0..35, HbR = 36..71 at the same optodes; showing both reveals the anti-correlation."""
     T = X.shape[2]
     step = max(1, T // n_t)
     ti = np.arange(0, T, step)
@@ -76,8 +77,35 @@ def _waveforms(X, y, names, n_t=300):
     out = {}
     for c in sorted(set(y.tolist())):
         ei = np.where(y == c)[0][0]
-        out[CLASS_NAMES[c]] = {names[i]: X[ei, i, ti].tolist() for i in range(len(names))}
+        out[CLASS_NAMES[c]] = {names[i]: {"hbo": X[ei, i, ti].tolist(), "hbr": X[ei, i + 36, ti].tolist()}
+                               for i in range(len(names))}
     return {"t": t, "trials": out, "chans": names}
+
+
+def _predictions(subject: int, X, y):
+    """Honest per-trial output: train the fNIRS decoder on the OTHER subjects (LOSO), predict THIS
+    subject's trials. Returns ({class: {truth, pred, probs, correct}} for the shown example trial) and the
+    subject's cross-subject fold accuracy — so the viewer shows ground truth vs prediction, not just signal."""
+    import polars as pl
+
+    from baselines import fnirs_features as ff
+    from core.data import store
+    from core.data.fnirs.base import FnirsCfg
+
+    meta = store.load("shin2017_nback", FnirsCfg(tmax=20.0))
+    Xtr, ytr = store.gather(meta.filter(pl.col("subject") != str(subject)))
+    clf = ff.fit(Xtr, ytr)
+    probs = ff.score(clf, X)
+    pred = probs.argmax(1)
+    per = {}
+    for c in sorted(set(y.tolist())):
+        i = int(np.where(y == c)[0][0])                    # the example trial shown for this class
+        per[CLASS_NAMES[c]] = {"truth": CLASS_NAMES[c], "pred": CLASS_NAMES[int(pred[i])],
+                               "probs": [round(float(p), 3) for p in probs[i]],
+                               "correct": bool(pred[i] == c)}
+    score = {"acc": round(float((pred == y).mean()), 3), "chance": round(1 / 3, 3),
+             "regime": "cross-subject (LOSO)", "decoder": "fNIRS mean+slope+peak → LDA"}
+    return per, score
 
 
 def main():
@@ -103,6 +131,9 @@ def main():
         "lda_patterns": _lda_patterns(X, y),               # decoder view (per-class HbO weight)
         "waveforms": _waveforms(X, y, names),
     }
+    per, score = _predictions(args.subject, X, y)
+    data["predictions"] = per                              # ground truth vs decoder prediction (per shown trial)
+    data["score"] = score                                  # the honest cross-subject decoder accuracy
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / f"fnirs_subject{args.subject}.json").write_text(json.dumps(data))
