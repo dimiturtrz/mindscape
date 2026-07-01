@@ -3,8 +3,8 @@
 body { margin:0; font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
 header { padding:24px 24px 8px; display:flex; justify-content:space-between; align-items:flex-start;
   gap:24px; flex-wrap:wrap; }
-h1 { margin:0; font-size:22px; letter-spacing:.5px; }
-.sub { color:var(--mut); max-width:760px; margin:6px 0 0; }
+h1 { margin:0; font-size:clamp(18px,2.4vw,24px); letter-spacing:.5px; }
+.sub { color:var(--mut); max-width:min(780px,94vw); margin:6px 0 0; font-size:clamp(12.5px,1.35vw,14px); }
 .head-modality { align-items:flex-end; }
 .seg-lg button { height:34px; padding:0 18px; font-size:14px; }
 .seg-lg { height:34px; }
@@ -40,7 +40,7 @@ canvas { background:transparent; }
 .cbar { display:flex; align-items:center; gap:8px; color:var(--mut); font-size:12px; }
 .cgrad { width:160px; height:10px; border-radius:6px;
   background:linear-gradient(90deg,#3b4cc0,#aab8ff,#f2f2f2,#ffb0a0,#b40426); }
-.hint { color:var(--mut); font-size:12.5px; max-width:380px; text-align:center; }
+.hint { color:var(--mut); font-size:clamp(11.5px,1.2vw,13px); max-width:min(560px,92%); text-align:center; }
 .result { margin:10px 0 0; padding:8px 12px; border:1px solid var(--line); border-radius:8px;
   background:#0e1116; color:var(--ink); font-size:12.5px; line-height:1.5; }
 .result:empty { display:none; }

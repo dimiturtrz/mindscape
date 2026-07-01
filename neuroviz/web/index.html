@@ -10,9 +10,7 @@
   <header>
     <div class="head-text">
       <h1>neuroviz</h1>
-      <p class="sub">Two non-invasive modalities, one viewer. <b>EEG</b> motor imagery (mu/beta ERD over motor
-        cortex) · <b>fNIRS</b> n-back workload (HbO/HbR hemodynamic response over prefrontal cortex) — the
-        signal each decoder reads.</p>
+      <p class="sub" id="sub"></p>
     </div>
     <div class="mapgroup head-modality">
       <span class="glabel">modality</span>
@@ -53,14 +51,14 @@
     </section>
 
     <section class="panel waves">
-      <h2>waveforms — all channels <span class="mut">(colored by contribution to the current view)</span></h2>
+      <h2 id="wavehead"></h2>
       <canvas id="waves" width="640" height="520"></canvas>
-      <p class="hint">One example trial of the selected class; each channel's brightness/width = how much it drives the
-      selected signal / decoder view. The red cursor tracks the topomap frame.</p>
+      <p class="hint" id="wavehint"></p>
     </section>
   </main>
 
-  <footer>commodity model, honest eval — the contribution is the measured generalization, not the topomap.</footer>
+  <footer>Commodity decoders, honest eval — the contribution is the measured cross-subject generalization,
+    now shown per trial (truth vs prediction), not the pretty topomap.</footer>
   <script src="app.js"></script>
 </body>
 </html>

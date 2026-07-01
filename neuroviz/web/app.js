@@ -216,10 +216,29 @@ function sync(){
   if(!animated) play(false);
 }
 
+// modality-aware copy — the descriptions swap with the data and describe what's actually on screen.
+const TEXTS = {
+  eeg: {
+    sub: `<b>EEG · motor imagery</b> (BCI IV-2a). Imagining one hand <b>desynchronizes the opposite motor cortex</b> — mu/beta power drops over C3↔C4. A fast electrical signal; the decoder reads the covariance.`,
+    head: `waveforms — all 22 EEG channels <span class="mut">(colored by contribution to the current view)</span>`,
+    hint: `One example trial; each channel's brightness + width = how much it drives the selected view. The red cursor tracks the topomap frame.`,
+  },
+  fnirs: {
+    sub: `<b>fNIRS · mental workload</b> (Shin n-back). Prefrontal blood oxygen tracks cognitive load — <b>HbO rises, HbR falls</b>, peaking ~5–8 s. A slow hemodynamic signal; the decoder reads the amplitude.`,
+    head: `waveforms — HbO + HbR per optode <span class="mut">(the raw two-signal data)</span>`,
+    hint: `One example trial: <b style="color:#ff7a5c">HbO</b> (warm) rises while <b style="color:#5b9dff">HbR</b> (cool) falls — the anti-correlated hemodynamic response. The red cursor tracks the topomap frame.`,
+  },
+};
+function setTexts(modality){
+  const tx=TEXTS[modality]||TEXTS.eeg;
+  $("sub").innerHTML=tx.sub; $("wavehead").innerHTML=tx.head; $("wavehint").innerHTML=tx.hint;
+}
+
 async function loadSubject(modality, s){
   const prefix = modality==="fnirs" ? "fnirs_" : "";
   state.data=await (await fetch(`data/${prefix}subject${s}.json`)).json();
   state.data.modality=modality; state.modality=modality;
+  setTexts(modality);
   state.cls=state.data.classes.includes("left_hand")?"left_hand":state.data.classes[0];
   state.map=firstSignal(); state.frame=Math.floor(nFrames()/2);
   $("scrub").max=nFrames()-1;
