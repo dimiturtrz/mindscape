@@ -12,6 +12,7 @@ Splits are queries over it (see data/splits.py); `gather` pulls the actual X/y f
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -54,6 +55,13 @@ def build(name: str, cfg: EpochCfg, rebuild: bool = False) -> Path:
     adapter = get_adapter(name)
     label_names = {v: k for k, v in adapter.label_map.items()}   # id -> name, per dataset
 
+    # channel names are dataset-level metadata — persist them into processed/ so the cache is
+    # self-describing (one format), instead of downstream readers reaching back into the raw files.
+    names_fn = getattr(adapter, "channels", None)
+    ch_names = names_fn() if callable(names_fn) else None
+    if ch_names:
+        (out / "channels.json").write_text(json.dumps(list(ch_names)))
+
     rows: list[dict] = []
     for sub in adapter.subjects():
         npz = data / f"sub{sub}.npz"
@@ -80,6 +88,16 @@ def load(names: list[str] | str, cfg: EpochCfg) -> pl.DataFrame:
         df = df.with_columns((pl.lit(str(out / "data")) + "/" + pl.col("file")).alias("path"))
         frames.append(df)
     return pl.concat(frames, how="vertical_relaxed")
+
+
+def channels(name: str, cfg: EpochCfg) -> list[str] | None:
+    """The dataset's channel names, from the processed cache (built by `build`). None if the adapter
+    doesn't expose them. Ensures the dataset is consolidated first, so the channels.json exists."""
+    out = dataset_dir(name, cfg)
+    if not (out / "meta.csv").exists():
+        build(name, cfg)
+    p = out / "channels.json"
+    return json.loads(p.read_text()) if p.exists() else None
 
 
 def gather(df: pl.DataFrame) -> tuple[np.ndarray, np.ndarray]:

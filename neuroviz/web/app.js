@@ -103,6 +103,8 @@ function renderTopo(){
     ? `LDA workload discriminant, ${cls} — per-channel weight of the amplitude-feature decoder (mean HbO). Switch class to compare load levels.`
     : state.modality==="fnirs"
     ? `Hemodynamic response (HbO), ${cls} — building over the trial (red = concentration rise); scrub time to watch it peak ~5–8 s. Both chromophores are in the waveforms →`
+    : state.modality==="eeg_workload"
+    ? `${state.map} band-power, ${cls} — spatial pattern (red = more than the head average, blue = less). Switch load class: frontal theta rises / parietal alpha drops as n-back load grows.`
     : `${state.map} ERD, ${cls} — blue = motor cortex desynchronizing; switch class to see the active side move.`;
 }
 
@@ -251,14 +253,20 @@ const TEXTS = {
     head: `waveforms — HbO + HbR per optode <span class="mut">(the raw two-signal data)</span>`,
     hint: `One example trial: <b style="color:#ff7a5c">HbO</b> (warm) rises while <b style="color:#5b9dff">HbR</b> (cool) falls — the anti-correlated hemodynamic response. The red cursor tracks the topomap frame.`,
   },
+  eeg_workload: {
+    sub: `<b>EEG · mental workload</b> (Shin n-back, same task as fNIRS). Cognitive load reshapes band-power — <b>frontal theta rises, parietal alpha suppresses</b> as n-back load grows. The covariance methods (CSP/Riemann) read it; θ/α/β power is the signal.`,
+    head: `waveforms — all 28 EEG channels <span class="mut">(colored by contribution to the current view)</span>`,
+    hint: `One example block; each channel's brightness + width = how much it drives the selected band's power. The red cursor tracks the topomap frame.`,
+  },
 };
+const _PREFIX = {fnirs: "fnirs_", eeg_workload: "eegwl_"};   // modality -> data-file prefix
 function setTexts(modality){
   const tx=TEXTS[modality]||TEXTS.eeg;
   $("sub").innerHTML=tx.sub; $("wavehead").innerHTML=tx.head; $("wavehint").innerHTML=tx.hint;
 }
 
 async function loadSubject(modality, s){
-  const prefix = modality==="fnirs" ? "fnirs_" : "";
+  const prefix = _PREFIX[modality] || "";
   state.data=await (await fetch(`data/${prefix}subject${s}.json`)).json();
   state.data.modality=modality; state.modality=modality;
   setTexts(modality);
@@ -354,11 +362,11 @@ async function init(){
 
   // task > modality: the toggle is two-tier because the modalities belong to DIFFERENT tasks — EEG here is
   // BCI-2a motor imagery; fNIRS + Fusion are the Shin workload task. Pick the task, then the approach within.
-  const MOD_LABEL={eeg:"EEG",fnirs:"fNIRS",fusion:"Fusion"};
+  const MOD_LABEL={eeg:"EEG",eeg_workload:"EEG",fnirs:"fNIRS",fusion:"Fusion"};
   const has=(m)=> m==="fusion" ? !!man.fusion : !!(mods[m] && mods[m].length);
   const TASKS=[
     {key:"mi", label:"Motor imagery", mods:["eeg"].filter(has)},
-    {key:"wl", label:"Mental workload", mods:["fnirs", "fusion"].filter(has)},
+    {key:"wl", label:"Mental workload", mods:["eeg_workload", "fnirs", "fusion"].filter(has)},
   ].filter(t=>t.mods.length);
   const taskOf=(m)=> TASKS.find(t=>t.mods.includes(m));
 

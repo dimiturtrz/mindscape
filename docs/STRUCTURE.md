@@ -80,7 +80,7 @@ _Diagrams are kept coarse (layer + contract) on purpose — they map to folders 
 | module | role |
 |---|---|
 | `core/config.py` | one data root (`paths.yaml` / `MINDSCAPE_DATA`), everything derived; cross-platform path translation; points MOABB's cache at `<root>/raw` |
-| `core/data/store.py` | the **epoch cloud** — consolidates a dataset into a recipe-keyed cache (`processed/<ds>/<key>/` = per-subject npz + a meta CSV, one row per epoch), and `gather()` pulls a split's epochs back in row order |
+| `core/data/store.py` | the **epoch cloud** — consolidates a dataset into a recipe-keyed cache (`processed/<ds>/<key>/` = per-subject npz + a meta CSV + a `channels.json` when the adapter exposes `channels()`, so the cache is self-describing / one-format), `gather()` pulls a split's epochs back in row order, `channels()` returns the montage names |
 | `core/data/splits.py` | **split-as-criteria** — a split is the cloud *filtered* (`make_split(meta, test_subjects, test_sessions, …)`), not a named thing; within / cross-subject (LOSO) / cross-session are all the same function with different criteria |
 | `core/data/eeg/base.py` | the canonical schema + `DatasetAdapter` protocol + a reusable MOABB motor-imagery adapter |
 | `core/data/eeg/registry.py` | name → adapter; "add a dataset = one file + one line" |
@@ -114,7 +114,7 @@ run through the same harness path as the nets). Module-level `fit`/`score` remai
 - `baselines/riemann.py` — `TangentSpace` / `Mdm` / `Acm(order, lag)` off a shared `_RiemannBaseline`, plus `recenter_covariances` (cross-subject manifold re-centering). The strongest classical baseline + the transfer fix.
 - `baselines/fnirs_features.py` — `FnirsLda`: per-channel mean+slope+peak of ΔHbO/ΔHbR → scaler → LDA. The amplitude features covariance methods discard; the right tool for the hemodynamic modality.
 - `baselines/eeg_bandpower.py` — `EegBandpower`: per-channel θ/α/β (log) band-power → scaler → LDA. The workload-native EEG feature (absolute rhythm magnitude, which covariance normalizes away); `relative=True` divides out per-epoch total power.
-- `neuroviz/` — the 2D EEG/fNIRS viewer (topomaps + CSP/Riemann/LDA patterns + waveforms) **plus a fusion complementarity view** (per-block which-modality-right map); Python export → dependency-free web app.
+- `neuroviz/` — the 2D viewer, organized **task → modality**: Motor imagery → EEG; Mental workload → EEG (θ/α/β band-power) · fNIRS (HbO/HbR) · **Fusion** (per-block complementarity map). Topomaps + CSP/Riemann/LDA patterns + waveforms; exporters (`export`, `export_eeg_workload`, `export_fnirs`, `export_fusion`) read the processed store → dependency-free web app.
 - `tests/` — a pyramid: `unit/` (equivalence-class per module) + `integration/` (module chains: data→splits→harness, decoder→export→parity).
 
 ## The one idea everything hangs off — split-as-criteria
