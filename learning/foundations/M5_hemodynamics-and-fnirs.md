@@ -76,11 +76,20 @@ Strong mechanistic grasp; proactively added the mitochondria/aerobic-efficiency 
 3. *Relative only* — ✓✓ unknown `G`/path → absolute c unrecoverable, only changes survive.
 4. *Two wavelengths* — ✓✓ oxy/deoxy differ by λ; **2 eqns 2 unknowns → invert 2×2 extinction matrix**.
 5. *Isosbestic straddle* — ✓✓ at ~800 nm ε_HbO=ε_HbR → rows collapse → singular; straddle = condition the solve.
-6. *Features / why covariance fails* — ~½. Got "aggregate features for slow events" + a correct **bonus**
-   (fNIRS spatially local, no volume conduction → low cross-channel corr). Missed the core: covariance is
-   **mean-centered → deletes the mean amplitude that IS the fNIRS signal** → CSP/Riemann at chance.
+6. *Features / why covariance fails* — ~½ on the day, but the follow-up produced the **richer answer** (below).
 
-**To lock:** `G` cancels in differences; covariance-fails-because-mean-centered. **Bonus banked:** fNIRS locality.
+**Why covariance fails on fNIRS — the full, two-axis answer** (student connected the second axis):
+Covariance is a *second-order, zero-mean, cross-channel* statistic. fNIRS breaks it on **two independent axes**:
+- **Order:** the signal is **first-order (the mean HbO level)** — covariance **centers the mean out**.
+- **Cross-channel:** fNIRS is **spatially local** (no volume conduction) → off-diagonals ≈ 0 → nothing for
+  CSP's spatial filters to *unmix*; a diagonal covariance = just per-channel variance (the wrong statistic).
+They converge: covariance's best case here is per-channel *variance*, but the signal is per-channel *mean*.
+**Caveat (sharpens it):** the covariance is NOT purely diagonal — **systemic physiology (Mayer/cardiac) is
+global**, correlating all channels → strong off-diagonals, but that's **noise**, so covariance methods lock
+onto the artifact. Empirically consistent: Riemann = 0.329 ≈ chance.
+
+**To lock:** `G` cancels in differences; covariance fails on BOTH order (mean centered out) AND locality
+(no cross-channel signal structure; the off-diagonals that exist are systemic noise).
 
 ### approaches section — pending
 _(next: classical mean+slope+peak→LDA vs DL 1D-CNN/LSTM/fNIRS-T; why DL rarely beats features on small data.)_
