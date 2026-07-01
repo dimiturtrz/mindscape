@@ -24,8 +24,17 @@ const LAYOUT = {
   idwEps: 1e-3,           // inverse-distance interpolation epsilon (avoid /0 at electrodes)
   wavePad: 34,            // waveform panel left padding (px, room for channel labels)
   waveAmp: 0.42,          // trace amplitude as a fraction of its row height
-  frameMs: 90,            // animation frame interval (ms)
+  playbackSpeed: 3,       // animation plays this many × faster than real time (EEG ~1.5 s, fNIRS ~7 s)
+  minFrameMs: 20,         // floor so the fast EEG animation doesn't blur
 };
+
+// per-frame interval from the REAL signal duration, so playback speed tracks input length
+// (EEG's ~4.5 s epoch animates ~5× faster than fNIRS's ~22 s window — synchronized to the data).
+function frameIntervalMs(){
+  const ft=state.data.frame_times, n=ft.length;
+  const realDt=(ft[n-1]-ft[0])/(n-1);   // seconds per frame in the actual recording
+  return Math.max(LAYOUT.minFrameMs, realDt*1000/LAYOUT.playbackSpeed);
+}
 
 // diverging colormap (RdBu_r): t in [0,1] -> [r,g,b]
 const STOPS = [[59,76,192],[170,184,255],[242,242,242],[255,176,160],[180,4,38]];
@@ -162,7 +171,7 @@ let timer=null;
 function play(on){
   state.playing=on; $("play").textContent=on?"❚❚":"▶";
   if(timer){clearInterval(timer);timer=null;}
-  if(on) timer=setInterval(()=>{ state.frame=(state.frame+1)%nFrames(); render(); }, LAYOUT.frameMs);
+  if(on) timer=setInterval(()=>{ state.frame=(state.frame+1)%nFrames(); render(); }, frameIntervalMs());
 }
 
 // TWO separate axes: `view` = the SIGNAL being looked at (the raw response — mu/beta or the HbO response);
