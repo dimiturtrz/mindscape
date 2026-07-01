@@ -19,6 +19,18 @@ def test_crops_full_length_is_identity_window():
     assert np.array_equal(Xc, X)
 
 
+def test_crops_windows_match_source_slices():
+    # value-level: row k*N+i must be trial i's window at starts[k], and tidx must agree
+    X = np.arange(4 * 2 * 10).reshape(4, 2, 10).astype(np.float32)
+    N, cl, nc = 4, 6, 3
+    Xc, tidx = T.crops(X, cl, nc)
+    starts = np.linspace(0, 10 - cl, nc).round().astype(int)
+    for k, s in enumerate(starts):
+        for i in range(N):
+            assert np.array_equal(Xc[k * N + i], X[i, :, s:s + cl])
+            assert tidx[k * N + i] == i
+
+
 def test_zscore_normalizes_per_channel():
     X = np.random.RandomState(1).randn(20, 3, 50).astype(np.float32) * 5 + 2
     z = T.ZScore().fit(X)(X)

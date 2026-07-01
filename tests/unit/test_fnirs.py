@@ -33,6 +33,19 @@ def test_epoch_blocks_windows_and_baseline_corrects():
     assert list(ye) == [0, 1]
 
 
+def test_epoch_blocks_extracts_correct_samples():
+    # ramp signal -> exact window + baseline are known, so this catches an off-by-window indexing bug
+    fs, Tn = 10.0, 1000
+    cont = np.tile(np.arange(Tn, dtype=float), (3, 1))     # each channel = 0,1,2,... sample index
+    cfg = FnirsCfg(tmin=-2.0, tmax=8.0, baseline_s=2.0)     # a=-20, b=80, nb=20
+    a, b, nb = int(round(-2.0 * fs)), int(round(8.0 * fs)), int(round(2.0 * fs))
+    X, ye = epoch_blocks(cont, np.array([300]), np.array([0]), fs, cfg)
+    seg = np.arange(300 + a, 300 + b, dtype=float)         # the samples that should be extracted
+    assert X.shape == (1, 3, b - a)
+    assert np.allclose(X[0, 0], seg - seg[:nb].mean())     # right window, baseline-subtracted
+    assert list(ye) == [0]
+
+
 def test_epoch_blocks_drops_out_of_range():
     cont = np.zeros((2, 300))
     # onset near the end -> window overruns -> dropped
