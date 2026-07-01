@@ -76,3 +76,25 @@ def test_render_rejects_bad_term():
         sync_numbers._render({"a": {"acc": ACC}}, "a.f1score")     # unknown field
     with pytest.raises(KeyError):
         sync_numbers._render({}, "missing.acc")                   # unknown run
+
+
+def test_row_passes_through_fusion_blocks():
+    """fusion aggregates carry per_role_mean / complementarity / aggregation dicts — _row flattens their
+    scalars into marker fields; kappa/ece stay None (fusion has no per-fold kappa)."""
+    agg = {"method": "fusion", "regime": "cross_subject_kfold", "n_classes": 3,
+           "fold_mean": {"acc": 0.4679},
+           "per_role_mean": {"eeg": 0.4301, "fnirs": 0.4743, "late": 0.4679, "feature": 0.4341},
+           "complementarity": {"oracle_either": 0.688, "err_corr": 0.0531},
+           "aggregation": {"stacking": 0.4687, "eeg_conf_gap": 0.0228}}
+    row = results._row("fusion_cross_subject_kfold_shin2017_nback", agg)
+    assert row["acc"] == 0.4679 and row["kappa"] is None and row["ece"] is None
+    assert row["fnirs"] == 0.4743 and row["oracle_either"] == 0.688         # role + complementarity fields
+    assert row["stacking"] == 0.4687 and row["eeg_conf_gap"] == 0.0228      # aggregation-sweep fields
+
+
+def test_render_generic_field_and_headroom_diff():
+    """markers address any flat field (fusion roles / complementarity), incl. a signed diff (oracle headroom)."""
+    runs = {"fus": {"fnirs": 0.474, "oracle_either": 0.688, "best_single": 0.474}}
+    assert sync_numbers._render(runs, "fus.fnirs") == "0.474"
+    assert sync_numbers._render(runs, "fus.oracle_either") == "0.688"
+    assert sync_numbers._render(runs, "fus.oracle_either-fus.best_single") == "+0.214"

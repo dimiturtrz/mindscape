@@ -40,15 +40,14 @@ def _lda():
     return LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")
 
 
-def _zscore(F, g, rows=None):
-    """Per-subject z-score. `rows` (bool mask) restricts which rows supply each subject's mean/std; None =
-    use all of the subject's rows (transductive)."""
+def _zscore(F, g):
+    """Per-subject z-score: standardize each subject's rows by ITS OWN feature mean/std (transductive — uses
+    all of the subject's rows). The honest calibration-half variant computes its stats inline in
+    `_cv_calib_half`, so this stays a single-purpose helper."""
     out = F.copy()
     for s in np.unique(g):
         m = g == s
-        src = m if rows is None else (m & rows)
-        mu, sd = F[src].mean(0), F[src].std(0)
-        out[m] = (F[m] - mu) / (sd + 1e-6)
+        out[m] = (F[m] - F[m].mean(0)) / (F[m].std(0) + 1e-6)
     return out
 
 
