@@ -103,6 +103,8 @@ function renderTopo(){
     ? `LDA workload discriminant, ${cls} — per-channel weight of the amplitude-feature decoder (mean HbO). Switch class to compare load levels.`
     : state.modality==="fnirs"
     ? `Hemodynamic response (HbO), ${cls} — building over the trial (red = concentration rise); scrub time to watch it peak ~5–8 s. Both chromophores are in the waveforms →`
+    : state.modality==="eeg_workload"
+    ? `${state.map} band-power, ${cls} — spatial pattern (red = more than the head average, blue = less). Switch load class: frontal theta rises / parietal alpha drops as n-back load grows.`
     : `${state.map} ERD, ${cls} — blue = motor cortex desynchronizing; switch class to see the active side move.`;
 }
 
@@ -251,14 +253,20 @@ const TEXTS = {
     head: `waveforms — HbO + HbR per optode <span class="mut">(the raw two-signal data)</span>`,
     hint: `One example trial: <b style="color:#ff7a5c">HbO</b> (warm) rises while <b style="color:#5b9dff">HbR</b> (cool) falls — the anti-correlated hemodynamic response. The red cursor tracks the topomap frame.`,
   },
+  eeg_workload: {
+    sub: `<b>EEG · mental workload</b> (Shin n-back, same task as fNIRS). Cognitive load reshapes band-power — <b>frontal theta rises, parietal alpha suppresses</b> as n-back load grows. The covariance methods (CSP/Riemann) read it; θ/α/β power is the signal.`,
+    head: `waveforms — all 28 EEG channels <span class="mut">(colored by contribution to the current view)</span>`,
+    hint: `One example block; each channel's brightness + width = how much it drives the selected band's power. The red cursor tracks the topomap frame.`,
+  },
 };
+const _PREFIX = {fnirs: "fnirs_", eeg_workload: "eegwl_"};   // modality -> data-file prefix
 function setTexts(modality){
   const tx=TEXTS[modality]||TEXTS.eeg;
   $("sub").innerHTML=tx.sub; $("wavehead").innerHTML=tx.head; $("wavehint").innerHTML=tx.hint;
 }
 
 async function loadSubject(modality, s){
-  const prefix = modality==="fnirs" ? "fnirs_" : "";
+  const prefix = _PREFIX[modality] || "";
   state.data=await (await fetch(`data/${prefix}subject${s}.json`)).json();
   state.data.modality=modality; state.modality=modality;
   setTexts(modality);
@@ -268,30 +276,134 @@ async function loadSubject(modality, s){
   buildView(); buildMethod(); buildSubmaps(); buildClassbar(); sync(); render();
 }
 
+// ---- fusion / complementarity view -----------------------------------------------------------------
+// A different question from the single-modality views: on the SAME n-back blocks, where does EEG succeed,
+// where does fNIRS, and do they miss the SAME blocks? Each cell = one block, colored by which modality got
+// it right. Blue+orange scattered = complementarity (they fail independently); the oracle bar towers over
+// either single modality, yet naive late fusion sits at the best single — the headroom no combiner cashes.
+const FCAT = {
+  both:  { c:"#3fb96b", label:"both correct" },
+  eeg:   { c:"#5b9dff", label:"EEG only right" },
+  fnirs: { c:"#ff7a5c", label:"fNIRS only right" },
+  none:  { c:"#2b3342", label:"both wrong" },
+};
+const fcatOf = (b) => { const e=b.eeg===b.truth, f=b.fnirs===b.truth;
+  return e&&f ? "both" : e ? "eeg" : f ? "fnirs" : "none"; };
+
+function showFusion(on){
+  document.querySelectorAll("main > .panel:not(.fusion-panel)").forEach(p=>p.hidden=on);
+  $("fusionview").hidden=!on;
+}
+
+async function loadFusion(){
+  const d = await (await fetch("data/fusion.json")).json();
+  state.data=d; state.modality="fusion";
+  $("sub").innerHTML = `<b>Fusion · EEG + fNIRS</b> (Shin n-back, same blocks). Two weak modalities that fail `+
+    `on <b>different</b> blocks — a per-block map of the complementarity the numbers imply, and why averaging can't use it.`;
+  showFusion(true); renderFusion();
+}
+
+function renderFusion(){
+  const d=state.data; if(!d||d.modality!=="fusion" && state.modality!=="fusion") return;
+  const s=d.summary, pct=(x)=> (100*x).toFixed(1)+"%";
+  // group blocks by subject -> rows; each subject's blocks -> columns
+  const bySub={}; d.blocks.forEach(b=>{ (bySub[b.subject]=bySub[b.subject]||[]).push(b); });
+  const subs=Object.keys(bySub).sort((a,b)=>(+a)-(+b));
+  const cols=Math.max(...subs.map(k=>bySub[k].length));
+
+  const cv=$("fgrid"), ctx=cv.getContext("2d");
+  // fit width to the column, but cap the height so the grid can't overrun the panel/footer (square cells)
+  const box=cv.parentElement, MAXH=400;
+  let W=Math.max(160,Math.floor(Math.min(box.clientWidth, 560))), H=Math.floor(W*subs.length/cols);
+  if(H>MAXH){ H=MAXH; W=Math.floor(H*cols/subs.length); }
+  cv.width=W; cv.height=H; cv.style.width=W+"px"; cv.style.height=H+"px";   // display = buffer (no CSS rescale)
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const cw=cv.width/cols, ch=cv.height/subs.length, g=Math.max(0.5, cw*0.08);
+  subs.forEach((sub,r)=>{ bySub[sub].forEach((b,c)=>{
+    ctx.fillStyle=FCAT[fcatOf(b)].c;
+    ctx.fillRect(c*cw+g/2, r*ch+g/2, cw-g, ch-g);
+  });});
+
+  // headline
+  const best=Math.max(s.eeg,s.fnirs);
+  $("fresult").innerHTML = `oracle (either modality right) <b class="ok">${pct(s.oracle)}</b> `+
+    `— <b>+${(100*(s.oracle-best)).toFixed(0)} pts</b> over the best single (${pct(best)}); `+
+    `late fusion <b class="no">${s.late!=null?pct(s.late):"—"}</b> captures none of it. `+
+    `<span class="rmut">error corr φ=${s.err_corr.toFixed(2)} · both wrong only ${pct(s.both_wrong)}</span>`;
+
+  // legend with counts
+  $("flegend").innerHTML = ["both","eeg","fnirs","none"].map(k=>{
+    const frac = k==="both"?s.both_correct : k==="eeg"?s.eeg_only : k==="fnirs"?s.fnirs_only : s.both_wrong;
+    return `<span class="fkey"><i style="background:${FCAT[k].c}"></i>${FCAT[k].label} <b>${pct(frac)}</b></span>`;
+  }).join("");
+
+  // bars: EEG / fNIRS / late / oracle, with chance + the oracle ceiling marked
+  const rows=[["EEG (Riemann)",s.eeg,"#5b9dff"],["fNIRS (LDA)",s.fnirs,"#ff7a5c"],
+              ["late fusion",s.late,"#9aa4b2"],["oracle (ceiling)",s.oracle,"#3fb96b"]];
+  const maxv=Math.max(s.oracle,0.7);
+  $("fbars").innerHTML = `<div class="fbtitle">accuracy (chance ${pct(s.chance)}, ${s.n} blocks)</div>` +
+    rows.map(([n,v,c])=> v==null?"" :
+      `<div class="fbar"><span class="fbn">${n}</span>`+
+      `<span class="fbtrack"><i style="width:${100*v/maxv}%;background:${c}"></i>`+
+      `<u style="left:${100*s.chance/maxv}%"></u></span>`+
+      `<span class="fbv">${pct(v)}</span></div>`).join("");
+
+  $("fhint").innerHTML = `Each cell is one held-out block (rows = subjects, 5-fold GroupKFold). Blue + orange `+
+    `are blocks only one modality gets — they're scattered and roughly balanced (φ≈0), so the modalities are `+
+    `genuinely complementary. Yet <b>late fusion ≈ the best single</b>: averaging probabilities can't tell which `+
+    `modality to trust per block (confidence doesn't track correctness), so the <b>+${(100*(s.oracle-best)).toFixed(0)}-pt</b> `+
+    `oracle headroom stays on the table. That's the honest fusion result.`;
+}
+
 async function init(){
   const man=await (await fetch("data/manifest.json")).json();
   const mods=man.modalities||{eeg:man.subjects||[]};      // back-compat with the old flat manifest
-  const modBar=$("modality"), subjSel=$("subject");
+  const taskBar=$("task"), appBar=$("approach"), appGroup=$("approach-group"), subjSel=$("subject");
+
+  // task > modality: the toggle is two-tier because the modalities belong to DIFFERENT tasks — EEG here is
+  // BCI-2a motor imagery; fNIRS + Fusion are the Shin workload task. Pick the task, then the approach within.
+  const MOD_LABEL={eeg:"EEG",eeg_workload:"EEG",fnirs:"fNIRS",fusion:"Fusion"};
+  const has=(m)=> m==="fusion" ? !!man.fusion : !!(mods[m] && mods[m].length);
+  const TASKS=[
+    {key:"mi", label:"Motor imagery", mods:["eeg"].filter(has)},
+    {key:"wl", label:"Mental workload", mods:["eeg_workload", "fnirs", "fusion"].filter(has)},
+  ].filter(t=>t.mods.length);
+  const taskOf=(m)=> TASKS.find(t=>t.mods.includes(m));
+
+  function buildApproach(t, active){                      // the modalities within the active task
+    appBar.innerHTML="";
+    t.mods.forEach(m=>{ const b=document.createElement("button"); b.textContent=MOD_LABEL[m]; b.dataset.m=m;
+      b.className=m===active?"on":""; b.onclick=()=>loadModality(m); appBar.appendChild(b); });
+    appGroup.hidden = false;                              // always show the modality tier (even single, e.g. MI -> EEG)
+  }
 
   function loadModality(mod){
-    subjSel.innerHTML="";
-    mods[mod].forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent="subject "+s;subjSel.appendChild(o);});
-    [...modBar.children].forEach(b=>b.classList.toggle("on", b.dataset.m===mod));
-    play(false); loadSubject(mod, mods[mod][0]);
+    play(false);
+    if(mod==="fusion"){ subjSel.parentElement.hidden=true; loadFusion(); }
+    else {
+      showFusion(false); subjSel.parentElement.hidden=false; subjSel.innerHTML="";
+      mods[mod].forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent="subject "+s;subjSel.appendChild(o);});
+      loadSubject(mod, mods[mod][0]);
+    }
+    const t=taskOf(mod);                                  // keep both tiers in sync with the loaded modality
+    [...taskBar.children].forEach(b=>b.classList.toggle("on", b.dataset.t===t.key));
+    buildApproach(t, mod);
   }
-  const MOD_LABEL={eeg:"EEG",fnirs:"fNIRS"};
-  Object.keys(mods).filter(m=>mods[m] && mods[m].length).forEach(mod=>{
-    const b=document.createElement("button"); b.textContent=MOD_LABEL[mod]||mod.toUpperCase(); b.dataset.m=mod;
-    b.onclick=()=>loadModality(mod); modBar.appendChild(b);
-  });
+
+  TASKS.forEach(t=>{ const b=document.createElement("button"); b.textContent=t.label; b.dataset.t=t.key;
+    b.onclick=()=>loadModality(t.mods[0]); taskBar.appendChild(b); });   // a task loads its first modality
   subjSel.onchange=()=>{play(false);loadSubject(state.modality, subjSel.value);};
   $("play").onclick=()=>play(!state.playing);
   $("scrub").oninput=()=>{play(false);state.frame=+$("scrub").value;render();};
   $("speed").oninput=()=>{ state.speed=Math.pow(10, +$("speed").value);   // log slider -> speed
                           $("speedlabel").textContent=fmtSpeed(state.speed);
                           if(state.playing) play(true); };   // restart timer with the new interval
-  let rz; window.addEventListener("resize",()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(state.data) render(); },120); });
-  loadModality(Object.keys(mods).find(m=>mods[m] && mods[m].length));
+  let rz; window.addEventListener("resize",()=>{ clearTimeout(rz); rz=setTimeout(()=>{
+    if(!state.data) return; state.modality==="fusion" ? renderFusion() : render(); },120); });
+  // deep-link: #fusion / #eeg / #fnirs selects the initial view (also lets a headless render target it)
+  const want=(location.hash||"").slice(1);
+  const first=Object.keys(mods).find(m=>mods[m] && mods[m].length);
+  loadModality(want==="fusion" && man.fusion ? "fusion" : (mods[want] && mods[want].length ? want : first));
 }
 init().catch(e=>{document.body.insertAdjacentHTML("beforeend",
   `<p style="color:#ffb0a0;padding:24px">load error: ${e}. Serve this dir: <code>python -m http.server</code> in neuroviz/web, then open http://localhost:8000</p>`);});

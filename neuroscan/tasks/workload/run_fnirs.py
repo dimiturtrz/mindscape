@@ -5,8 +5,8 @@ modality-agnostic. The right decoder differs though: covariance methods (csp_lda
 because fNIRS class info is in the HbO amplitude the covariance discards; `fnirs_lda` (mean+slope+peak ->
 LDA) is the field-standard that actually reads it.
 
-    python -m neuroscan.experiments.run_fnirs --method fnirs_lda --regime cross_subject
-    python -m neuroscan.experiments.run_fnirs --method fnirs_lda --regime within --test-session 2
+    python -m neuroscan.tasks.workload.run_fnirs --method fnirs_lda --regime cross_subject
+    python -m neuroscan.tasks.workload.run_fnirs --method fnirs_lda --regime within --test-session 2
 """
 from __future__ import annotations
 
@@ -47,9 +47,10 @@ def main():
     run_dir = Path(args.out) if args.out else Path("runs") / f"{args.method}_{args.regime}_{args.dataset}"
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n=== {args.method} · {args.regime} · {args.dataset} ({len(folds)} folds, chance {chance:.3f}) ===")
+    n_jobs = -1 if args.method in {"csp_lda", "riemann", "riemann_acm", "fnirs_lda"} else 1
     res = harness.run(args.method, fit_fn, score_fn, folds, n_classes, regime=args.regime,
                       params={"method": args.method, "regime": args.regime, "dataset": args.dataset,
-                              "modality": "fnirs"}, run_dir=run_dir)
+                              "modality": "fnirs"}, run_dir=run_dir, n_jobs=n_jobs)
     (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
     from neuroscan.evaluation import results
     if not args.no_record and results.record(run_dir):

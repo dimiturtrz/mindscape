@@ -55,11 +55,11 @@ def read_metrics(agg: dict) -> dict | None:
 
     The one place that knows both run-aggregate shapes; reused by tracking.backfill so the schema
     knowledge isn't duplicated."""
-    fm = agg.get("fold_mean")
-    if isinstance(fm, dict) and "acc" in fm:
-        return {"acc": fm.get("acc"), "kappa": fm.get("kappa"), "ece": fm.get("ece")}
-    if "acc_mean" in agg:
-        return {"acc": agg.get("acc_mean"), "kappa": agg.get("kappa_mean"), "ece": agg.get("ece_mean")}
+    fm = agg.get("fold_mean")                                # harness schema: {"acc","kappa","ece"} or absent
+    if fm and "acc" in fm:
+        return {"acc": fm["acc"], "kappa": fm.get("kappa"), "ece": fm.get("ece")}
+    if "acc_mean" in agg:                                    # align.py schema
+        return {"acc": agg["acc_mean"], "kappa": agg.get("kappa_mean"), "ece": agg.get("ece_mean")}
     return None
 
 
@@ -69,12 +69,18 @@ def _row(name: str, agg: dict) -> dict | None:
     if m is None:
         return None
     method, regime, dataset = _split_name(name)
+    # fusion runs add dict[str, float] blocks — a per-role breakdown (eeg/fnirs/late/feature) and the
+    # complementarity + aggregation-sweep scalars — pass them through as flat marker fields. Absent on
+    # non-fusion runs (-> {}); comp wins on any key overlap with the sweep.
+    extra = {**agg.get("per_role_mean", {}), **agg.get("aggregation", {}), **agg.get("complementarity", {})}
     return {
         "method": agg.get("method", method),
         "regime": agg.get("regime", regime),
         "dataset": dataset,
         "n_classes": agg.get("n_classes"),
-        **{k: (round(v, _PRECISION) if isinstance(v, (int, float)) else v) for k, v in m.items()},
+        # metrics: kappa/ece are None on fusion runs (no per-fold kappa) — keep None, round the rest
+        **{k: (round(v, _PRECISION) if v is not None else None) for k, v in m.items()},
+        **{k: round(v, _PRECISION) for k, v in extra.items()},
     }
 
 
@@ -124,4 +130,4 @@ def record(run_dir: Path | str, out_path: Path = _OUT) -> str | None:
 if __name__ == "__main__":
     p = write()
     n = len(json.loads(p.read_text())["runs"])
-    print(f"wrote {p.relative_to(_ROOT)} — {n} run(s)")
+    print(f"wrote {p.relative_to(REPO)} — {n} run(s)")

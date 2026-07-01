@@ -6,8 +6,8 @@ ERD contrast. This runner re-centers every subject (train AND the unlabeled targ
 congruence transform with their own Riemannian mean (Zanini et al. 2018), then runs the same tangent-space
 classifier. Target re-centering is unsupervised (uses only the target's trials, no labels) -> deployable.
 
-    python -m neuroscan.experiments.align                 # recentered tangent space, LOSO
-    python -m neuroscan.experiments.align --augment       # recentered ACM (time-delay covariances)
+    python -m neuroscan.tasks.motor_imagery.align                 # recentered tangent space, LOSO
+    python -m neuroscan.tasks.motor_imagery.align --augment       # recentered ACM (time-delay covariances)
 
 Compare the printed mean against the un-recentered LOSO baseline (riemann ~0.357) to read the transfer gain.
 """
@@ -86,7 +86,7 @@ def main():
     tag = "acm" if args.augment else "ts"
     print(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · recipe {cfg.key()} · recentered {tag}")
 
-    folds = [(s, tr, te) for s, tr, _val, te in splits.leave_one_subject_out(meta)]
+    folds = list(splits.leave_one_subject_out(meta))
     print(f"\n=== riemann recentered ({tag}) · cross_subject · {args.dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
     out_folds = Parallel(n_jobs=args.jobs)(
         delayed(_run_fold)(s, tr, te, args.augment, args.order, args.lag) for s, tr, te in folds)

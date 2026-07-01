@@ -10,7 +10,7 @@ our data instead of reinventing it. Paper number: LDA 38.9% (3-class, chance 33.
 A reproduction entrypoint (alongside reproduce_atcnet) — BenchNIRS is an optional dependency, not a
 pipeline dep:
     uv pip install benchnirs            # (isolated venv recommended; it pins its own mne)
-    python -m neuroscan.experiments.repro_benchnirs --data <dir with VP001-NIRS/…>
+    python -m neuroscan.tasks.workload.repro_benchnirs --data <dir with VP001-NIRS/…>
 
 Expected: MEAN ≈ 0.39 (we measured 0.392 on our copy — matches the paper's 0.389). Compare against our
 `fnirs_lda` under the matched regime: `run_fnirs --method fnirs_lda --regime cross_subject_kfold`.

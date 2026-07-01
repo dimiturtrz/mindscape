@@ -51,6 +51,15 @@ class Shin2017NbackEegAdapter:
     def subjects(self) -> list[int]:
         return sorted(self._index())
 
+    def channels(self) -> list[str]:
+        """The 28 EEG channel names (BBCI `cnt.clab`, dropping the 2 trailing EOG) — standard 10-05 labels,
+        montage-mappable. Read from the first subject; the montage is fixed across the set."""
+        import scipy.io as sio
+
+        d = next(iter(self._index().values()))
+        cnt = sio.loadmat(d / "cnt_nback.mat", struct_as_record=False, squeeze_me=True)["cnt_nback"]
+        return [str(c) for c in np.asarray(cnt.clab)][:_N_EEG]
+
     def _load_continuous(self, d):
         """(cont [28, T] EEG, fs, block onsets[samples], canonical labels[27]) — block-level workload only."""
         import scipy.io as sio

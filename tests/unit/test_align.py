@@ -2,7 +2,7 @@
 and the covariance step grows correctly under time-delay augmentation. Synthetic — no dataset needed."""
 import numpy as np
 
-from neuroscan.experiments import align
+from neuroscan.tasks.motor_imagery import align
 
 
 def _domain(n, d, t, shift, rng):

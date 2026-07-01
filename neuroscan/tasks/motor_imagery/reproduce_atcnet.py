@@ -5,7 +5,7 @@ continuous-signal EMS (core/data/eeg/braindecode_pre), full-trial ATCNet (its ow
 no extra standardization, their recipe (500 epochs, no early stop). Per-subject hold-out: session-1
 train -> session-2 test.
 
-    python -m neuroscan.experiments.reproduce_atcnet --epochs 500
+    python -m neuroscan.tasks.motor_imagery.reproduce_atcnet --epochs 500
 """
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 """Decoder method registry — one place that maps a method name to its (fit_fn, score_fn) pair.
 
 Unifies the handcrafted baseline (CSP+LDA, plain functions) and the braindecode decoders (built via
-decoders.make) behind one lookup, so entrypoints (experiments/run, calibrate, quantize) don't each
+decoders.make) behind one lookup, so entrypoints (tasks (run, workload/*, motor_imagery/*)) don't each
 re-implement the csp-vs-net branch. The harness contract is the same for all: `fit(X,y)->clf`,
 `score(clf,X)->probs[n,C]`.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 def method_names() -> list[str]:
     from neuroscan.models.decoders import MODELS
-    return ["csp_lda", "riemann", "riemann_acm", "fnirs_lda", *sorted(MODELS)]
+    return ["csp_lda", "riemann", "riemann_acm", "fnirs_lda", "eeg_bandpower", *sorted(MODELS)]
 
 
 def _proba(clf, X):
@@ -21,9 +21,11 @@ def _proba(clf, X):
 def _baseline_classes() -> dict:
     """name -> Baseline class (lazy import so pyriemann/mne load only when a baseline is actually used)."""
     from baselines.csp_lda import CspLda
+    from baselines.eeg_bandpower import EegBandpower
     from baselines.fnirs_features import FnirsLda
     from baselines.riemann import Acm, TangentSpace
-    return {"csp_lda": CspLda, "riemann": TangentSpace, "riemann_acm": Acm, "fnirs_lda": FnirsLda}
+    return {"csp_lda": CspLda, "riemann": TangentSpace, "riemann_acm": Acm, "fnirs_lda": FnirsLda,
+            "eeg_bandpower": EegBandpower}
 
 
 def get_method(name: str):

@@ -10,14 +10,33 @@
       "kappa": 0.3503,
       "ece": 0.1405
     },
+    "calibration_ablation_shin2017_nback_eeg": {
+      "method": "calibration_ablation",
+      "regime": "cross_subject_kfold",
+      "dataset": "",
+      "n_classes": 3,
+      "acc": 0.511,
+      "kappa": null,
+      "ece": null,
+      "eeg_raw": 0.4069,
+      "eeg_ztrans": 0.5807,
+      "eeg_zcalib": 0.511,
+      "fnirs_raw": 0.4743,
+      "fnirs_ztrans": 0.4835,
+      "eeg_z_best": 0.5812,
+      "fnirs_z": 0.4829,
+      "late_z": 0.5755,
+      "oracle_z": 0.7664,
+      "err_corr_z": 0.0692
+    },
     "csp_lda_cross_subject_bnci2014_001": {
       "method": "csp_lda",
       "regime": "cross_subject",
       "dataset": "bnci2014_001",
       "n_classes": 4,
-      "acc": 0.3823,
-      "kappa": 0.1764,
-      "ece": 0.1346
+      "acc": 0.3914,
+      "kappa": 0.1885,
+      "ece": 0.1344
     },
     "csp_lda_cross_subject_shin2017_nback": {
       "method": "csp_lda",
@@ -33,9 +52,9 @@
       "regime": "cross_subject",
       "dataset": "",
       "n_classes": 3,
-      "acc": 0.4103,
-      "kappa": 0.1154,
-      "ece": 0.1761
+      "acc": 0.4316,
+      "kappa": 0.1474,
+      "ece": 0.1759
     },
     "csp_lda_within_bnci2014_001": {
       "method": "csp_lda",
@@ -55,32 +74,91 @@
       "kappa": 0.3526,
       "ece": 0.373
     },
+    "eeg_bandpower_cross_subject_shin2017_nback_eeg": {
+      "method": "eeg_bandpower",
+      "regime": "cross_subject",
+      "dataset": "",
+      "n_classes": 3,
+      "acc": 0.4202,
+      "kappa": 0.1303,
+      "ece": 0.3628
+    },
+    "eeg_bandpower_within_shin2017_nback_eeg": {
+      "method": "eeg_bandpower",
+      "regime": "within",
+      "dataset": "",
+      "n_classes": 3,
+      "acc": 0.5769,
+      "kappa": 0.3654,
+      "ece": 0.4154
+    },
     "fnirs_lda_cross_subject_kfold_shin2017_nback": {
       "method": "fnirs_lda",
       "regime": "cross_subject_kfold",
       "dataset": "shin2017_nback",
       "n_classes": 3,
-      "acc": 0.4291,
-      "kappa": 0.1437,
-      "ece": 0.251
+      "acc": 0.4743,
+      "kappa": 0.2115,
+      "ece": 0.1926
     },
     "fnirs_lda_cross_subject_shin2017_nback": {
       "method": "fnirs_lda",
       "regime": "cross_subject",
       "dataset": "shin2017_nback",
       "n_classes": 3,
-      "acc": 0.4416,
-      "kappa": 0.1624,
-      "ece": 0.2723
+      "acc": 0.4544,
+      "kappa": 0.1816,
+      "ece": 0.2736
+    },
+    "fusion_cross_subject_kfold_shin2017_nback": {
+      "method": "fusion",
+      "regime": "cross_subject_kfold",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.4679,
+      "kappa": null,
+      "ece": null,
+      "eeg": 0.4301,
+      "fnirs": 0.4743,
+      "late": 0.4679,
+      "feature": 0.4341,
+      "mean": 0.4687,
+      "product": 0.463,
+      "conf_weight": 0.4672,
+      "maxconf_pick": 0.4615,
+      "stacking": 0.4687,
+      "cal_mean": 0.4687,
+      "cal_conf_weight": 0.4672,
+      "eeg_conf_gap": 0.0228,
+      "fnirs_conf_gap": 0.0383,
+      "best_single": 0.4743,
+      "oracle_either": 0.688,
+      "both_correct": 0.2179,
+      "eeg_only": 0.2151,
+      "fnirs_only": 0.255,
+      "both_wrong": 0.312,
+      "err_corr": 0.0531,
+      "best_aggregator": 0.4687,
+      "oracle_gap_captured": -0.0057
+    },
+    "fusion_gate_cross_subject_kfold_shin2017_nback": {
+      "method": "fusion_gate",
+      "regime": "cross_subject_kfold",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.5733,
+      "kappa": null,
+      "ece": null,
+      "gate": 0.5733
     },
     "riemann_acm_cross_subject_bnci2014_001": {
       "method": "riemann_acm",
       "regime": "cross_subject",
       "dataset": "bnci2014_001",
       "n_classes": 4,
-      "acc": 0.3513,
-      "kappa": 0.135,
-      "ece": 0.4764
+      "acc": 0.3555,
+      "kappa": 0.1407,
+      "ece": 0.4747
     },
     "riemann_acm_within_bnci2014_001": {
       "method": "riemann_acm",
@@ -96,9 +174,9 @@
       "regime": "cross_subject",
       "dataset": "bnci2014_001",
       "n_classes": 4,
-      "acc": 0.3574,
-      "kappa": 0.1433,
-      "ece": 0.3755
+      "acc": 0.3596,
+      "kappa": 0.1461,
+      "ece": 0.3687
     },
     "riemann_cross_subject_shin2017_nback": {
       "method": "riemann",
@@ -114,17 +192,17 @@
       "regime": "cross_subject",
       "dataset": "",
       "n_classes": 3,
-      "acc": 0.4245,
-      "kappa": 0.1368,
-      "ece": 0.3666
+      "acc": 0.4516,
+      "kappa": 0.1774,
+      "ece": 0.3719
     },
     "riemann_recenter_acm_bnci2014_001": {
       "method": "riemann_recenter_acm",
       "regime": "cross_subject",
       "dataset": "bnci2014_001",
       "n_classes": null,
-      "acc": 0.4695,
-      "kappa": 0.2927,
+      "acc": 0.4713,
+      "kappa": 0.295,
       "ece": null
     },
     "riemann_recenter_ts_bnci2014_001": {
@@ -132,8 +210,8 @@
       "regime": "cross_subject",
       "dataset": "bnci2014_001",
       "n_classes": null,
-      "acc": 0.4961,
-      "kappa": 0.3282,
+      "acc": 0.5008,
+      "kappa": 0.3344,
       "ece": null
     },
     "riemann_within_bnci2014_001": {
@@ -141,9 +219,9 @@
       "regime": "within",
       "dataset": "bnci2014_001",
       "n_classes": 4,
-      "acc": 0.7063,
-      "kappa": 0.609,
-      "ece": 0.1097
+      "acc": 0.6555,
+      "kappa": 0.5406,
+      "ece": 0.0752
     },
     "riemann_within_shin2017_nback_eeg": {
       "method": "riemann",

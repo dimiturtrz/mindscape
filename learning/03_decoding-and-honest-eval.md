@@ -94,7 +94,7 @@ nothing**. The decoders export to ONNX (~26 KB) with a **parity gate** (fp32 ONN
 and at this size INT8 quantization *adds* overhead rather than saving — the honest finding is "already
 edge-sized."
 
-*In our pipeline:* `core/export_onnx.py`, `neuroscan/experiments/quantize.py`.
+*In our pipeline:* `core/export_onnx.py`, `neuroscan/tasks/motor_imagery/quantize.py`.
 
 **Takeaway.** Deployability is a measured result here, and a tiny model is competitive — exactly the angle a
 bandwidth/efficiency-minded BCI cares about.
