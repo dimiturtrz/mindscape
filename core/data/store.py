@@ -18,8 +18,8 @@ import numpy as np
 import polars as pl
 
 from core.config import processed_dir
-from core.data.eeg.base import CANONICAL_MI_NAMES, EpochCfg
-from core.data.eeg.registry import get_adapter
+from core.data.eeg.base import EpochCfg
+from core.data.registry import get_adapter
 
 META_FIELDS = ["dataset", "subject", "session", "run", "label_id", "label", "epoch", "file"]
 _SCHEMA = {
@@ -32,12 +32,14 @@ def dataset_dir(name: str, cfg: EpochCfg) -> Path:
     return processed_dir() / name / cfg.key()
 
 
-def _rows_for_subject(name: str, sub: int, npz: Path) -> list[dict]:
-    """Build per-epoch meta rows from a subject npz WITHOUT loading X (npz is lazy per-key)."""
+def _rows_for_subject(name: str, sub: int, npz: Path, label_names: dict[int, str]) -> list[dict]:
+    """Build per-epoch meta rows from a subject npz WITHOUT loading X (npz is lazy per-key).
+    `label_names` (id->name) comes from the dataset's own adapter, so the label column is correct for
+    any modality (MI classes, n-back load levels, …) — no hardcoded convention."""
     z = np.load(npz, allow_pickle=True)
     y, sess, run = z["y"], z["session"], z["run"]
     return [{"dataset": name, "subject": str(sub), "session": str(sess[i]), "run": str(run[i]),
-             "label_id": int(y[i]), "label": CANONICAL_MI_NAMES.get(int(y[i]), str(int(y[i]))),
+             "label_id": int(y[i]), "label": label_names.get(int(y[i]), str(int(y[i]))),
              "epoch": i, "file": npz.name} for i in range(len(y))]
 
 
@@ -50,6 +52,7 @@ def build(name: str, cfg: EpochCfg, rebuild: bool = False) -> Path:
     data = out / "data"
     data.mkdir(parents=True, exist_ok=True)
     adapter = get_adapter(name)
+    label_names = {v: k for k, v in adapter.label_map.items()}   # id -> name, per dataset
 
     rows: list[dict] = []
     for sub in adapter.subjects():
@@ -58,7 +61,7 @@ def build(name: str, cfg: EpochCfg, rebuild: bool = False) -> Path:
             X, y, m = adapter.get_data([sub], cfg)
             np.savez_compressed(npz, X=X, y=y,
                                 session=m["session"].to_numpy(), run=m["run"].to_numpy())
-        rows.extend(_rows_for_subject(name, sub, npz))
+        rows.extend(_rows_for_subject(name, sub, npz, label_names))
 
     pl.DataFrame(rows, schema=_SCHEMA).write_csv(out / "meta.csv")
     return out
