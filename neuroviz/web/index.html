@@ -61,6 +61,18 @@
       <canvas id="waves" width="640" height="520"></canvas>
       <p class="hint" id="wavehint"></p>
     </section>
+
+    <section class="panel fusion-panel" id="fusionview" hidden>
+      <div class="result" id="fresult"><!-- headline: fusion vs best-single vs oracle --></div>
+      <div class="fusion-body">
+        <div class="fgrid-wrap">
+          <canvas id="fgrid" width="540" height="540"></canvas>
+          <div class="flegend" id="flegend"><!-- category legend, built in JS --></div>
+        </div>
+        <div class="fbars" id="fbars"><!-- EEG / fNIRS / late / oracle bars, built in JS --></div>
+      </div>
+      <p class="hint" id="fhint"></p>
+    </section>
   </main>
 
   <footer>Commodity decoders, honest eval — the contribution is the measured cross-subject generalization,

@@ -22,14 +22,23 @@ inherently 2D-surface, and topomaps are what the field actually uses.
 cortex), the optode montage, and the **LDA discriminant** (per-channel amplitude weight the decoder reads).
 Same JSON schema, so one web app shows both signals side by side.
 
+**Fusion view (a third toggle):** not a signal animation but the *result* — a per-block **complementarity
+map**. Every held-out n-back block (rows = subjects, subject-wise 5-fold GroupKFold) is a cell colored by
+which modality decoded it: both-right / EEG-only / fNIRS-only / both-wrong. Blue + orange scattered and
+balanced (error corr φ≈0) = the two weak modalities fail on *different* blocks, so an oracle that picked the
+right one per block hits **0.69** vs best-single **0.47** — yet naive late fusion sits at the best single,
+because confidence doesn't track correctness. The bars show EEG · fNIRS · late · oracle against chance. It
+visualizes the honest fusion finding: complementarity is real, no output-space combiner cashes it.
+
 ## Run
 ```bash
 # 1) export view data (writes neuroviz/web/data/, gitignored)
 uv run python -m neuroviz.export --subject 1        # EEG motor imagery
 uv run python -m neuroviz.export --subject 3
 uv run python -m neuroviz.export_fnirs --subject 1  # fNIRS n-back workload
+uv run python -m neuroviz.export_fusion             # EEG↔fNIRS complementarity map
 
-# 2) serve + open — a top-level EEG / fNIRS toggle switches modality
+# 2) serve + open — a top-level EEG / fNIRS / Fusion toggle switches view
 python -m http.server 8000 -d neuroviz/web      # then open http://localhost:8000
 ```
 

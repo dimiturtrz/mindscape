@@ -18,11 +18,13 @@ method-dependent tail (our nets are already edge-tiny). Full plan → **[docs/PL
 ## See the signal the decoder reads — [neuroviz](neuroviz/)
 ![neuroviz — fNIRS n-back workload: the HbO hemodynamic response animating over prefrontal cortex, HbO/HbR waveforms, and the decoder's ground-truth-vs-prediction readout](neuroviz/docs/media/demo.webp)
 
-One dependency-free viewer for **both modalities** (EEG motor imagery · fNIRS mental workload). Shown: the
-fNIRS **hemodynamic response** — prefrontal HbO rising and peaking over the n-back trial — with **HbO/HbR
-waveforms** and the decoder's **ground truth vs prediction + cross-subject score**. Switch to EEG for mu/beta
-ERD topomaps + CSP/Riemann patterns. The picture shows the signal each decoder consumes *and whether it got
-it right*. → **[neuroviz/](neuroviz/)**
+One dependency-free viewer for **both modalities** (EEG motor imagery · fNIRS mental workload) **plus a
+fusion view**. Shown: the fNIRS **hemodynamic response** — prefrontal HbO rising and peaking over the n-back
+trial — with **HbO/HbR waveforms** and the decoder's **ground truth vs prediction + cross-subject score**.
+Switch to EEG for mu/beta ERD topomaps + CSP/Riemann patterns, or to **Fusion** for the per-block
+**complementarity map** — every held-out block colored by which modality got it right, showing EEG and fNIRS
+failing on *different* blocks (oracle 0.69 vs best-single 0.47) while naive fusion cashes none of it. The
+picture shows the signal each decoder consumes *and whether it got it right*. → **[neuroviz/](neuroviz/)**
 
 ## Task · Motor imagery (BCI-2a, EEG) — the generalization gap, measured
 The science layer is **signal → preprocess → decode → evaluate**, and the *evaluation regime* is the
