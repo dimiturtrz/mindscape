@@ -36,6 +36,17 @@ from neuroscan.models.transforms import crops as _crops          # noqa: E402
 from neuroscan.models.transforms import standardizer as _standardizer  # noqa: E402
 
 
+def _take(Xs, y, idx, cl, n_crops):
+    """Gather (X, y) for a set of trial indices — cropping into `cl`-length windows when cl is set.
+    idx=None (no validation split) returns (None, None), so the caller needs no use_val branch."""
+    if idx is None:
+        return None, None
+    if not cl:
+        return Xs[idx], y[idx]
+    Xc, cmap = _crops(Xs[idx], cl, n_crops)
+    return Xc, y[idx][cmap]
+
+
 class BraindecodeClf:
     def __init__(self, cls, n_chans, n_times, n_classes, epochs, lr, batch=128, weight_decay=1e-4,
                  device=None, log_every=0, val_frac=0.2, patience=0,
@@ -65,17 +76,8 @@ class BraindecodeClf:
         else:
             ti, vi = np.arange(len(Xs)), None
 
-        if cl:
-            Xtr, tmap = _crops(Xs[ti], cl, self.n_train_crops)
-            ytr = y[ti][tmap]
-            if use_val:
-                Xva, vmap = _crops(Xs[vi], cl, self.n_test_crops)
-                yva = y[vi][vmap]
-            else:
-                Xva, yva = None, None
-        else:
-            Xtr, ytr = Xs[ti], y[ti]
-            Xva, yva = (Xs[vi], y[vi]) if use_val else (None, None)
+        Xtr, ytr = _take(Xs, y, ti, cl, self.n_train_crops)
+        Xva, yva = _take(Xs, y, vi, cl, self.n_test_crops)     # vi is None when no val -> (None, None)
         return Xtr, ytr, Xva, yva
 
     def fit(self, X, y):

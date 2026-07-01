@@ -66,15 +66,15 @@ def fit(X: np.ndarray, y: np.ndarray, method: str = "ts", estimator: str = "oas"
 
     cov = Covariances(estimator=estimator)
     ts_lr = [TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0)]
-    if method == "mdm":
-        pipe = make_pipeline(cov, MDM(metric="riemann"))
-    elif method == "ts":
-        pipe = make_pipeline(cov, *ts_lr)
-    elif method == "acm":
-        aug = FunctionTransformer(_augment, kw_args={"order": order, "lag": lag}, validate=False)
-        pipe = make_pipeline(aug, cov, *ts_lr)
-    else:
-        raise ValueError(f"unknown riemann method {method!r}; use 'ts', 'mdm', or 'acm'")
+    aug = FunctionTransformer(_augment, kw_args={"order": order, "lag": lag}, validate=False)
+    builders = {                                              # only the chosen pipeline is built
+        "mdm": lambda: make_pipeline(cov, MDM(metric="riemann")),
+        "ts": lambda: make_pipeline(cov, *ts_lr),
+        "acm": lambda: make_pipeline(aug, cov, *ts_lr),
+    }
+    if method not in builders:
+        raise ValueError(f"unknown riemann method {method!r}; use one of {sorted(builders)}")
+    pipe = builders[method]()
     pipe.fit(X.astype(np.float64), y)
     return pipe
 
