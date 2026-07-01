@@ -26,4 +26,11 @@ log — the ramp is real, the self-eval is honest.
 3. [`03_decoding-and-honest-eval.md`](03_decoding-and-honest-eval.md) — CSP+LDA → EEGNet/ATCNet, the
    cross-subject gap, calibration, the efficiency angle.
 
+## Foundations ([`foundations/`](foundations/))
+The under-everything modules — math + the biology of each signal:
+- `M1` signals & frequency · `M2` linear algebra (→ CSP) · `M3` probability & stats.
+- [`M4`](foundations/M4_neurophysiology.md) — **electrophysiology**: why the *EEG* signal is the way it is.
+- [`M5`](foundations/M5_hemodynamics-and-fnirs.md) — **hemodynamics**: why the *fNIRS* signal is the way it
+  is (neurovascular coupling, Beer–Lambert, the slow HRF) — and why it needs amplitude features, not covariance.
+
 [glossary.md](glossary.md) — terms, one line each.
