@@ -374,7 +374,7 @@ async function init(){
     appBar.innerHTML="";
     t.mods.forEach(m=>{ const b=document.createElement("button"); b.textContent=MOD_LABEL[m]; b.dataset.m=m;
       b.className=m===active?"on":""; b.onclick=()=>loadModality(m); appBar.appendChild(b); });
-    appGroup.hidden = t.mods.length<2;                    // hide when a task has a single modality (MI -> EEG)
+    appGroup.hidden = false;                              // always show the modality tier (even single, e.g. MI -> EEG)
   }
 
   function loadModality(mod){
