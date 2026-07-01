@@ -115,11 +115,17 @@ change.
 
 **n-back workload** (Shin · 26 subjects · 3-class · **chance 0.333**):
 
-| modality · method | cross-subject (LOSO) | within (session-2 holdout) |
+| modality · method | cross-subject (LOSO) | within (held-out block-series) |
 |---|---|---|
 | **fNIRS · mean+slope+peak → LDA** | **<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.442<!--/r-->** (κ 0.16) | **0.415** (κ 0.12) |
 | EEG · CSP + LDA | <!--r:csp_lda_cross_subject_shin2017_nback_eeg.acc-->0.410<!--/r--> (κ 0.12) | <!--r:csp_lda_within_shin2017_nback_eeg.acc-->0.568<!--/r--> (κ 0.35) |
 | EEG · Riemann (tangent space) | <!--r:riemann_cross_subject_shin2017_nback_eeg.acc-->0.424<!--/r--> (κ 0.14) | <!--r:riemann_within_shin2017_nback_eeg.acc-->0.538<!--/r--> (κ 0.31) |
+
+_On the "within" column — read it as a **soft** ceiling._ The Shin n-back is **one ~33-min continuous
+recording** per subject, split into 3 block-series (9 blocks each); "within" holds out the last series, so
+train and test are the *same recording* minutes apart — a temporal-generalization test, **not** a separate
+session like the BCI-2a two-day protocol. So the within numbers (EEG 0.57 especially) are a lenient ceiling;
+the EEG within≫cross gap is directionally real but partly flattered by that temporal proximity.
 
 **Anchored to the field's honest benchmark — the numbers are modest by design.** [BenchNIRS](https://doi.org/10.3389/fnrgo.2023.994969)
 (Benerradi 2023) is the rigorous fNIRS-ML benchmark whose whole point is that *proper* cross-subject
