@@ -15,7 +15,7 @@ body { margin:0; height:100vh; overflow:hidden; display:flex; flex-direction:col
 header { padding:var(--pad) var(--pad) .5rem; display:flex; justify-content:space-between;
   align-items:flex-start; gap:var(--gap); flex-wrap:wrap; }
 h1 { margin:0; font-size:1.5rem; letter-spacing:.03em; }
-.sub { color:var(--mut); max-width:80ch; margin:.4rem 0 0; font-size:.9rem; }
+.sub { color:var(--mut); margin:.4rem 0 0; font-size:.9rem; }
 .head-text { flex:1 1 20rem; min-width:0; }   /* grow to fill the row so the sub wraps wide, not squeezed */
 .head-modality { align-items:flex-end; flex:0 0 auto; }
 .seg-lg, .seg-lg button { height:2.6rem; }
@@ -66,7 +66,7 @@ h2 { margin:0 0 .6rem; font-size:.95rem; font-weight:600; color:var(--mut); }
 #waves { flex:1; width:100%; min-height:0; }
 
 /* captions + result readout — constrained by the container, not a magic width */
-.hint { color:var(--mut); font-size:.85rem; max-width:100%; text-align:left; margin:.6rem 0 0; }
+.hint { color:var(--mut); font-size:.85rem; width:100%; text-align:left; margin:.6rem 0 0; }
 .result { margin:.6rem 0 0; padding:.5rem .8rem; border:1px solid var(--line); border-radius:var(--radius);
   background:#0e1116; color:var(--ink); font-size:.85rem; line-height:1.5; }
 .result:empty { display:none; }
