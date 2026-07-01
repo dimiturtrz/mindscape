@@ -149,8 +149,8 @@ def _predictions(subject: int):
     probs = np.asarray(csp_lda.score(clf, Xte))
     pred = probs.argmax(1)
     per = {}
-    for c in sorted(set(yte.tolist())):
-        i = int(np.where(yte == c)[0][0])
+    for c in sorted(np.unique(yte).tolist()):
+        i = int((yte == c).argmax())
         per[CANONICAL_MI_NAMES[c]] = {"truth": CANONICAL_MI_NAMES[c], "pred": CANONICAL_MI_NAMES[int(pred[i])],
                                       "probs": [round(float(p), 3) for p in probs[i]],
                                       "correct": bool(pred[i] == c)}

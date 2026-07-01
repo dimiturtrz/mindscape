@@ -44,7 +44,7 @@ def _frames(X, y, chan_slice, n_frames=N_FRAMES):
     edges = np.linspace(0, T, n_frames + 1).astype(int)
     widths = np.diff(edges)                                  # samples per frame-bin (uneven)
     frames = {}
-    for c in sorted(set(y.tolist())):
+    for c in sorted(np.unique(y).tolist()):
         m = X[y == c][:, chan_slice, :].mean(0)             # [36, t] mean HbO/HbR
         frames[CLASS_NAMES[c]] = (np.add.reduceat(m, edges[:-1], axis=1) / widths).T.tolist()
     ftimes = ((edges[:-1] + edges[1:]) / 2 / 10.0 - 2.0).tolist()   # tmin=-2 s
@@ -58,7 +58,7 @@ def _lda_patterns(X, y):
 
     lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto").fit(_features(X), y)
     coef = np.atleast_2d(lda.coef_)                         # [n_class, 216] (mean|slope|peak × 72)
-    classes = sorted(set(y.tolist()))
+    classes = sorted(np.unique(y).tolist())
     if coef.shape[0] == 1 and len(classes) == 2:
         coef = np.vstack([-coef[0], coef[0]])
     out = {}
@@ -76,8 +76,8 @@ def _waveforms(X, y, names, n_t=300):
     ti = np.arange(0, T, step)
     t = (ti / 10.0 - 2.0).tolist()
     out = {}
-    for c in sorted(set(y.tolist())):
-        ei = np.where(y == c)[0][0]
+    for c in sorted(np.unique(y).tolist()):
+        ei = int((y == c).argmax())
         out[CLASS_NAMES[c]] = {names[i]: {"hbo": X[ei, i, ti].tolist(), "hbr": X[ei, i + 36, ti].tolist()}
                                for i in range(len(names))}
     return {"t": t, "trials": out, "chans": names}
@@ -99,8 +99,8 @@ def _predictions(subject: int, X, y):
     probs = ff.score(clf, X)
     pred = probs.argmax(1)
     per = {}
-    for c in sorted(set(y.tolist())):
-        i = int(np.where(y == c)[0][0])                    # the example trial shown for this class
+    for c in sorted(np.unique(y).tolist()):
+        i = int((y == c).argmax())                         # the example trial shown for this class (first match)
         per[CLASS_NAMES[c]] = {"truth": CLASS_NAMES[c], "pred": CLASS_NAMES[int(pred[i])],
                                "probs": [round(float(p), 3) for p in probs[i]],
                                "correct": bool(pred[i] == c)}
@@ -116,7 +116,7 @@ def main():
     args = ap.parse_args()
 
     X, y, names, pos, fs = _subject_epochs(args.subject)
-    print(f"fNIRS subject {args.subject}: {len(X)} epochs, {len(names)} ch, classes {sorted(set(y.tolist()))}")
+    print(f"fNIRS subject {args.subject}: {len(X)} epochs, {len(names)} ch, classes {sorted(np.unique(y).tolist())}")
 
     hbo, ftimes = _frames(X, y, slice(0, 36))
     data = {
@@ -125,7 +125,7 @@ def main():
         "sfreq": fs,
         "channels": names,
         "pos": pos.tolist(),
-        "classes": [CLASS_NAMES[c] for c in sorted(set(y.tolist()))],
+        "classes": [CLASS_NAMES[c] for c in sorted(np.unique(y).tolist())],
         "frames": {"response": hbo},                       # one signal topomap (HbO activation); HbR is in the waveforms
         "frame_times": ftimes,
         "lda_patterns": _lda_patterns(X, y),               # decoder view (per-class HbO weight)
