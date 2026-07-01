@@ -22,7 +22,7 @@ h1 { margin:0; font-size:1.5rem; letter-spacing:.03em; }
 .seg-lg button { padding:0 1.1rem; font-size:.95rem; }
 
 /* layout — two fluid columns; main fills remaining height */
-main { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,46fr) minmax(0,54fr);
+main { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,25fr) minmax(0,75fr);
   gap:var(--gap); padding:0 var(--pad) var(--pad); }
 @media (max-width:56rem){ main{ grid-template-columns:1fr; } }
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:.75rem;
