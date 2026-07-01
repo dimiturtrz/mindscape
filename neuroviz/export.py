@@ -158,9 +158,15 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / f"subject{args.subject}.json").write_text(json.dumps(data))
-    # a tiny manifest the viewer reads to list available subjects
-    subs = sorted(int(p.stem.replace("subject", "")) for p in out.glob("subject*.json"))
-    (out / "manifest.json").write_text(json.dumps({"subjects": subs}))
+    # modality-aware manifest (the viewer's EEG/fNIRS switch reads it); preserve any fNIRS entry
+    eeg_subs = sorted(int(p.stem.replace("subject", "")) for p in out.glob("subject*.json")
+                      if not p.stem.startswith("fnirs"))
+    mpath = out / "manifest.json"
+    man = json.loads(mpath.read_text()) if mpath.exists() else {}
+    if "modalities" not in man:                            # migrate legacy {subjects:[...]}
+        man = {"modalities": {}}
+    man["modalities"]["eeg"] = eeg_subs
+    mpath.write_text(json.dumps(man))
     print(f"-> {out}/subject{args.subject}.json  (+ manifest)")
 
 

@@ -3,19 +3,24 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>neuroviz — motor-imagery EEG</title>
+  <title>neuroviz — EEG + fNIRS</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header>
     <h1>neuroviz</h1>
-    <p class="sub">BCI IV-2a motor imagery — the scalp signature the decoder reads.
-      Imagining one hand <b>desynchronizes the opposite motor cortex</b> (mu/beta power drop over C3↔C4).</p>
+    <p class="sub">Two non-invasive modalities, one viewer. <b>EEG</b> motor imagery (mu/beta ERD over motor
+      cortex) · <b>fNIRS</b> n-back workload (HbO/HbR hemodynamic response over prefrontal cortex) — the
+      signal each decoder reads.</p>
   </header>
 
   <main>
     <section class="panel">
       <div class="controls">
+        <div class="mapgroup">
+          <span class="glabel">modality</span>
+          <div class="seg" id="modality"><!-- EEG / fNIRS buttons, built in JS --></div>
+        </div>
         <div class="mapgroup">
           <span class="glabel">subject</span>
           <select id="subject"></select>
@@ -41,10 +46,10 @@
     </section>
 
     <section class="panel waves">
-      <h2>waveforms — all 22 channels <span class="mut">(colored by contribution to the current view)</span></h2>
+      <h2>waveforms — all channels <span class="mut">(colored by contribution to the current view)</span></h2>
       <canvas id="waves" width="640" height="520"></canvas>
       <p class="hint">One example trial of the selected class; each channel's brightness/width = how much it drives the
-      selected band-power / CSP pattern. The red cursor tracks the topomap frame.</p>
+      selected signal / decoder view. The red cursor tracks the topomap frame.</p>
     </section>
   </main>
 

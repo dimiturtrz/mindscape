@@ -14,16 +14,22 @@ inherently 2D-surface, and topomaps are what the field actually uses.
 - **Riemannian discriminant** — per-class channel weights of the tangent-space classifier
   (the strongest baseline, 0.706 within-subject). Here the *covariance* is the feature, so the map shows
   which channels' power drives each class — a different lens on the same signal than CSP's spatial filters.
-- **Waveforms** — all 22 channels for an example trial, each colored by its contribution to the selected
-  map (band power or CSP filter) — so the channels that drive the current view light up, no hardcoded highlight.
+- **Waveforms** — all channels for an example trial, each colored by its contribution to the selected
+  map — so the channels that drive the current view light up, no hardcoded highlight.
+
+**fNIRS view (a top-level EEG/fNIRS toggle):** the same viewer renders the hemodynamic modality — animated
+**HbO/HbR topomaps** per n-back workload class (watch the response build + peak ~5–8 s over prefrontal
+cortex), the optode montage, and the **LDA discriminant** (per-channel amplitude weight the decoder reads).
+Same JSON schema, so one web app shows both signals side by side.
 
 ## Run
 ```bash
-# 1) export a subject's view data (writes neuroviz/web/data/, gitignored)
-uv run python -m neuroviz.export --subject 1
+# 1) export view data (writes neuroviz/web/data/, gitignored)
+uv run python -m neuroviz.export --subject 1        # EEG motor imagery
 uv run python -m neuroviz.export --subject 3
+uv run python -m neuroviz.export_fnirs --subject 1  # fNIRS n-back workload
 
-# 2) serve + open
+# 2) serve + open — a top-level EEG / fNIRS toggle switches modality
 python -m http.server 8000 -d neuroviz/web      # then open http://localhost:8000
 ```
 

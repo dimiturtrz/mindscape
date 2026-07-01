@@ -2,16 +2,20 @@
 // neuroviz — animated 2D ERD topomap (inverse-distance interpolation) + waveforms for BCI IV-2a.
 // No build step: serve this dir (`python -m http.server`) and open index.html.
 
-// state.map ∈ {"mu","beta","csp0…csp5","riemann"}; one unified selector across methods.
-const state = { data:null, map:"mu", cls:null, frame:25, playing:false };
+// modality-aware: EEG (mu/beta + CSP/Riemann) or fNIRS (HbO/HbR + LDA). state.map is a frame key
+// ("mu"/"beta"/"HbO"/"HbR") or a decoder view ("csp0…", "riemann", "lda"). Controls are built from the
+// data's own keys, so one viewer renders both modalities.
+const state = { data:null, modality:null, map:null, cls:null, frame:25, playing:false };
 const $ = (id) => document.getElementById(id);
 const isCsp = () => state.map.startsWith("csp");
 const isRiemann = () => state.map === "riemann";
-const isPerClass = () => !isCsp();          // band power + Riemann are per-class; CSP filters are not
+const isLda = () => state.map === "lda";
+const isSignal = () => state.data && (state.map in state.data.frames);   // a time-resolved frame map
+const isPerClass = () => !isCsp();          // signal + Riemann + LDA are per-class; CSP filters are not
 const cspIdx = () => +state.map.slice(3);
-// method family of the current map + each family's default map (the method dropdown picks the family)
-const family = () => isCsp() ? "csp" : isRiemann() ? "riemann" : "band";
-const FAMILY_DEFAULT = { band:"mu", csp:"csp0", riemann:"riemann" };
+const firstSignal = () => Object.keys(state.data.frames)[0];
+const family = () => isCsp() ? "csp" : isRiemann() ? "riemann" : isLda() ? "lda" : "signal";
+const FAMILY_DEFAULT = { csp:"csp0", riemann:"riemann", lda:"lda" };      // signal -> firstSignal()
 
 // layout / render constants (no magic numbers inline)
 const LAYOUT = {
@@ -39,13 +43,15 @@ function currentValues(){
   const d=state.data;
   if (isCsp()) return d.csp_patterns[cspIdx()];
   if (isRiemann()) return d.riemann_patterns[state.cls];
+  if (isLda()) return d.lda_patterns[state.cls];
   return d.frames[state.map][state.cls][state.frame];
 }
-// stable color scale (CSP/Riemann: the static pattern; band: across the whole animation so playback is comparable)
+// stable color scale (decoder views: the static pattern; signal: across the whole animation so playback is comparable)
 function scaleMax(){
   const d=state.data;
   if (isCsp()) return Math.max(...d.csp_patterns[cspIdx()].map(Math.abs))||1;
   if (isRiemann()) return Math.max(...d.riemann_patterns[state.cls].map(Math.abs))||1;
+  if (isLda()) return Math.max(...d.lda_patterns[state.cls].map(Math.abs))||1;
   let m=1e-9;
   for (const fr of d.frames[state.map][state.cls]) for (const v of fr) m=Math.max(m,Math.abs(v));
   return m;
@@ -80,11 +86,16 @@ function renderTopo(){
     ctx.fillStyle="#0e1116";ctx.fill();
     ctx.strokeStyle=`rgba(230,233,239,${0.2+0.7*c})`;ctx.lineWidth=1;ctx.stroke();
   }
+  const cls=(state.cls||"").replace("_"," ");
   $("hint").textContent = isCsp()
     ? `CSP component ${cspIdx()+1} — the spatial filter the baseline decoder learned (weight per electrode).`
     : isRiemann()
-    ? `Riemann discriminant, ${state.cls.replace("_"," ")} — per-channel weight of the tangent-space classifier (covariance is the feature; no spatial filter). Switch class to see the pattern move.`
-    : `${state.map} ERD, ${state.cls.replace("_"," ")} — blue = motor cortex desynchronizing; switch class to see the active side move.`;
+    ? `Riemann discriminant, ${cls} — per-channel weight of the tangent-space classifier (covariance is the feature; no spatial filter). Switch class to see the pattern move.`
+    : isLda()
+    ? `LDA workload discriminant, ${cls} — per-channel weight of the amplitude-feature decoder (mean HbO). Switch class to compare load levels.`
+    : state.modality==="fnirs"
+    ? `${state.map} response, ${cls} — the hemodynamic response building over the trial (red = concentration rise); scrub time to watch it peak ~5–8 s.`
+    : `${state.map} ERD, ${cls} — blue = motor cortex desynchronizing; switch class to see the active side move.`;
 }
 
 function renderWaves(){
@@ -131,23 +142,28 @@ function play(on){
   if(on) timer=setInterval(()=>{ state.frame=(state.frame+1)%nFrames(); render(); }, LAYOUT.frameMs);
 }
 
-// method dropdown (next to subject): band power · CSP · Riemann — picks the map family.
+// method dropdown (next to subject): signal + whatever decoders the data carries — picks the map family.
 function buildMethod(){
-  const sel=$("method"); sel.innerHTML="";
-  const opts=[["band","band power"],["csp","CSP"]];
-  if(state.data.riemann_patterns) opts.push(["riemann","Riemann"]);
+  const d=state.data, sel=$("method"); sel.innerHTML="";
+  const opts=[["signal", d.modality==="fnirs" ? "chromophore" : "band power"]];
+  if(d.csp_patterns) opts.push(["csp","CSP"]);
+  if(d.riemann_patterns) opts.push(["riemann","Riemann"]);
+  if(d.lda_patterns) opts.push(["lda","LDA"]);
   opts.forEach(([k,t])=>{ const o=document.createElement("option"); o.value=k; o.textContent=t; sel.appendChild(o); });
-  sel.onchange=()=>{ state.map=FAMILY_DEFAULT[sel.value]; buildSubmaps(); sync(); render(); };
+  sel.onchange=()=>{ state.map = sel.value==="signal" ? firstSignal() : FAMILY_DEFAULT[sel.value];
+                     buildSubmaps(); sync(); render(); };
 }
-// sub-controls for the chosen method: band -> mu/beta buttons; CSP -> filter dropdown; Riemann -> none.
+// sub-controls for the chosen method: signal -> a button per frame map (mu/beta or HbO/HbR); CSP -> filter
+// dropdown; Riemann/LDA -> none (per-class, chosen on the classbar).
 function buildSubmaps(){
-  const bar=$("map"); bar.innerHTML=""; const f=family();
-  if(f==="band"){
+  const bar=$("map"); bar.innerHTML=""; const d=state.data, f=family();
+  if(f==="signal"){
     const sg=document.createElement("div"); sg.className="mapgroup";
-    const sl=document.createElement("span"); sl.className="glabel"; sl.textContent="band"; sg.appendChild(sl);
+    const sl=document.createElement("span"); sl.className="glabel";
+    sl.textContent = d.modality==="fnirs" ? "chromophore" : "band"; sg.appendChild(sl);
     const seg=document.createElement("div"); seg.className="seg";
-    [["mu","mu"],["beta","beta"]].forEach(([k,t])=>{
-      const b=document.createElement("button"); b.textContent=t; b.dataset.k=k;
+    Object.keys(d.frames).forEach(k=>{
+      const b=document.createElement("button"); b.textContent=k; b.dataset.k=k;
       b.onclick=()=>{ state.map=k; sync(); render(); }; seg.appendChild(b);
     });
     sg.appendChild(seg); bar.appendChild(sg);
@@ -155,12 +171,12 @@ function buildSubmaps(){
     const fg=document.createElement("div"); fg.className="mapgroup";
     const fl=document.createElement("span"); fl.className="glabel"; fl.textContent="filter"; fg.appendChild(fl);
     const sel=document.createElement("select"); sel.id="cspsel";
-    state.data.csp_patterns.forEach((_,i)=>{ const o=document.createElement("option"); o.value="csp"+i; o.textContent="CSP "+(i+1); sel.appendChild(o); });
+    d.csp_patterns.forEach((_,i)=>{ const o=document.createElement("option"); o.value="csp"+i; o.textContent="CSP "+(i+1); sel.appendChild(o); });
     sel.value=state.map;
     sel.onchange=()=>{ state.map=sel.value; sync(); render(); };
     fg.appendChild(sel); bar.appendChild(fg);
   }
-  // riemann: per-class discriminant, no sub-control (class chosen on the classbar)
+  // riemann / lda: per-class discriminant, no sub-control
 }
 function buildClassbar(){
   const bar=$("classbar"); bar.innerHTML="";
@@ -176,29 +192,42 @@ function sync(){
   $("map").querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.k===state.map));
   const sel=$("cspsel"); if(sel) sel.value=state.map;
   [...$("classbar").children].forEach(b=>b.classList.toggle("on", b.dataset.c===state.cls));
-  $("classbar").hidden=!isPerClass();         // class applies to band power + Riemann (per-class), not CSP
-  const animated=isPerClass()&&!isRiemann();  // only band power has time frames
+  $("classbar").hidden=!isPerClass();         // class applies to signal + Riemann + LDA (per-class), not CSP
+  const animated=isSignal();                  // only the signal maps have time frames
   $("player").hidden=!animated;
   if(!animated) play(false);
 }
 
-async function loadSubject(s){
-  state.data=await (await fetch(`data/subject${s}.json`)).json();
+async function loadSubject(modality, s){
+  const prefix = modality==="fnirs" ? "fnirs_" : "";
+  state.data=await (await fetch(`data/${prefix}subject${s}.json`)).json();
+  state.data.modality=modality; state.modality=modality;
   state.cls=state.data.classes.includes("left_hand")?"left_hand":state.data.classes[0];
-  state.map="mu"; state.frame=Math.floor(nFrames()/2);
+  state.map=firstSignal(); state.frame=Math.floor(nFrames()/2);
   $("scrub").max=nFrames()-1;
   buildMethod(); buildSubmaps(); buildClassbar(); sync(); render();
 }
 
 async function init(){
   const man=await (await fetch("data/manifest.json")).json();
-  const sel=$("subject");
-  man.subjects.forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent="subject "+s;sel.appendChild(o);});
-  sel.onchange=()=>{play(false);loadSubject(sel.value);};
+  const mods=man.modalities||{eeg:man.subjects||[]};      // back-compat with the old flat manifest
+  const modBar=$("modality"), subjSel=$("subject");
+
+  function loadModality(mod){
+    subjSel.innerHTML="";
+    mods[mod].forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent="subject "+s;subjSel.appendChild(o);});
+    [...modBar.children].forEach(b=>b.classList.toggle("on", b.dataset.m===mod));
+    play(false); loadSubject(mod, mods[mod][0]);
+  }
+  Object.keys(mods).filter(m=>mods[m] && mods[m].length).forEach(mod=>{
+    const b=document.createElement("button"); b.textContent=mod.toUpperCase(); b.dataset.m=mod;
+    b.onclick=()=>loadModality(mod); modBar.appendChild(b);
+  });
+  subjSel.onchange=()=>{play(false);loadSubject(state.modality, subjSel.value);};
   $("play").onclick=()=>play(!state.playing);
   $("scrub").oninput=()=>{play(false);state.frame=+$("scrub").value;render();};
   let rz; window.addEventListener("resize",()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(state.data) render(); },120); });
-  await loadSubject(man.subjects[0]);
+  loadModality(Object.keys(mods).find(m=>mods[m] && mods[m].length));
 }
 init().catch(e=>{document.body.insertAdjacentHTML("beforeend",
   `<p style="color:#ffb0a0;padding:24px">load error: ${e}. Serve this dir: <code>python -m http.server</code> in neuroviz/web, then open http://localhost:8000</p>`);});
