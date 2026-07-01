@@ -57,11 +57,13 @@ def main():
     run_dir = Path(args.out) if args.out else Path("runs") / f"{args.method}_{args.regime}_{args.dataset}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n=== {args.method} · {args.regime} · {args.dataset} ({len(folds)} folds) ===")
+    # classical baselines are CPU + fold-independent -> parallelize folds; GPU nets stay on one device
+    n_jobs = -1 if args.method in {"csp_lda", "riemann", "riemann_acm", "fnirs_lda"} else 1
+    print(f"\n=== {args.method} · {args.regime} · {args.dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
     res = harness.run(args.method, fit_fn, score_fn, folds, n_classes, regime=args.regime,
                       params={"method": args.method, "regime": args.regime,
                               "dataset": args.dataset, "resample": args.resample},
-                      run_dir=run_dir)
+                      run_dir=run_dir, n_jobs=n_jobs)
 
     out = run_dir / "aggregate.json"
     out.write_text(json.dumps(res, indent=2))

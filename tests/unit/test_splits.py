@@ -36,9 +36,10 @@ def test_val_subjects_disjoint_from_train_and_test():
 def test_loso_yields_one_fold_per_subject():
     folds = list(splits.leave_one_subject_out(_meta()))
     assert len(folds) == 3
-    for sub, tr, _va, te in folds:
+    all_subs = set(_meta()["subject"].unique().to_list())
+    for sub, tr, te in folds:
         assert set(te["subject"].unique()) == {sub}
-        assert sub not in set(tr["subject"].unique())
+        assert set(tr["subject"].unique()) == all_subs - {sub}     # train = ALL others, in full (no val carve)
 
 
 def test_within_subject_session_protocol():

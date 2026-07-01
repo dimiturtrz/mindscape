@@ -86,7 +86,7 @@ def main():
     tag = "acm" if args.augment else "ts"
     print(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · recipe {cfg.key()} · recentered {tag}")
 
-    folds = [(s, tr, te) for s, tr, _val, te in splits.leave_one_subject_out(meta)]
+    folds = list(splits.leave_one_subject_out(meta))
     print(f"\n=== riemann recentered ({tag}) · cross_subject · {args.dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
     out_folds = Parallel(n_jobs=args.jobs)(
         delayed(_run_fold)(s, tr, te, args.augment, args.order, args.lag) for s, tr, te in folds)

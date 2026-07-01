@@ -46,25 +46,28 @@ def make_split(meta: pl.DataFrame, test_subjects=(), test_sessions=(), val_subje
 
 
 def leave_one_subject_out(meta: pl.DataFrame):
-    """Yield (held_subject, train, val, test) for each subject — the cross-subject regime.
-    test = the held subject; val = a random carve of the remaining subjects' epochs."""
+    """Yield (held_subject, train, test) for each subject — the cross-subject regime. test = the held
+    subject; train = ALL other subjects, in full. No fold-level val carve: the harness discards it anyway,
+    and the DL decoders carve their own val from `train` internally (early stopping), so carving here just
+    threw training data away — worse for the classical baselines, redundant for the nets."""
     for sub in sorted(meta["subject"].unique().to_list()):
-        train, val, test = make_split(meta, test_subjects=[sub])
-        yield sub, train, val, test
+        s = str(sub)
+        yield sub, meta.filter(pl.col("subject") != s), meta.filter(pl.col("subject") == s)
 
 
 def grouped_kfold(meta: pl.DataFrame, k: int = 5):
-    """Yield (fold_name, train, val, test) for k-fold cross-SUBJECT CV — subjects partitioned into k
-    test groups, each subject tested exactly once. This is the BenchNIRS 'generalised' protocol
-    (sklearn GroupKFold); LOSO is the k = n_subjects limit. Fewer, larger test folds than LOSO (so each
-    trains on ~(k-1)/k of subjects, vs LOSO's n-1). test = a group of subjects; val = carve of the rest."""
+    """Yield (fold_name, train, test) for k-fold cross-SUBJECT CV — subjects partitioned into k test
+    groups, each subject tested exactly once. This is the BenchNIRS 'generalised' protocol (sklearn
+    GroupKFold); LOSO is the k = n_subjects limit. train = all non-test subjects, in full (no val carve;
+    see leave_one_subject_out)."""
     from sklearn.model_selection import GroupKFold
 
     subs = sorted(meta["subject"].unique().to_list())
     gkf = GroupKFold(n_splits=k)
     for i, (_tr, te) in enumerate(gkf.split(list(range(len(subs))), groups=subs)):
-        train, val, test = make_split(meta, test_subjects=[subs[j] for j in te])
-        yield f"fold{i}", train, val, test
+        test_subs = [subs[j] for j in te]
+        in_test = pl.col("subject").is_in(test_subs)
+        yield f"fold{i}", meta.filter(~in_test), meta.filter(in_test)   # full train (no val carve)
 
 
 def within_subject(meta: pl.DataFrame, subject: str, test_sessions=(), val_frac: float = 0.2,

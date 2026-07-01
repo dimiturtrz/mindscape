@@ -28,36 +28,49 @@ def folds_for(meta, regime: str, test_sessions=()):
             tr, _val, te = splits.within_subject(meta, s, test_sessions=test_sessions)
             out.append((s, tr, te))
     elif regime == "cross_subject":
-        for s, tr, _val, te in splits.leave_one_subject_out(meta):
-            out.append((s, tr, te))
+        out.extend(splits.leave_one_subject_out(meta))
     elif regime == "cross_subject_kfold":
-        for name, tr, _val, te in splits.grouped_kfold(meta, k=5):
-            out.append((name, tr, te))
+        out.extend(splits.grouped_kfold(meta, k=5))
     else:
         raise ValueError(f"unknown regime {regime!r} (want within / cross_subject / cross_subject_kfold)")
     return out
 
 
+def _fit_score_fold(fold, fit_fn, score_fn):
+    """One fold: gather -> fit -> score -> metrics. Returns (name, row, probs, yte, clf)."""
+    name, train, test = fold
+    Xtr, ytr = store.gather(train)
+    Xte, yte = store.gather(test)
+    clf = fit_fn(Xtr, ytr)
+    probs = np.asarray(score_fn(clf, Xte), dtype=float)
+    pred = probs.argmax(1)
+    row = {"fold": str(name), "n": int(len(yte)),
+           "acc": metrics.accuracy(yte, pred), "kappa": metrics.kappa(yte, pred),
+           "ece": metrics.ece_from_probs(probs, yte)}
+    return str(name), row, probs, yte, clf
+
+
 def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str = "",
-              models_out: list | None = None) -> dict:
+              models_out: list | None = None, n_jobs: int = 1) -> dict:
     """Pure: run the method over folds, compute the metrics. No MLflow, no side effects.
     If `models_out` is given, each fold's fitted clf is appended as (fold_name, clf) for the caller to
-    persist — keeps this function side-effect-free while letting `run` save the trained models."""
+    persist. `n_jobs`: parallelize the (independent) folds — threading backend, so numpy/BLAS releases the
+    GIL and the fit_fn closures need no pickling. Default 1 (sequential); use -1 for CPU baselines, keep 1
+    for GPU nets (one device)."""
+    if n_jobs == 1:
+        done = [_fit_score_fold(f, fit_fn, score_fn) for f in folds]
+    else:
+        from joblib import Parallel, delayed
+        done = Parallel(n_jobs=n_jobs, backend="threading")(
+            delayed(_fit_score_fold)(f, fit_fn, score_fn) for f in folds)
+
     per, P, Y, G = [], [], [], []
-    for name, train, test in folds:
-        Xtr, ytr = store.gather(train)
-        Xte, yte = store.gather(test)
-        clf = fit_fn(Xtr, ytr)
+    for name, row, probs, yte, clf in done:                         # collected in fold order
         if models_out is not None:
-            models_out.append((str(name), clf))
-        probs = np.asarray(score_fn(clf, Xte), dtype=float)
-        pred = probs.argmax(1)
-        row = {"fold": str(name), "n": int(len(yte)),
-               "acc": metrics.accuracy(yte, pred), "kappa": metrics.kappa(yte, pred),
-               "ece": metrics.ece_from_probs(probs, yte)}
+            models_out.append((name, clf))
         per.append(row)
         print(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  ece {row['ece']:.3f}  (n={row['n']})")
-        P.append(probs); Y.append(yte); G.append(np.full(len(yte), str(name)))
+        P.append(probs); Y.append(yte); G.append(np.full(len(yte), name))
 
     probs, y, g = np.concatenate(P), np.concatenate(Y), np.concatenate(G)
     pred = probs.argmax(1)
@@ -73,11 +86,11 @@ def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str 
 
 
 def run(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str = "",
-        params: dict | None = None, run_dir=None, save_models: bool = True) -> dict:
+        params: dict | None = None, run_dir=None, save_models: bool = True, n_jobs: int = 1) -> dict:
     """aggregate + log to MLflow (guarded). `run_dir` (a runs/<name>/ dir) enables resume + artifacts.
-    `save_models` persists each fold's trained model (run_dir/models/ + MLflow artifact)."""
+    `save_models` persists each fold's trained model. `n_jobs` parallelizes folds (see aggregate)."""
     models: list = [] if save_models else None
-    res = aggregate(method, fit_fn, score_fn, folds, n_classes, regime, models_out=models)
+    res = aggregate(method, fit_fn, score_fn, folds, n_classes, regime, models_out=models, n_jobs=n_jobs)
     fm, pooled = res["fold_mean"], res["pooled"]
     tags = {"method": method, "regime": regime, "dataset": (params or {}).get("dataset", "")}
     with tracking.run("mindscape", f"{method}_{regime}", params=params or {"method": method, "regime": regime},

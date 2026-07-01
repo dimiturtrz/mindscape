@@ -3,8 +3,8 @@
 **What this is.** mindscape decodes **motor imagery** from non-invasive EEG and asks the question most
 demos skip: *a decoder that scores ~60% on a subject's own recordings — how far does it fall on a person
 it never saw?* On **BCI Competition IV-2a** (4-class motor imagery, 9 subjects, the standard benchmark),
-a CSP+LDA decoder hits **0.598 within-subject** but drops to **0.382 leave-one-subject-out** — a
-**22-point generalization gap** (chance = 25%). That measured gap, and the calibration under it, is the
+a CSP+LDA decoder hits **0.598 within-subject** but drops to **0.391 leave-one-subject-out** — a
+**21-point generalization gap** (chance = 25%). That measured gap, and the calibration under it, is the
 contribution — not the headline accuracy. The second through-line is **deployability**: the decoders are
 tiny and export to ONNX at millisecond-scale CPU latency.
 
@@ -36,12 +36,12 @@ generalization number from an inflated one.
 | regime | accuracy | kappa | ECE |
 |---|---|---|---|
 | within-subject | **<!--r:csp_lda_within_bnci2014_001.acc-->0.598<!--/r-->** | <!--r:csp_lda_within_bnci2014_001.kappa-->0.464<!--/r--> | <!--r:csp_lda_within_bnci2014_001.ece-->0.140<!--/r--> |
-| **cross-subject (leave-one-subject-out)** | **<!--r:csp_lda_cross_subject_bnci2014_001.acc-->0.382<!--/r-->** | <!--r:csp_lda_cross_subject_bnci2014_001.kappa-->0.176<!--/r--> | <!--r:csp_lda_cross_subject_bnci2014_001.ece-->0.135<!--/r--> |
-| **gap** | **<!--r:csp_lda_cross_subject_bnci2014_001.acc-csp_lda_within_bnci2014_001.acc-->−0.215<!--/r-->** | <!--r:csp_lda_cross_subject_bnci2014_001.kappa-csp_lda_within_bnci2014_001.kappa-->−0.287<!--/r--> | |
+| **cross-subject (leave-one-subject-out)** | **<!--r:csp_lda_cross_subject_bnci2014_001.acc-->0.391<!--/r-->** | <!--r:csp_lda_cross_subject_bnci2014_001.kappa-->0.189<!--/r--> | <!--r:csp_lda_cross_subject_bnci2014_001.ece-->0.134<!--/r--> |
+| **gap** | **<!--r:csp_lda_cross_subject_bnci2014_001.acc-csp_lda_within_bnci2014_001.acc-->−0.206<!--/r-->** | <!--r:csp_lda_cross_subject_bnci2014_001.kappa-csp_lda_within_bnci2014_001.kappa-->−0.275<!--/r--> | |
 
-The mean understates it: per subject, cross-subject accuracy spans **0.24–0.54**, and three subjects land
-**at or below chance** on a person they never saw. A "working" motor-imagery BCI is near-useless on
-several unseen users — the trap the field underreports and any deployment hits first.
+The mean understates it: per subject, cross-subject accuracy spans **0.24–0.55**, and one subject lands
+**below chance** on a person it never saw (two more within a few points of it). A "working" motor-imagery
+BCI is near-useless on several unseen users — the trap the field underreports and any deployment hits first.
 
 **Calibration under shift.** Temperature scaling fit on an in-session validation split, ECE measured
 before/after on the *cross-session* test (ATCNet): test ECE **0.113 → 0.084**. We report the *transfer* —
@@ -57,10 +57,10 @@ whitening), target included and **unsupervised**. We implemented it ([`neuroscan
 
 | method (leave-one-subject-out) | cross-subject acc |
 |---|---|
-| CSP+LDA | <!--r:csp_lda_cross_subject_bnci2014_001.acc-->0.382<!--/r--> |
-| Riemann (tangent space) | <!--r:riemann_cross_subject_bnci2014_001.acc-->0.357<!--/r--> |
-| Riemann ACM (time-delay cov) | <!--r:riemann_acm_cross_subject_bnci2014_001.acc-->0.351<!--/r--> |
-| **Riemann + re-centering** | **<!--r:riemann_recenter_ts_bnci2014_001.acc-->0.496<!--/r-->** |
+| CSP+LDA | <!--r:csp_lda_cross_subject_bnci2014_001.acc-->0.391<!--/r--> |
+| Riemann (tangent space) | <!--r:riemann_cross_subject_bnci2014_001.acc-->0.360<!--/r--> |
+| Riemann ACM (time-delay cov) | <!--r:riemann_acm_cross_subject_bnci2014_001.acc-->0.355<!--/r--> |
+| **Riemann + re-centering** | **<!--r:riemann_recenter_ts_bnci2014_001.acc-->0.501<!--/r-->** |
 
 **+0.139** over plain tangent space — the displacement *was* the gap. And it's the *location*, not the
 features: ACM (richer time-delay covariances) scores 0.351 alone and **0.470 even with re-centering** —
@@ -80,7 +80,7 @@ single-thread — `python -m neuroscan.models.profile`):
 | model | role | params | FLOPs | CPU latency | within-subj acc | kappa |
 |---|---|---|---|---|---|---|
 | CSP+LDA | baseline | — | — | — | <!--r:csp_lda_within_bnci2014_001.acc-->0.598<!--/r--> | <!--r:csp_lda_within_bnci2014_001.kappa-->0.464<!--/r--> |
-| **Riemann (tangent space + LR)** | baseline | — | — | — | **<!--r:riemann_within_bnci2014_001.acc-->0.706<!--/r-->** | **<!--r:riemann_within_bnci2014_001.kappa-->0.609<!--/r-->** |
+| **Riemann (tangent space + LR)** | baseline | — | — | — | **<!--r:riemann_within_bnci2014_001.acc-->0.655<!--/r-->** | **<!--r:riemann_within_bnci2014_001.kappa-->0.541<!--/r-->** |
 | **EEGNet** | compact CNN | **3.7K** | 13.7M | 1.5 ms | 0.606 | 0.475 |
 | **ATCNet** | attention + TCN | 114K | **2.8M** | 4.2 ms | 0.619 | 0.492 |
 | EEGConformer | transformer | 871K | 72M | 4.2 ms | — | — |
@@ -117,9 +117,9 @@ change.
 
 | modality · method | cross-subject (LOSO) | within (held-out block-series) |
 |---|---|---|
-| **fNIRS · mean+slope+peak → LDA** | **<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.442<!--/r-->** (κ 0.16) | **0.415** (κ 0.12) |
-| EEG · CSP + LDA | <!--r:csp_lda_cross_subject_shin2017_nback_eeg.acc-->0.410<!--/r--> (κ 0.12) | <!--r:csp_lda_within_shin2017_nback_eeg.acc-->0.568<!--/r--> (κ 0.35) |
-| EEG · Riemann (tangent space) | <!--r:riemann_cross_subject_shin2017_nback_eeg.acc-->0.424<!--/r--> (κ 0.14) | <!--r:riemann_within_shin2017_nback_eeg.acc-->0.538<!--/r--> (κ 0.31) |
+| **fNIRS · mean+slope+peak → LDA** | **<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.454<!--/r-->** (κ 0.16) | **0.415** (κ 0.12) |
+| EEG · CSP + LDA | <!--r:csp_lda_cross_subject_shin2017_nback_eeg.acc-->0.432<!--/r--> (κ 0.12) | <!--r:csp_lda_within_shin2017_nback_eeg.acc-->0.568<!--/r--> (κ 0.35) |
+| EEG · Riemann (tangent space) | <!--r:riemann_cross_subject_shin2017_nback_eeg.acc-->0.452<!--/r--> (κ 0.14) | <!--r:riemann_within_shin2017_nback_eeg.acc-->0.538<!--/r--> (κ 0.31) |
 
 _On the "within" column — read it as a **soft** ceiling._ The Shin n-back is **one ~33-min continuous
 recording** per subject, split into 3 block-series (9 blocks each); "within" holds out the last series, so
