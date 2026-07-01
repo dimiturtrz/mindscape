@@ -10,6 +10,25 @@
       "kappa": 0.3503,
       "ece": 0.1405
     },
+    "calibration_ablation_shin2017_nback_eeg": {
+      "method": "calibration_ablation",
+      "regime": "cross_subject_kfold",
+      "dataset": "",
+      "n_classes": 3,
+      "acc": 0.511,
+      "kappa": null,
+      "ece": null,
+      "eeg_raw": 0.4069,
+      "eeg_ztrans": 0.5807,
+      "eeg_zcalib": 0.511,
+      "fnirs_raw": 0.4743,
+      "fnirs_ztrans": 0.4835,
+      "eeg_z_best": 0.5812,
+      "fnirs_z": 0.4829,
+      "late_z": 0.5755,
+      "oracle_z": 0.7664,
+      "err_corr_z": 0.0692
+    },
     "csp_lda_cross_subject_bnci2014_001": {
       "method": "csp_lda",
       "regime": "cross_subject",
@@ -121,6 +140,16 @@
       "err_corr": 0.0531,
       "best_aggregator": 0.4687,
       "oracle_gap_captured": -0.0057
+    },
+    "fusion_gate_cross_subject_kfold_shin2017_nback": {
+      "method": "fusion_gate",
+      "regime": "cross_subject_kfold",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.5733,
+      "kappa": null,
+      "ece": null,
+      "gate": 0.5733
     },
     "riemann_acm_cross_subject_bnci2014_001": {
       "method": "riemann_acm",

@@ -16,7 +16,7 @@ EEG-band-power → LDA to 0.581 (from 0.407 raw; the absolute band-power was sub
 gate merely *ties* that best single modality (z-EEG 0.581, z-concat-LDA 0.578, late-z 0.575, gate 0.573). So
 the learned output-mixing gate captures none of the oracle headroom either — consistent with run_fusion's
 finding that the per-trial reliability signal is not in the probabilities. The real transfer lever the
-investigation surfaced is the per-subject normalization (see mindscape-lpv follow-up), not the fusion.
+investigation surfaced is the per-subject normalization (measured in calibration_ablation.py), not the fusion.
 
     python -m neuroscan.tasks.workload.fusion_gate --no-record   # 5-fold GroupKFold (negative result; not recorded)
 """

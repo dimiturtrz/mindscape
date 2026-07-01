@@ -103,7 +103,7 @@ _Diagrams are kept coarse (layer + contract) on purpose — they map to folders 
 | `models/transforms.py` | standardizers (z-score / EMS / identity) + sliding-window crops, independently testable |
 | `models/__init__.py` | `get_method(name)` — one registry over the `core.decoder.Decoder` contract: baselines and nets share a single `predict_proba` scorer; only the builder differs (a fresh baseline object, or `decoders.make` for a net) |
 | `tracking.py` | guarded local-sqlite MLflow (no-op if absent); `save_model` persists trained models (torch `.pt` / sklearn `.joblib`) to `runs/<name>/models/` + as an artifact |
-| `tasks/` | thin CLIs organized **by decoding task**. Root: `run` (generic EEG decode under a regime — serves both tasks via `--dataset`), `reproduce_all` (regenerate the canonical numbers). `tasks/motor_imagery/`: `align` (cross-subject Riemannian re-centering), `reproduce_atcnet` (faithful reproduction), `quantize` (optional edge deploy). `tasks/workload/`: `run_fnirs` (fNIRS decode), `run_fusion` (EEG+fNIRS fusion + complementarity/aggregation sweep), `fusion_gate` (compact learned gate — honest negative), `repro_benchnirs` (BenchNIRS anchor) |
+| `tasks/` | thin CLIs organized **by decoding task**. Root: `run` (generic EEG decode under a regime — serves both tasks via `--dataset`), `reproduce_all` (regenerate the canonical numbers). `tasks/motor_imagery/`: `align` (cross-subject Riemannian re-centering), `reproduce_atcnet` (faithful reproduction), `quantize` (optional edge deploy). `tasks/workload/`: `run_fnirs` (fNIRS decode), `run_fusion` (EEG+fNIRS fusion + complementarity/aggregation sweep), `fusion_gate` (compact learned gate — honest negative), `repro_benchnirs` (BenchNIRS anchor), `calibration_ablation` (per-subject calibration = the EEG transfer lever) |
 
 ### `baselines/` and the rest
 Method **objects**, not loose functions: each classical method is a class owning its hyperparameters
@@ -113,7 +113,8 @@ run through the same harness path as the nets). Module-level `fit`/`score` remai
 - `baselines/csp_lda.py` — `CspLda(n_components)`: CSP + LDA, the standard motor-imagery reference, isolated from the decoders under test.
 - `baselines/riemann.py` — `TangentSpace` / `Mdm` / `Acm(order, lag)` off a shared `_RiemannBaseline`, plus `recenter_covariances` (cross-subject manifold re-centering). The strongest classical baseline + the transfer fix.
 - `baselines/fnirs_features.py` — `FnirsLda`: per-channel mean+slope+peak of ΔHbO/ΔHbR → scaler → LDA. The amplitude features covariance methods discard; the right tool for the hemodynamic modality.
-- `neuroviz/` — the 2D motor-imagery viewer (topomaps + CSP patterns + Riemann discriminant + waveforms); Python export → dependency-free web app.
+- `baselines/eeg_bandpower.py` — `EegBandpower`: per-channel θ/α/β (log) band-power → scaler → LDA. The workload-native EEG feature (absolute rhythm magnitude, which covariance normalizes away); `relative=True` divides out per-epoch total power.
+- `neuroviz/` — the 2D EEG/fNIRS viewer (topomaps + CSP/Riemann/LDA patterns + waveforms) **plus a fusion complementarity view** (per-block which-modality-right map); Python export → dependency-free web app.
 - `tests/` — a pyramid: `unit/` (equivalence-class per module) + `integration/` (module chains: data→splits→harness, decoder→export→parity).
 
 ## The one idea everything hangs off — split-as-criteria

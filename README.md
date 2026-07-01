@@ -230,15 +230,20 @@ reproduce that collapse. On the EEG side, three *zero-calibration* feature famil
 (CSP/Riemann), absolute band-power, relative band-power — all land ~0.43 cross-subject; workload band-power is
 subject-idiosyncratic in **absolute scale**, which points straight at the fix. Adding **per-subject
 unsupervised calibration** (z-score each subject by its own feature statistics — no labels, the EEG analog of
-the Riemannian re-centering that closed the motor-imagery gap) recovers EEG band-power to **~0.51**
-(honest held-out-calibration-half) up to **0.58** (transductive), from 0.407 raw — so the ~0.43 number is the
-*zero-calibration* floor, not a ceiling, and with calibration **EEG (~0.51–0.58) becomes the stronger
+the Riemannian re-centering that closed the motor-imagery gap) recovers EEG band-power to
+**<!--r:calibration_ablation_shin2017_nback_eeg.eeg_zcalib-->0.511<!--/r-->** (honest held-out-calibration-half)
+up to **<!--r:calibration_ablation_shin2017_nback_eeg.eeg_ztrans-->0.581<!--/r-->** (transductive), from
+<!--r:calibration_ablation_shin2017_nback_eeg.eeg_raw-->0.407<!--/r--> raw — so the ~0.43 number is the
+*zero-calibration* floor, not a ceiling, and with calibration **EEG (0.51–0.58) becomes the stronger
 modality**, above fNIRS (~0.47, which doesn't benefit — its per-epoch baseline correction already removes the
 offset). Crucially, **fusion still doesn't beat that best single modality even after the fix**: a compact
-input-level gate (per-modality encoders + a per-trial mixing gate, nested GroupKFold) scores 0.573 — tying
-z-scored-EEG-alone (0.581), capturing none of the (now larger, 0.766) oracle headroom. The learned gate fails
+input-level gate (per-modality encoders + a per-trial mixing gate, nested GroupKFold) scores
+**<!--r:fusion_gate_cross_subject_kfold_shin2017_nback.gate-->0.573<!--/r-->** — tying z-scored-EEG-alone
+(<!--r:calibration_ablation_shin2017_nback_eeg.eeg_z_best-->0.581<!--/r-->), capturing none of the (now larger,
+<!--r:calibration_ablation_shin2017_nback_eeg.oracle_z-->0.766<!--/r-->) oracle headroom. The learned gate fails
 for the same reason every output-space combiner did. Full audit + citations:
-[`research/`](research/deep_dives/2026-07-01_eeg_fnirs_fusion_sota.md); calibration + gate in
+[`research/`](research/deep_dives/2026-07-01_eeg_fnirs_fusion_sota.md); the calibration ablation in
+[`tasks/workload/calibration_ablation.py`](neuroscan/tasks/workload/calibration_ablation.py), the gate in
 [`tasks/workload/fusion_gate.py`](neuroscan/tasks/workload/fusion_gate.py).
 
 ## Honest limits (measured, not assumed)
