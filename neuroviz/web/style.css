@@ -60,8 +60,7 @@ h2 { margin:0 0 10px; font-size:clamp(12.5px,1.3vw,14px); font-weight:600; color
 #waves { flex:1; width:100%; min-height:0; }
 
 /* captions + result readout */
-.hint { color:var(--mut); font-size:clamp(11.5px,1.2vw,13px); max-width:min(60ch,92%); text-align:center; }
-.waves .hint { max-width:none; width:100%; }
+.hint { color:var(--mut); font-size:clamp(11.5px,1.2vw,13px); max-width:100%; text-align:center; }
 .result { margin:10px 0 0; padding:8px 12px; border:1px solid var(--line); border-radius:var(--radius);
   background:#0e1116; color:var(--ink); font-size:clamp(11.5px,1.2vw,12.5px); line-height:1.5; }
 .result:empty { display:none; }
