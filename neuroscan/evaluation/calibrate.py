@@ -89,13 +89,12 @@ def main():
         print(f"  s{r['subject']}  T {T:.2f} | val ECE {r['val_ece_uncal']:.3f}->{r['val_ece_temp']:.3f} | "
               f"test ECE {r['test_ece_uncal']:.3f}->{r['test_ece_temp']:.3f}  (acc {r['test_acc']:.3f})")
 
-    def mean(k):
-        return float(np.mean([r[k] for r in rows]))
-
+    m = {k: float(np.mean([r[k] for r in rows]))
+         for k in ("T", "val_ece_uncal", "val_ece_temp", "test_ece_uncal", "test_ece_temp")}
     summary = {"method": args.method, "regime": "within_calibration", "n": len(rows),
-               "T_mean": mean("T"),
-               "val_ece": {"uncal": mean("val_ece_uncal"), "temp": mean("val_ece_temp")},
-               "test_ece": {"uncal": mean("test_ece_uncal"), "temp": mean("test_ece_temp")},
+               "T_mean": m["T"],
+               "val_ece": {"uncal": m["val_ece_uncal"], "temp": m["val_ece_temp"]},
+               "test_ece": {"uncal": m["test_ece_uncal"], "temp": m["test_ece_temp"]},
                "per_subject": rows}
     # the headline read: how much of the val-ECE fix transfers to the cross-session test
     val_fix = summary["val_ece"]["uncal"] - summary["val_ece"]["temp"]
