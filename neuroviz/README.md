@@ -4,7 +4,7 @@ The motor-imagery EEG viewer — the field-standard 2D views of the signal the d
 (an in-browser viewer of the data the model consumes). 2D topographic maps, not a 3D head: EEG scalp data is
 inherently 2D-surface, and topomaps are what the field actually uses.
 
-![neuroviz demo — fNIRS n-back workload: animated HbO hemodynamic response topomap + HbO/HbR waveforms, with the decoder's ground-truth-vs-prediction readout](docs/media/demo.gif)
+![neuroviz demo — fNIRS n-back workload: animated HbO hemodynamic response topomap + HbO/HbR waveforms, with the decoder's ground-truth-vs-prediction readout](docs/media/demo.webp)
 
 **Shows, for a BCI IV-2a subject:**
 - **Band-power topomaps** (mu 8–12 Hz, beta 13–30 Hz) per class — the motor-imagery signature: imagining

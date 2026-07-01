@@ -16,7 +16,7 @@ transfer — the gap measured *and* closed) is done; **Stage 2** (fNIRS, a secon
 method-dependent tail (our nets are already edge-tiny). Full plan → **[docs/PLAN.md](docs/PLAN.md)**.
 
 ## See the signal the decoder reads — [neuroviz](neuroviz/)
-![neuroviz — fNIRS n-back workload: the HbO hemodynamic response animating over prefrontal cortex, HbO/HbR waveforms, and the decoder's ground-truth-vs-prediction readout](neuroviz/docs/media/demo.gif)
+![neuroviz — fNIRS n-back workload: the HbO hemodynamic response animating over prefrontal cortex, HbO/HbR waveforms, and the decoder's ground-truth-vs-prediction readout](neuroviz/docs/media/demo.webp)
 
 One dependency-free viewer for **both modalities** (EEG motor imagery · fNIRS mental workload). Shown: the
 fNIRS **hemodynamic response** — prefrontal HbO rising and peaking over the n-back trial — with **HbO/HbR
