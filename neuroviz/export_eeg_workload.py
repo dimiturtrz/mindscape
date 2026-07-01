@@ -66,7 +66,7 @@ def _epochs(subject: int):
     info = mne.create_info(list(names), _CFG.resample or 100.0, "eeg")
     ep = mne.EpochsArray(X.astype(np.float64) * 1e-6, info, tmin=_CFG.tmin, verbose="error")
     ep.set_montage(mne.channels.make_standard_montage("standard_1005"), match_case=False, on_missing="ignore")
-    labels = np.asarray([q["label"].to_list()[i] for i in range(len(y))])   # '0-back'/'2-back'/'3-back'
+    labels = np.asarray(q["label"].to_list())               # '0-back'/'2-back'/'3-back' (gather keeps q's row order)
     return ep, labels
 
 
