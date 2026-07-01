@@ -224,11 +224,20 @@ free lunch: every published Shin n-back fusion number (96–98 %) is **within-su
 BenchNIRS predicts), the one honest EEG-fNIRS fusion LOSO figure *drops* 34 pts (DC-AGIN 96.98 %→62.56 %), and
 on the hardest real contrast (2- vs 3-back) fusion *loses* to fNIRS — so a learned model must be small
 (compact cross-attention, the only thing that fits n=26) and gated on **strict nested GroupKFold**, or it will
-reproduce that collapse. We also stress-tested the EEG side three ways — covariance (CSP/Riemann), absolute
-band-power, relative band-power — all land ~0.43 cross-subject (workload band-power is subject-idiosyncratic;
-within-subject it's the *best* EEG feature at 0.577), so the near-floor EEG number is the honest cross-subject
-reality, not an under-tuned decoder. Full audit + citations:
-[`research/`](research/deep_dives/2026-07-01_eeg_fnirs_fusion_sota.md).
+reproduce that collapse. On the EEG side, three *zero-calibration* feature families — covariance
+(CSP/Riemann), absolute band-power, relative band-power — all land ~0.43 cross-subject; workload band-power is
+subject-idiosyncratic in **absolute scale**, which points straight at the fix. Adding **per-subject
+unsupervised calibration** (z-score each subject by its own feature statistics — no labels, the EEG analog of
+the Riemannian re-centering that closed the motor-imagery gap) recovers EEG band-power to **~0.51**
+(honest held-out-calibration-half) up to **0.58** (transductive), from 0.407 raw — so the ~0.43 number is the
+*zero-calibration* floor, not a ceiling, and with calibration **EEG (~0.51–0.58) becomes the stronger
+modality**, above fNIRS (~0.47, which doesn't benefit — its per-epoch baseline correction already removes the
+offset). Crucially, **fusion still doesn't beat that best single modality even after the fix**: a compact
+input-level gate (per-modality encoders + a per-trial mixing gate, nested GroupKFold) scores 0.573 — tying
+z-scored-EEG-alone (0.581), capturing none of the (now larger, 0.766) oracle headroom. The learned gate fails
+for the same reason every output-space combiner did. Full audit + citations:
+[`research/`](research/deep_dives/2026-07-01_eeg_fnirs_fusion_sota.md); calibration + gate in
+[`experiments/fusion_gate.py`](neuroscan/experiments/fusion_gate.py).
 
 ## Honest limits (measured, not assumed)
 Competent on a public benchmark, **not** a finished system:
