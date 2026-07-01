@@ -7,6 +7,7 @@ from neuroscan import models
 def test_method_names_include_baseline_and_nets():
     names = models.method_names()
     assert "csp_lda" in names and "riemann" in names
+    assert "fnirs_lda" in names
     assert "atcnet" in names and "eegnet" in names
 
 
