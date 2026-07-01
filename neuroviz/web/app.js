@@ -219,8 +219,9 @@ async function init(){
     [...modBar.children].forEach(b=>b.classList.toggle("on", b.dataset.m===mod));
     play(false); loadSubject(mod, mods[mod][0]);
   }
+  const MOD_LABEL={eeg:"EEG",fnirs:"fNIRS"};
   Object.keys(mods).filter(m=>mods[m] && mods[m].length).forEach(mod=>{
-    const b=document.createElement("button"); b.textContent=mod.toUpperCase(); b.dataset.m=mod;
+    const b=document.createElement("button"); b.textContent=MOD_LABEL[mod]||mod.toUpperCase(); b.dataset.m=mod;
     b.onclick=()=>loadModality(mod); modBar.appendChild(b);
   });
   subjSel.onchange=()=>{play(false);loadSubject(state.modality, subjSel.value);};

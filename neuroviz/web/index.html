@@ -8,19 +8,21 @@
 </head>
 <body>
   <header>
-    <h1>neuroviz</h1>
-    <p class="sub">Two non-invasive modalities, one viewer. <b>EEG</b> motor imagery (mu/beta ERD over motor
-      cortex) · <b>fNIRS</b> n-back workload (HbO/HbR hemodynamic response over prefrontal cortex) — the
-      signal each decoder reads.</p>
+    <div class="head-text">
+      <h1>neuroviz</h1>
+      <p class="sub">Two non-invasive modalities, one viewer. <b>EEG</b> motor imagery (mu/beta ERD over motor
+        cortex) · <b>fNIRS</b> n-back workload (HbO/HbR hemodynamic response over prefrontal cortex) — the
+        signal each decoder reads.</p>
+    </div>
+    <div class="mapgroup head-modality">
+      <span class="glabel">modality</span>
+      <div class="seg seg-lg" id="modality"><!-- EEG / fNIRS buttons, built in JS --></div>
+    </div>
   </header>
 
   <main>
     <section class="panel">
       <div class="controls">
-        <div class="mapgroup">
-          <span class="glabel">modality</span>
-          <div class="seg" id="modality"><!-- EEG / fNIRS buttons, built in JS --></div>
-        </div>
         <div class="mapgroup">
           <span class="glabel">subject</span>
           <select id="subject"></select>
