@@ -5,7 +5,7 @@
   --ctl-h:2.5rem; --content-max:44rem; --bp:56rem;   /* single-column breakpoint */
 }
 /* THE size knob: every dimension below is rem/em/%, so this one line scales the whole UI. */
-html { font-size:clamp(15px, 0.6vw + 12px, 18px); }
+html { font-size:clamp(16px, 0.55vw + 13px, 21px); }
 * { box-sizing:border-box; }
 body { margin:0; height:100vh; overflow:hidden; display:flex; flex-direction:column;
   font-family:system-ui,Segoe UI,Roboto,sans-serif; line-height:1.5; background:var(--bg); color:var(--ink); }
