@@ -86,11 +86,14 @@ single-thread — `python -m neuroscan.models.profile`):
 | EEGConformer | transformer | 871K | 72M | 4.2 ms | — | — |
 
 Three honest findings fall out:
-- **Classical geometry wins within-subject here.** Riemannian tangent-space + LR ([`baselines/riemann.py`](baselines/riemann.py))
-  hits **0.706** — above both deep nets — the textbook BCI-2a result that treating each trial's *covariance*
-  as a point on a curved manifold beats raw-waveform DL when per-subject data is tiny (~288 trials). But its
+- **Classical geometry leads within-subject on this protocol — read it as strong-and-cheap, not a settled verdict.**
+  Riemannian tangent-space + LR ([`baselines/riemann.py`](baselines/riemann.py)) hits **0.706**, above both deep
+  nets *as run here* — but this is a single seed, no per-model tuning, and the nets aren't optimized, over ~24h of
+  runs. So it's not a fair head-to-head; it's consistent with the textbook BCI-2a finding that per-trial
+  *covariance* on a curved manifold is hard to beat when per-subject data is tiny (~288 trials), and it says the
+  classical baseline is a strong, cheap floor to clear — not that DL loses. But its
   *cross-subject* score is **0.357**, no better than CSP (0.382): plain tangent space doesn't transfer — the
-  manifold **re-centering** that closes that gap is the next step, not implemented yet.
+  manifold **re-centering** closes that gap (→ 0.496; see the transfer table above).
 - **Tiny doesn't cost accuracy here.** The 3.7K-parameter EEGNet is within noise of the 30×-larger
   ATCNet (0.606 vs 0.619) on the same protocol — the edge-deployable model gives up essentially nothing.
 - **Already edge-sized.** These nets are ~26 KB as ONNX with sub-ms inference; the optional edge-deploy tail

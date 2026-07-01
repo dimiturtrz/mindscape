@@ -6,7 +6,7 @@ Working name `mindscape` (the terrain of the mind). Folder/repo may differ; rena
 
 mindscape applies a *spine-first, honest-eval* pattern — the same one carried from prior ML projects of mine (honest cross-distribution evaluation as the contribution, not a leaderboard number) — to neural signal. The structural and honesty conventions below are lifted from that prior work deliberately.
 
-> **Status: initialization (2026-06-30).** Thesis + shape set; the spine (first task, eval harness, dataset) lands next. No results yet — when there are, they're reported as the *measured contrast + where it fails*, not a leaderboard number.
+> **Status: Stage 1 + Stage 2 shipped (public, tested).** EEG motor-imagery decode + honest eval + cross-subject transfer (recentering 0.357→0.496) done; fNIRS n-back workload second modality done. Stage 3 (fusion + harder tasks) next. Results reported as the *measured contrast + where it fails*, not a leaderboard number.
 
 ---
 
@@ -40,7 +40,7 @@ Per-condition diagnostics stratify the failure (by subject, session, signal qual
 
 ## The ramp (real spine first, then breadth)
 1. **Stage 1 — EEG decode + honest eval + cross-subject transfer. ✅ DONE.** Standard motor-imagery benchmark (BCI IV-2a) through a *verified* harness (accuracy + κ + calibration + per-subject/session diagnostics); reproduce known methods (CSP+LDA, Riemann, the nets); *measure* the out-of-distribution gap honestly (within 0.706 → cross 0.357) — then **close it with the field's fix** (Riemannian re-centering → 0.496). The cross-subject gap + its principled, unsupervised, deployable fix is the headline. This was the public-flip trigger.
-2. **Stage 2 — Second modality: fNIRS (parallel track).** Add the hemodynamic axis on **Shin 2017** (mental arithmetic — fNIRS's home task, prefrontal). Same honest harness + Riemann/recentering spine (validated on fNIRS covariances, Näher 2025). The modality-specific failure mode — **systemic-physiology leakage** (scalp/heartbeat/Mayer waves correlated with task) — is the new rigor angle. Parallel to Stage 1, not strictly after it. Sequence: fNIRS-alone → EEG-alone on the same subjects → sets up Stage 3.
+2. **Stage 2 — Second modality: fNIRS (parallel track). ✅ DONE.** Added the hemodynamic axis on **Shin 2017** — **n-back mental workload** (which working-memory load: 0/2/3-back), prefrontal. Same honest harness, new modality. The key finding is the **method–signal match**: covariance methods (the EEG winners, CSP/Riemann) sit at chance on fNIRS because they read covariance, but the workload signal is the **mean HbO amplitude** covariance centers away — so the right decoder is amplitude features (mean+slope+peak) → **LDA**, the fNIRS-BCI workhorse (0.442 LOSO, chance 0.333). Opposite generalization to EEG (cross ≈ within — the prefrontal response is stereotyped, pooling helps). Parallel to Stage 1, not strictly after. Sequence done: fNIRS-alone shipped; EEG-alone on the same subjects → Stage 3.
 3. **Stage 3 — Fusion + harder tasks.** Hybrid EEG+fNIRS **fusion** (the complementarity grid: EEG strong on motor imagery, fNIRS strong on arithmetic — each covers the other's blind spot, fusion beats either alone); and the harder **semantic / communication-decoding** target (THINGS-EEG2). The payoff, built on two *proven* unimodal pipelines — not attempted before the baselines exist.
 - **Cross-cutting (optional) — efficient deploy.** ONNX export + parity gate + quantization, applied per method *where it actually helps* (measured: our nets are already edge-tiny, ~26 KB / sub-ms — INT8 *adds* overhead here). Method-dependent optimization, **not** a mandatory stage.
 
@@ -48,7 +48,7 @@ Per-condition diagnostics stratify the failure (by subject, session, signal qual
 Against the published ceiling (reproduced through the same harness), report honestly:
 1. Reproduced ceiling (standard method on the standard split).
 2. Cross-subject / cross-session — the out-of-distribution gap **and the transfer fix that closes it**.
-3. The modality-specific way the number lies — EEG's cross-subject location shift, fNIRS's systemic-physiology leakage.
+3. The modality-specific way the number lies — EEG's cross-subject location shift (SPD-manifold displacement); fNIRS's method–signal mismatch (covariance discards the amplitude signal → categorically wrong decoder class).
 4. *(optional, when the method warrants edge deploy)* efficient/quantized vs full-precision — the deployment cost.
 
 That + calibration + per-condition diagnostics is the defensible result — not a leaderboard number.
@@ -97,4 +97,4 @@ Mirror the `learning/<date>_<topic>.md` + glossary + on-demand self-quizzes, and
 ---
 
 ## Where we are
-**Stage 1 done** — EEG motor-imagery decode + honest eval + cross-subject transfer (recentering closes 0.357→0.496); public, tested. **Stage 2 next** — fNIRS second modality (Shin 2017, mental arithmetic), parallel. **Stage 3** — hybrid fusion + harder semantic decoding, on top of the proven unimodal pipelines. Efficient edge deploy = optional, applied per method where it helps.
+**Stage 1 + Stage 2 done** — EEG motor-imagery decode + honest eval + cross-subject transfer (recentering closes 0.357→0.496); fNIRS n-back mental-workload second modality (amplitude features → LDA, 0.442 LOSO; covariance methods shown categorically mismatched). Both public, tested. **Stage 3 next** — hybrid EEG+fNIRS fusion + harder semantic decoding (THINGS-EEG2), on top of the proven unimodal pipelines. Efficient edge deploy = optional, applied per method where it helps.
