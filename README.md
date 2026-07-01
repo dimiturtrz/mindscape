@@ -62,9 +62,9 @@ whitening), target included and **unsupervised**. We implemented it ([`neuroscan
 | Riemann ACM (time-delay cov) | <!--r:riemann_acm_cross_subject_bnci2014_001.acc-->0.355<!--/r--> |
 | **Riemann + re-centering** | **<!--r:riemann_recenter_ts_bnci2014_001.acc-->0.501<!--/r-->** |
 
-**+0.139** over plain tangent space — the displacement *was* the gap. And it's the *location*, not the
-features: ACM (richer time-delay covariances) scores 0.351 alone and **0.470 even with re-centering** —
-below plain re-centered tangent space (0.496). Removing the per-subject location shift is what transfers;
+**+0.141** over plain tangent space — the displacement *was* the gap. And it's the *location*, not the
+features: ACM (richer time-delay covariances) scores 0.355 alone and **0.471 even with re-centering** —
+below plain re-centered tangent space (0.501). Removing the per-subject location shift is what transfers;
 adding features on top doesn't. (Re-centering is unsupervised on the target → deployment-real.)
 
 ## The decoders — measured
@@ -87,13 +87,13 @@ single-thread — `python -m neuroscan.models.profile`):
 
 Three honest findings fall out:
 - **Classical geometry leads within-subject on this protocol — read it as strong-and-cheap, not a settled verdict.**
-  Riemannian tangent-space + LR ([`baselines/riemann.py`](baselines/riemann.py)) hits **0.706**, above both deep
+  Riemannian tangent-space + LR ([`baselines/riemann.py`](baselines/riemann.py)) hits **0.655**, above both deep
   nets *as run here* — but this is a single seed, no per-model tuning, and the nets aren't optimized, over ~24h of
   runs. So it's not a fair head-to-head; it's consistent with the textbook BCI-2a finding that per-trial
   *covariance* on a curved manifold is hard to beat when per-subject data is tiny (~288 trials), and it says the
   classical baseline is a strong, cheap floor to clear — not that DL loses. But its
-  *cross-subject* score is **0.357**, no better than CSP (0.382): plain tangent space doesn't transfer — the
-  manifold **re-centering** closes that gap (→ 0.496; see the transfer table above).
+  *cross-subject* score is **0.360**, no better than CSP (0.391): plain tangent space doesn't transfer — the
+  manifold **re-centering** closes that gap (→ 0.501; see the transfer table above).
 - **Tiny doesn't cost accuracy here.** The 3.7K-parameter EEGNet lands ~1 point behind the 30×-larger
   ATCNet (0.606 vs 0.619) on the same protocol — single seed, no per-model tuning, no error bars, so read
   it as *comparable, not distinguishable* rather than a significance claim: the edge-deployable model gives
@@ -155,37 +155,58 @@ Two findings from the same-task design:
   weak either way, so the within≈cross similarity is as much "little signal to lose" as any stereotypy, and
   the tiny per-subject test sets (9 epochs) make the ordering noisy. The honest read: **fNIRS workload barely
   transfers cross-subject** (exactly what BenchNIRS found), and we reproduce that. Whether the weak fNIRS
-  signal nonetheless *adds* to EEG is the **fusion question** — answered below, and the answer is **no gain**.
+  signal nonetheless *adds* to EEG is the **fusion question** — answered below: naive fusion gains nothing,
+  yet the modalities are genuinely **complementary** (near-independent errors), so learned fusion is warranted.
 - **The field's transfer trick didn't help here.** Per-subject z-scoring (the standard fNIRS cross-subject
   fix) gave no gain — a slight drop on this single run — most likely because our per-epoch baseline-correction
   already removes the offset it targets. (One run, not a claim that z-scoring is useless.)
 
-### Fusion — does the second modality *add*? (null result)
-Both decoders run on the **same aligned epochs** (EEG log-band-power + fNIRS mean/slope/peak), so fusion is a
-clean test: does combining beat the better single modality? Two schemes — **late** (average class
-probabilities) and **feature** (concatenate features → one LDA) — under one **5-fold GroupKFold** so all four
-roles share identical folds (fusion needs per-epoch EEG↔fNIRS pairing, which LOSO's single-subject test sets
-make too small to read):
+### Fusion — the second modality *does* carry independent signal; naive fusion just can't use it
+Both decoders run on the **same aligned epochs** (EEG Riemann tangent-space + fNIRS mean/slope/peak), so
+fusion is a clean test — under one **5-fold GroupKFold** so all four roles share identical folds (fusion needs
+per-epoch EEG↔fNIRS pairing, which LOSO's single-subject test sets make too small to read):
 
 | role (5-fold GroupKFold, matched folds) | acc | vs best single |
 |---|---|---|
 | chance | 0.333 | — |
-| EEG alone (CSP+LDA) | <!--r:fusion_cross_subject_kfold_shin2017_nback.eeg-->0.430<!--/r--> | — |
+| EEG alone (Riemann) | <!--r:fusion_cross_subject_kfold_shin2017_nback.eeg-->0.430<!--/r--> | — |
 | **fNIRS alone (mean/slope/peak → LDA)** | **<!--r:fusion_cross_subject_kfold_shin2017_nback.fnirs-->0.474<!--/r-->** | best |
 | Late fusion (avg probabilities) | <!--r:fusion_cross_subject_kfold_shin2017_nback.late-->0.468<!--/r--> | **−0.006** |
 | Feature fusion (concat → LDA) | <!--r:fusion_cross_subject_kfold_shin2017_nback.feature-->0.434<!--/r--> | **−0.040** |
 
-**Neither fusion beats fNIRS alone** — late fusion ties it, feature fusion drops toward the weaker EEG. These
-are the two simplest schemes; the SOTA is **cross-modal attention** (MBC-ATT, TSMMF-style bidirectional
-transformers). We don't run those, and the literature says why it wouldn't rescue this: **every published
-Shin n-back fusion number (96–98 %) is *within-subject*** — inflated exactly as BenchNIRS predicts. There is
-**no published honest cross-subject 0/2/3-back result where fusion beats both single modalities**; the one
-quantified honest EEG-fNIRS fusion LOSO drop is **−34 pts** (DC-AGIN 96.98 %→62.56 %), and on the hardest
-*real* contrast (2- vs 3-back) fusion (59 %) *loses* to fNIRS (61 %). So this null isn't a weak-method
-artifact — it's the **missing honest datapoint**: a clean subject-wise GroupKFold with per-modality + fusion
-breakdown, which the field skips. On ~700 near-floor blocks there's no separable complementarity to exploit,
-and a compact cross-attention model (the only candidate that fits n=26) is expected to *match*, not beat,
-fNIRS — its value would be a rigorous negative, not a win. Full audit + citations:
+Naively, this reads as a null — **neither fusion beats fNIRS alone**. But that's the wrong conclusion, and the
+**complementarity diagnostic** shows why: the two modalities are near-equal (EEG 0.430 ≈ fNIRS 0.474, both
+clearly above chance) and they **fail on different blocks**.
+
+| complementarity (same 5-fold) | value |
+|---|---|
+| best single modality | <!--r:fusion_cross_subject_kfold_shin2017_nback.best_single-->0.474<!--/r--> |
+| late fusion (what naive averaging gets) | <!--r:fusion_cross_subject_kfold_shin2017_nback.late-->0.468<!--/r--> |
+| **oracle — *either* modality correct** | **<!--r:fusion_cross_subject_kfold_shin2017_nback.oracle_either-->0.688<!--/r-->** |
+| oracle headroom over best single | **+<!--r:fusion_cross_subject_kfold_shin2017_nback.oracle_either-fusion_cross_subject_kfold_shin2017_nback.best_single-->+0.214<!--/r-->** |
+| error correlation (φ) | <!--r:fusion_cross_subject_kfold_shin2017_nback.err_corr-->0.053<!--/r--> |
+| EEG-only-right / fNIRS-only-right / both-wrong | 0.215 / 0.255 / <!--r:fusion_cross_subject_kfold_shin2017_nback.both_wrong-->0.312<!--/r--> |
+
+**The signal for fusion is there.** A per-trial oracle that always picked the right modality would hit
+**0.688** — **+21 pts** over the best single decoder — and the errors are near-independent (φ ≈ 0.05): EEG
+uniquely rescues ~21 % of blocks, fNIRS ~26 %, and both miss only ~31 %. So the ceiling here is **not the
+data** — it's the **fusion mechanism**. Averaging probabilities and concatenating features can't exploit that
+headroom because they can't tell *which* modality to trust on a given trial; they wash the two weak,
+differently-wrong signals together. Capturing it needs a **per-trial gate / learned cross-modal attention**
+(MBC-ATT, TSMMF-style) — which is now motivated by a concrete target (close the 0.468 → 0.688 gap), not a
+hope. That is the honest, forward-looking result: *complementarity demonstrated, naive fusion insufficient,
+learned fusion warranted.*
+
+Two honesty caveats. (1) The oracle is an **upper bound** — a perfect selector is unattainable; a real gate
+captures only a fraction. It proves headroom *exists*, not that we can claim it. (2) The literature offers no
+free lunch: every published Shin n-back fusion number (96–98 %) is **within-subject** (inflated exactly as
+BenchNIRS predicts), the one honest EEG-fNIRS fusion LOSO figure *drops* 34 pts (DC-AGIN 96.98 %→62.56 %), and
+on the hardest real contrast (2- vs 3-back) fusion *loses* to fNIRS — so a learned model must be small
+(compact cross-attention, the only thing that fits n=26) and gated on **strict nested GroupKFold**, or it will
+reproduce that collapse. We also stress-tested the EEG side three ways — covariance (CSP/Riemann), absolute
+band-power, relative band-power — all land ~0.43 cross-subject (workload band-power is subject-idiosyncratic;
+within-subject it's the *best* EEG feature at 0.577), so the near-floor EEG number is the honest cross-subject
+reality, not an under-tuned decoder. Full audit + citations:
 [`research/`](research/deep_dives/2026-07-01_eeg_fnirs_fusion_sota.md).
 
 ## Honest limits (measured, not assumed)

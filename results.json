@@ -55,6 +55,24 @@
       "kappa": 0.3526,
       "ece": 0.373
     },
+    "eeg_bandpower_cross_subject_shin2017_nback_eeg": {
+      "method": "eeg_bandpower",
+      "regime": "cross_subject",
+      "dataset": "",
+      "n_classes": 3,
+      "acc": 0.4202,
+      "kappa": 0.1303,
+      "ece": 0.3628
+    },
+    "eeg_bandpower_within_shin2017_nback_eeg": {
+      "method": "eeg_bandpower",
+      "regime": "within",
+      "dataset": "",
+      "n_classes": 3,
+      "acc": 0.5769,
+      "kappa": 0.3654,
+      "ece": 0.4154
+    },
     "fnirs_lda_cross_subject_kfold_shin2017_nback": {
       "method": "fnirs_lda",
       "regime": "cross_subject_kfold",
@@ -84,7 +102,14 @@
       "eeg": 0.4301,
       "fnirs": 0.4743,
       "late": 0.4679,
-      "feature": 0.4341
+      "feature": 0.4341,
+      "best_single": 0.4743,
+      "oracle_either": 0.688,
+      "both_correct": 0.2179,
+      "eeg_only": 0.2151,
+      "fnirs_only": 0.255,
+      "both_wrong": 0.312,
+      "err_corr": 0.0531
     },
     "riemann_acm_cross_subject_bnci2014_001": {
       "method": "riemann_acm",

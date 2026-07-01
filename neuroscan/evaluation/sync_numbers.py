@@ -29,7 +29,7 @@ _README = REPO / "README.md"
 _DP = 3          # decimals shown in the README (snapshot keeps more; see results._PRECISION)
 
 _MARKER = re.compile(r"<!--r:([^>]+?)-->(.*?)<!--/r-->")
-_TERM = re.compile(r"^([\w.]+?)\.(acc|kappa|ece|eeg|fnirs|late|feature)$")
+_TERM = re.compile(r"^([\w.]+?)\.([a-z_]+)$")     # <run>.<field>; field validated by presence in the row
 
 
 def _lookup(runs: dict, term: str) -> float:

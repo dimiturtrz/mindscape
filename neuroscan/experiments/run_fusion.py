@@ -74,6 +74,7 @@ def main():
         fold_subs = [[str(s)] for s in subs]
 
     rows = []
+    CE, CF, Y = [], [], []                                   # pooled correct-masks for the oracle analysis
     for i, te_subs in enumerate(fold_subs):
         tr_subs = [s for s in map(str, subs) if s not in te_subs]
         Xe_tr, Xf_tr, y_tr = _gather_aligned(meta_e, meta_f, tr_subs)
@@ -87,6 +88,7 @@ def main():
         # feature fusion: concat EEG log-bandpower + fNIRS features -> shrinkage-LDA
         p_feat = _feature_fusion(Xe_tr, Xf_tr, y_tr, Xe_te, Xf_te)
 
+        CE.append(pe.argmax(1) == y_te); CF.append(pf.argmax(1) == y_te); Y.append(y_te)
         rows.append({
             "fold": str(i), "n": int(len(y_te)),
             "eeg": metrics.accuracy(y_te, pe.argmax(1)),
@@ -98,16 +100,31 @@ def main():
               f"late {rows[-1]['late']:.3f} | feature {rows[-1]['feature']:.3f}")
 
     mean = {k: float(np.mean([r[k] for r in rows])) for k in ("eeg", "fnirs", "late", "feature")}
+    # complementarity: is fusion fundamentally hopeless, or just naive averaging? The oracle (either
+    # modality correct) is the upper bound ANY fusion could reach; near-zero error correlation means the
+    # two modalities fail on independent blocks, so a per-trial selector has headroom the mean can't touch.
+    ce, cf = np.concatenate(CE), np.concatenate(CF)
+    comp = {
+        "best_single": max(mean["eeg"], mean["fnirs"]),
+        "oracle_either": float((ce | cf).mean()),           # upper bound of a perfect per-block selector
+        "both_correct": float((ce & cf).mean()),
+        "eeg_only": float((ce & ~cf).mean()), "fnirs_only": float((~ce & cf).mean()),
+        "both_wrong": float((~ce & ~cf).mean()),
+        "err_corr": float(np.corrcoef(ce.astype(float), cf.astype(float))[0, 1]),
+    }
     print(f"\n=== fusion · {args.regime} · shin n-back ({len(rows)} folds, chance {1/n_classes:.3f}) ===")
     for k in ("eeg", "fnirs", "late", "feature"):
         print(f"  {k:>8}: {mean[k]:.3f}")
-    best_uni = max(mean["eeg"], mean["fnirs"])
+    best_uni = comp["best_single"]
     print(f"  fusion vs best-unimodal: late {mean['late']-best_uni:+.3f} | feature {mean['feature']-best_uni:+.3f}")
+    print(f"  ORACLE (either correct) {comp['oracle_either']:.3f}  (+{comp['oracle_either']-best_uni:.3f} headroom) "
+          f"| err-corr {comp['err_corr']:+.3f} | both-wrong {comp['both_wrong']:.3f}")
 
     run_dir = Path(args.out) if args.out else Path("runs") / f"fusion_{args.regime}_shin2017_nback"
     run_dir.mkdir(parents=True, exist_ok=True)
     res = {"method": "fusion", "regime": args.regime, "n_classes": n_classes,
-           "fold_mean": {"acc": mean["late"]}, "per_role_mean": mean, "per_fold": rows}
+           "fold_mean": {"acc": mean["late"]}, "per_role_mean": mean,
+           "complementarity": comp, "per_fold": rows}
     (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
     print(f"-> {run_dir}/aggregate.json")
 
