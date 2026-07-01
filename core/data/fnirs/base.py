@@ -53,15 +53,11 @@ def epoch_blocks(cont: np.ndarray, onsets: np.ndarray, y: np.ndarray, fs: float,
     a, b = int(round(cfg.tmin * fs)), int(round(cfg.tmax * fs))
     nb = int(round(cfg.baseline_s * fs))
     T = cont.shape[1]
-    Xs, ys = [], []
-    for o, lab in zip(onsets, y):
-        s, e = o + a, o + b
-        if s < 0 or e > T:
-            continue
-        seg = cont[:, s:e].astype(np.float32)
-        base = seg[:, :nb].mean(axis=1, keepdims=True) if nb > 0 else 0.0   # pre-onset baseline
-        Xs.append(seg - base)
-        ys.append(lab)
-    if not Xs:                                                              # all epochs fell off the edge
+    onsets, y = np.asarray(onsets), np.asarray(y)
+    valid = (onsets + a >= 0) & (onsets + b <= T)                           # window fully on the recording
+    if not valid.any():                                                     # all epochs fell off the edge
         return np.empty((0, cont.shape[0], b - a), np.float32), np.empty(0, np.int64)
-    return np.stack(Xs), np.asarray(ys, dtype=np.int64)
+    idx = onsets[valid][:, None] + np.arange(a, b)                          # [n_valid, b-a] sample indices
+    segs = cont[:, idx].transpose(1, 0, 2).astype(np.float32)              # [n_valid, ch, b-a]
+    base = segs[:, :, :nb].mean(axis=2, keepdims=True) if nb > 0 else 0.0   # per-epoch pre-onset baseline
+    return segs - base, y[valid].astype(np.int64)
