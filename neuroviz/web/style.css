@@ -96,6 +96,9 @@ footer { color:var(--mut); padding:.5rem var(--pad) 1.6rem; font-size:.8rem; }
 /* the `hidden` attribute must beat `.panel{display:flex}` (class selector otherwise wins) */
 .panel[hidden] { display:none; }
 
-/* two-tier header: task selector + (context) modality selector */
-.head-selectors { display:flex; gap:var(--gap); flex-wrap:wrap; align-items:flex-start; }
+/* two-tier header: task OVER modality (a hierarchy — task is the parent, modality its child) */
+.head-selectors { display:flex; flex-direction:column; gap:.5rem; align-items:flex-end; }
+#approach-group { align-items:flex-end; }
+#approach-group .glabel { font-size:.72rem; opacity:.8; }   /* the child tier reads as subordinate */
+#approach { border-color:#3a4560; }                          /* lighter frame = nested under the task */
 #approach-group[hidden] { display:none; }
