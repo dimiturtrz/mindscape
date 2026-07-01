@@ -79,7 +79,7 @@ footer { color:var(--mut); padding:.5rem var(--pad) 1.6rem; font-size:.8rem; }
 .fusion-panel { grid-column:1/-1; }
 .fusion-body { display:flex; gap:var(--gap); flex-wrap:wrap; align-items:flex-start; margin-top:.6rem; }
 .fgrid-wrap { flex:1 1 20rem; min-width:0; }
-#fgrid { width:100%; height:auto; border:1px solid var(--line); border-radius:var(--radius); background:#0e1116; }
+#fgrid { display:block; max-width:100%; border:1px solid var(--line); border-radius:var(--radius); background:#0e1116; }
 .flegend { display:flex; flex-wrap:wrap; gap:.4rem 1rem; margin-top:.5rem; font-size:.82rem; color:var(--mut); }
 .fkey { display:inline-flex; align-items:center; gap:.4rem; }
 .fkey i { width:.8rem; height:.8rem; border-radius:.2rem; display:inline-block; }
@@ -92,3 +92,6 @@ footer { color:var(--mut); padding:.5rem var(--pad) 1.6rem; font-size:.8rem; }
 .fbtrack i { position:absolute; left:0; top:0; bottom:0; border-radius:.3rem 0 0 .3rem; }
 .fbtrack u { position:absolute; top:-2px; bottom:-2px; width:0; border-left:1px dashed var(--no); }
 .fbv { color:var(--ink); font-variant-numeric:tabular-nums; text-align:right; }
+
+/* the `hidden` attribute must beat `.panel{display:flex}` (class selector otherwise wins) */
+.panel[hidden] { display:none; }

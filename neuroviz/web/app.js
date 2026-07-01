@@ -304,8 +304,11 @@ function renderFusion(){
   const cols=Math.max(...subs.map(k=>bySub[k].length));
 
   const cv=$("fgrid"), ctx=cv.getContext("2d");
-  const box=cv.parentElement, S=Math.max(160,Math.floor(Math.min(box.clientWidth, 540)));
-  cv.width=S; cv.height=Math.floor(S*subs.length/cols);
+  // fit width to the column, but cap the height so the grid can't overrun the panel/footer (square cells)
+  const box=cv.parentElement, MAXH=400;
+  let W=Math.max(160,Math.floor(Math.min(box.clientWidth, 560))), H=Math.floor(W*subs.length/cols);
+  if(H>MAXH){ H=MAXH; W=Math.floor(H*cols/subs.length); }
+  cv.width=W; cv.height=H; cv.style.width=W+"px"; cv.style.height=H+"px";   // display = buffer (no CSS rescale)
   ctx.clearRect(0,0,cv.width,cv.height);
   const cw=cv.width/cols, ch=cv.height/subs.length, g=Math.max(0.5, cw*0.08);
   subs.forEach((sub,r)=>{ bySub[sub].forEach((b,c)=>{
@@ -373,7 +376,10 @@ async function init(){
                           if(state.playing) play(true); };   // restart timer with the new interval
   let rz; window.addEventListener("resize",()=>{ clearTimeout(rz); rz=setTimeout(()=>{
     if(!state.data) return; state.modality==="fusion" ? renderFusion() : render(); },120); });
-  loadModality(Object.keys(mods).find(m=>mods[m] && mods[m].length));
+  // deep-link: #fusion / #eeg / #fnirs selects the initial view (also lets a headless render target it)
+  const want=(location.hash||"").slice(1);
+  const first=Object.keys(mods).find(m=>mods[m] && mods[m].length);
+  loadModality(want==="fusion" && man.fusion ? "fusion" : (mods[want] && mods[want].length ? want : first));
 }
 init().catch(e=>{document.body.insertAdjacentHTML("beforeend",
   `<p style="color:#ffb0a0;padding:24px">load error: ${e}. Serve this dir: <code>python -m http.server</code> in neuroviz/web, then open http://localhost:8000</p>`);});
