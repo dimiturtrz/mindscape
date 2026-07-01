@@ -106,26 +106,32 @@ Three honest findings fall out:
 **Published ceilings** (cited, not chased): FBCSP 0.65 · EEGNet 0.70 · ShallowConvNet 0.74 · ATCNet 0.81 ·
 transformer SOTA 0.88; cross-subject SOTA 0.74.
 
-## Second modality — fNIRS mental-workload (Shin n-back)
-A different signal **and** a different task: **hemodynamic** fNIRS (ΔHbO/ΔHbR, 10 Hz) decoding **mental
-workload** — which n-back load level (0/2/3-back) a subject holds in working memory. Same harness, new
-modality — the eval spine is modality-agnostic; only the adapter + decoder change.
+## Second modality — n-back mental workload, EEG **vs** fNIRS on the *same* task (Shin)
+Decode **mental workload** — which n-back load (0/2/3-back) a subject holds in working memory — from the
+Shin hybrid set, where EEG and fNIRS were recorded **simultaneously**. So both modalities decode *one
+identical task*, and any difference below is the **modality, not the task** — the clean comparison the
+motor-imagery EEG couldn't give (different task, different chance). Same harness; only the adapter + decoder
+change.
 
-**fNIRS n-back workload** (Shin · 26 subjects · 3-class · **chance 0.333** — a separate table by design;
-different task, chance, and generalization regime than the EEG motor imagery above):
+**n-back workload** (Shin · 26 subjects · 3-class · **chance 0.333**):
 
-| method | cross-subject (LOSO) | within (session-2 holdout) |
+| modality · method | cross-subject (LOSO) | within (session-2 holdout) |
 |---|---|---|
-| **mean+slope+peak → LDA** | **<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.442<!--/r-->** (κ 0.16) | **0.415** (κ 0.12) |
+| **fNIRS · mean+slope+peak → LDA** | **<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.442<!--/r-->** (κ 0.16) | **0.415** (κ 0.12) |
+| EEG · CSP + LDA | <!--r:csp_lda_cross_subject_shin2017_nback_eeg.acc-->0.410<!--/r--> (κ 0.12) | <!--r:csp_lda_within_shin2017_nback_eeg.acc-->0.568<!--/r--> (κ 0.35) |
+| EEG · Riemann (tangent space) | <!--r:riemann_cross_subject_shin2017_nback_eeg.acc-->0.424<!--/r--> (κ 0.14) | <!--r:riemann_within_shin2017_nback_eeg.acc-->0.538<!--/r--> (κ 0.31) |
 
-The result is the **method–signal match**, not the accuracy:
-- **Covariance methods don't apply** — not shown as benchmarks, because they're a categorical mismatch. CSP
-  and Riemannian decoders (the EEG winners) sit at chance on fNIRS: they read the *covariance*, but the
-  workload signal is the **mean HbO amplitude**, which covariance discards by centering. The right features
-  are amplitude-based (mean, slope, peak of the hemodynamic response) → LDA, the fNIRS-BCI workhorse.
-- **Opposite generalization to EEG.** Here cross-subject (0.442) ≈ within (0.415): the prefrontal workload
-  response is more stereotyped across people than motor imagery, and per-subject data is tiny, so pooling
-  subjects *helps*. In EEG, within ≫ cross. Two modalities, opposite behaviour.
+Two findings fall straight out of the same-task design:
+- **Method–signal match is modality-specific.** On EEG, covariance methods **work** — CSP/Riemann read the
+  workload's band-power (frontal theta / parietal alpha) covariance, above chance. On fNIRS the *same*
+  methods sit at chance (shown in the covariance-mismatch run, not tabled): the workload there is the **mean
+  HbO amplitude**, which covariance discards by centering — so fNIRS needs amplitude features (mean/slope/peak)
+  → LDA. Same task, opposite right-tool: the feature must match the *signal*, and the signal is the modality.
+- **Opposite generalization — now proven, not inferred.** EEG shows **within ≫ cross** (0.54–0.57 vs 0.41–0.43):
+  subject-specific spatial patterns. fNIRS shows **within ≈ cross** (0.42 both): the prefrontal response is
+  stereotyped across people, so pooling subjects helps. Because it's *one task*, this is the modality's
+  behaviour with no task confound — and it's exactly the **complementarity that motivates fusion** (EEG strong
+  per-subject, fNIRS robust across subjects). That fusion is the next Stage-3 step.
 - **The field's transfer trick didn't help here.** Per-subject z-scoring (the standard fNIRS cross-subject
   fix) gave no gain — a slight drop (0.442 → 0.420) on this single run — most likely because our per-epoch
   baseline-correction already removes the offset it targets. (One run, not a claim that z-scoring is useless.)
