@@ -1,5 +1,5 @@
 {
-  "_note": "Committed snapshot of local run aggregates. Do not hand-edit \u2014 regenerate with `python -m neuroscan.evaluation.results`, then `sync_numbers` to update the README.",
+  "_note": "Committed snapshot of local run aggregates. Do not hand-edit \u2014 it is updated automatically after training (record) or rebuilt with `python -m neuroscan.evaluation.results`; run `sync_numbers` to push these into the README.",
   "runs": {
     "atcnet_within_bnci2014_001": {
       "method": "atcnet",

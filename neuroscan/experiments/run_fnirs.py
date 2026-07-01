@@ -29,6 +29,8 @@ def main():
     ap.add_argument("--l-freq", type=float, default=0.01)
     ap.add_argument("--h-freq", type=float, default=0.2)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--no-record", action="store_true",
+                    help="skip updating the committed results.json snapshot (scratch/experimental runs)")
     args = ap.parse_args()
 
     cfg = FnirsCfg(l_freq=args.l_freq, h_freq=args.h_freq)
@@ -49,6 +51,9 @@ def main():
                       params={"method": args.method, "regime": args.regime, "dataset": args.dataset,
                               "modality": "fnirs"}, run_dir=run_dir)
     (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
+    from neuroscan.evaluation import results
+    if not args.no_record and results.record(run_dir):
+        print(f"   recorded -> results.json ({run_dir.name})")
     fm = res["fold_mean"]
     print(f"\nfold-mean acc {fm['acc']:.3f} | kappa {fm['kappa']:.3f} | ece {fm['ece']:.3f}  "
           f"(chance {chance:.3f})")

@@ -38,6 +38,35 @@ def test_collect_reads_aggregates(tmp_path):
     assert row["dataset"] == "bnci2014_001"
 
 
+def _make_run(tmp_path, name, acc):
+    d = tmp_path / name
+    d.mkdir()
+    (d / "aggregate.json").write_text(json.dumps(
+        {"method": name.split("_")[0], "regime": "within", "n_classes": 4,
+         "fold_mean": {"acc": acc, "kappa": 0.4, "ece": 0.1}}))
+    return d
+
+
+def test_record_upserts_and_preserves_others(tmp_path):
+    out = tmp_path / "results.json"
+    a = _make_run(tmp_path, "csp_lda_within_bnci2014_001", 0.5)
+    b = _make_run(tmp_path, "riemann_within_bnci2014_001", 0.7)
+    assert results.record(a, out) == "csp_lda_within_bnci2014_001"
+    assert results.record(b, out) == "riemann_within_bnci2014_001"
+    runs = json.loads(out.read_text())["runs"]
+    assert set(runs) == {"csp_lda_within_bnci2014_001", "riemann_within_bnci2014_001"}   # both kept
+    # re-record a changed number -> upsert in place, sibling untouched
+    (a / "aggregate.json").write_text(json.dumps({"fold_mean": {"acc": 0.55, "kappa": 0.4, "ece": 0.1}}))
+    results.record(a, out)
+    runs = json.loads(out.read_text())["runs"]
+    assert runs["csp_lda_within_bnci2014_001"]["acc"] == 0.55
+    assert runs["riemann_within_bnci2014_001"]["acc"] == 0.7
+
+
+def test_record_nonfatal_on_missing(tmp_path):
+    assert results.record(tmp_path / "nope", tmp_path / "results.json") is None   # no aggregate -> None, no raise
+
+
 def test_render_single_and_gap():
     runs = {
         "a": {"acc": 0.5976, "kappa": 0.4635},

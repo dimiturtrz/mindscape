@@ -75,6 +75,8 @@ def main():
     ap.add_argument("--fmax", type=float, default=32.0)
     ap.add_argument("--jobs", type=int, default=-1, help="parallel LOSO folds (joblib; -1 = all cores)")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--no-record", action="store_true",
+                    help="skip updating the committed results.json snapshot (scratch/experimental runs)")
     args = ap.parse_args()
 
     from joblib import Parallel, delayed
@@ -113,6 +115,9 @@ def main():
         tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
         tracking.per_group("acc_subject", {r["fold"]: r["acc"] for r in rows})
         tracking.artifact(out / "aggregate.json")
+    from neuroscan.evaluation import results
+    if not args.no_record and results.record(out):
+        print(f"   recorded -> results.json ({out.name})")
     print(f"-> {out}/aggregate.json")
 
 

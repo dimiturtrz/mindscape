@@ -7,10 +7,17 @@ number). This script closes that loop: it scans the local run aggregates and wri
 `results.json` snapshot. `sync_numbers.py` then injects those numbers into the README between markers, so
 the prose can't drift from the measured result.
 
-    uv run python -m neuroscan.evaluation.results          # runs/ -> results.json (repo root, committed)
+    uv run python -m neuroscan.evaluation.results          # rebuild-all: scan runs/ -> results.json
 
-`results.json` is a *snapshot*, not the source of truth — regenerate it after a run that changes a headline
-number, commit it, then run sync_numbers. Two aggregate schemas exist and both are normalized here:
+Three separated layers, each one responsibility:
+  1. train/eval  -> writes runs/<name>/aggregate.json          (per-run, authoritative; gitignored)
+  2. record      -> `record(run_dir)` merges ONE finished run into the committed results.json snapshot
+                    (called automatically at the end of each experiment entrypoint; --no-record opts out)
+  3. sync        -> sync_numbers.py injects results.json into the README (separate, periodic/deliberate)
+
+So numbers update on training (layer 2), but the README only changes when you choose to sync (layer 3).
+`write()` here is the layer-1.5 rebuild-all fallback (rescans every run). `results.json` is a *snapshot*,
+not the source of truth. Two aggregate schemas exist and both are normalized:
   - harness runs:  {"method","regime","n_classes","fold_mean":{"acc","kappa","ece"}}
   - align.py runs: {"method","regime","acc_mean","kappa_mean","per_fold":[...]}
 """
@@ -22,6 +29,9 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[2]
 _RUNS = _ROOT / "runs"
 _OUT = _ROOT / "results.json"
+_NOTE = ("Committed snapshot of local run aggregates. Do not hand-edit — it is updated automatically after "
+         "training (record) or rebuilt with `python -m neuroscan.evaluation.results`; run `sync_numbers` to "
+         "push these into the README.")
 
 # datasets whose run-dir suffix we recognize (longest match first so shin2017_nback beats bnci2014_001)
 _DATASETS = ("bnci2014_001", "shin2017_nback", "shin2017")
@@ -48,35 +58,62 @@ def _metrics(agg: dict) -> dict | None:
     return None
 
 
+def _row(name: str, agg: dict) -> dict | None:
+    """Normalize one aggregate.json -> a snapshot row, or None if it has no usable metrics."""
+    m = _metrics(agg)
+    if m is None:
+        return None
+    method, regime, dataset = _split_name(name)
+    return {
+        "method": agg.get("method", method),
+        "regime": agg.get("regime", regime),
+        "dataset": dataset,
+        "n_classes": agg.get("n_classes"),
+        **{k: (round(v, 4) if isinstance(v, (int, float)) else v) for k, v in m.items()},
+    }
+
+
 def collect(runs_dir: Path = _RUNS) -> dict:
     """Scan runs/*/aggregate.json -> {run_name: {method,regime,dataset,n_classes,acc,kappa,ece}}."""
     out: dict[str, dict] = {}
     for agg_path in sorted(runs_dir.glob("*/aggregate.json")):
-        name = agg_path.parent.name
-        agg = json.loads(agg_path.read_text())
-        m = _metrics(agg)
-        if m is None:
-            continue
-        method, regime, dataset = _split_name(name)
-        out[name] = {
-            "method": agg.get("method", method),
-            "regime": agg.get("regime", regime),
-            "dataset": dataset,
-            "n_classes": agg.get("n_classes"),
-            **{k: (round(v, 4) if isinstance(v, (int, float)) else v) for k, v in m.items()},
-        }
+        row = _row(agg_path.parent.name, json.loads(agg_path.read_text()))
+        if row is not None:
+            out[agg_path.parent.name] = row
     return out
 
 
-def write(out_path: Path = _OUT, runs_dir: Path = _RUNS) -> Path:
-    runs = collect(runs_dir)
-    payload = {
-        "_note": "Committed snapshot of local run aggregates. Do not hand-edit — regenerate with "
-                 "`python -m neuroscan.evaluation.results`, then `sync_numbers` to update the README.",
-        "runs": runs,
-    }
-    out_path.write_text(json.dumps(payload, indent=2) + "\n")
+def _dump(runs: dict, out_path: Path) -> Path:
+    out_path.write_text(json.dumps({"_note": _NOTE, "runs": dict(sorted(runs.items()))}, indent=2) + "\n")
     return out_path
+
+
+def write(out_path: Path = _OUT, runs_dir: Path = _RUNS) -> Path:
+    """Rebuild-all: rescan every run and overwrite the snapshot."""
+    return _dump(collect(runs_dir), out_path)
+
+
+def record(run_dir: Path | str, out_path: Path = _OUT) -> str | None:
+    """Layer 2 — merge ONE finished run's aggregate into the committed snapshot (upsert by run name).
+
+    Called at the end of an experiment entrypoint, after runs/<name>/aggregate.json is written. Best-effort
+    and non-fatal: a bad/absent aggregate just returns None rather than breaking the training run. Returns
+    the run name on success. Only the named run is touched — other rows are preserved."""
+    try:
+        run_dir = Path(run_dir)
+        agg_path = run_dir / "aggregate.json"
+        if not agg_path.exists():
+            return None
+        row = _row(run_dir.name, json.loads(agg_path.read_text()))
+        if row is None:
+            return None
+        payload = json.loads(out_path.read_text()) if out_path.exists() else {"runs": {}}
+        runs = payload.get("runs", {})
+        runs[run_dir.name] = row
+        _dump(runs, out_path)
+        return run_dir.name
+    except Exception:
+        return None
 
 
 if __name__ == "__main__":
