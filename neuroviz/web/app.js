@@ -15,7 +15,6 @@ const isPerClass = () => !isCsp();          // signal + Riemann + LDA are per-cl
 const cspIdx = () => +state.map.slice(3);
 const firstSignal = () => Object.keys(state.data.frames)[0];
 const family = () => isCsp() ? "csp" : isRiemann() ? "riemann" : isLda() ? "lda" : "signal";
-const FAMILY_DEFAULT = { csp:"csp0", riemann:"riemann", lda:"lda" };      // signal -> firstSignal()
 
 // layout / render constants (no magic numbers inline)
 const LAYOUT = {
@@ -142,32 +141,22 @@ function play(on){
   if(on) timer=setInterval(()=>{ state.frame=(state.frame+1)%nFrames(); render(); }, LAYOUT.frameMs);
 }
 
-// method dropdown (next to subject): signal + whatever decoders the data carries — picks the map family.
+// method dropdown: each signal map (mu/beta or HbO/HbR — both shown, they're one signal not a choice) +
+// whatever decoder views the data carries (CSP/Riemann/LDA). Flat — no signal/chromophore grouping level.
 function buildMethod(){
   const d=state.data, sel=$("method"); sel.innerHTML="";
-  const opts=[["signal", d.modality==="fnirs" ? "chromophore" : "band power"]];
+  const opts=[];
+  Object.keys(d.frames).forEach(k=>opts.push([k,k]));       // mu, beta / HbO, HbR — direct entries
   if(d.csp_patterns) opts.push(["csp","CSP"]);
   if(d.riemann_patterns) opts.push(["riemann","Riemann"]);
   if(d.lda_patterns) opts.push(["lda","LDA"]);
   opts.forEach(([k,t])=>{ const o=document.createElement("option"); o.value=k; o.textContent=t; sel.appendChild(o); });
-  sel.onchange=()=>{ state.map = sel.value==="signal" ? firstSignal() : FAMILY_DEFAULT[sel.value];
-                     buildSubmaps(); sync(); render(); };
+  sel.onchange=()=>{ state.map = sel.value==="csp" ? "csp0" : sel.value; buildSubmaps(); sync(); render(); };
 }
-// sub-controls for the chosen method: signal -> a button per frame map (mu/beta or HbO/HbR); CSP -> filter
-// dropdown; Riemann/LDA -> none (per-class, chosen on the classbar).
+// only CSP needs a sub-control (which of its 6 filters); signal maps + Riemann/LDA have none.
 function buildSubmaps(){
-  const bar=$("map"); bar.innerHTML=""; const d=state.data, f=family();
-  if(f==="signal"){
-    const sg=document.createElement("div"); sg.className="mapgroup";
-    const sl=document.createElement("span"); sl.className="glabel";
-    sl.textContent = d.modality==="fnirs" ? "chromophore" : "band"; sg.appendChild(sl);
-    const seg=document.createElement("div"); seg.className="seg";
-    Object.keys(d.frames).forEach(k=>{
-      const b=document.createElement("button"); b.textContent=k; b.dataset.k=k;
-      b.onclick=()=>{ state.map=k; sync(); render(); }; seg.appendChild(b);
-    });
-    sg.appendChild(seg); bar.appendChild(sg);
-  } else if(f==="csp"){
+  const bar=$("map"); bar.innerHTML=""; const d=state.data;
+  if(family()==="csp"){
     const fg=document.createElement("div"); fg.className="mapgroup";
     const fl=document.createElement("span"); fl.className="glabel"; fl.textContent="filter"; fg.appendChild(fl);
     const sel=document.createElement("select"); sel.id="cspsel";
@@ -176,7 +165,6 @@ function buildSubmaps(){
     sel.onchange=()=>{ state.map=sel.value; sync(); render(); };
     fg.appendChild(sel); bar.appendChild(fg);
   }
-  // riemann / lda: per-class discriminant, no sub-control
 }
 function buildClassbar(){
   const bar=$("classbar"); bar.innerHTML="";
@@ -188,8 +176,7 @@ function buildClassbar(){
   });
 }
 function sync(){
-  $("method").value=family();
-  $("map").querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.k===state.map));
+  $("method").value = isCsp() ? "csp" : state.map;   // frame map / decoder view maps directly to a dropdown entry
   const sel=$("cspsel"); if(sel) sel.value=state.map;
   [...$("classbar").children].forEach(b=>b.classList.toggle("on", b.dataset.c===state.cls));
   $("classbar").hidden=!isPerClass();         // class applies to signal + Riemann + LDA (per-class), not CSP
