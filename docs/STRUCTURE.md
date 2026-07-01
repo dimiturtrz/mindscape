@@ -115,7 +115,7 @@ run through the same harness path as the nets). Module-level `fit`/`score` remai
 - `baselines/fnirs_features.py` — `FnirsLda`: per-channel mean+slope+peak of ΔHbO/ΔHbR → scaler → LDA. The amplitude features covariance methods discard; the right tool for the hemodynamic modality.
 - `baselines/eeg_bandpower.py` — `EegBandpower`: per-channel θ/α/β (log) band-power → scaler → LDA. The workload-native EEG feature (absolute rhythm magnitude, which covariance normalizes away); `relative=True` divides out per-epoch total power.
 - `neuroviz/` — the 2D viewer, organized **task → modality**: Motor imagery → EEG; Mental workload → EEG (θ/α/β band-power) · fNIRS (HbO/HbR) · **Fusion** (per-block complementarity map). Topomaps + CSP/Riemann/LDA patterns + waveforms; exporters (`export`, `export_eeg_workload`, `export_fnirs`, `export_fusion`) read the processed store → dependency-free web app.
-- `tests/` — a pyramid: `unit/` (equivalence-class per module) + `integration/` (module chains: data→splits→harness, decoder→export→parity).
+- `tests/` — a pyramid. `unit/` **mirrors the source tree** (`unit/core/data/test_store.py`, `unit/baselines/test_eeg_bandpower.py`, `unit/neuroscan/evaluation/test_metrics.py`, …) so a module's tests sit where the module does; equivalence-class per module. `integration/` stays **scenario-based** (flat — module chains: data→splits→harness, decoder→export→parity), since those cross the tree by design.
 
 ## The one idea everything hangs off — split-as-criteria
 The honesty story is one design choice. A split isn't a named, fixed thing; it's the data cloud filtered
