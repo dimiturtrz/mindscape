@@ -1,0 +1,113 @@
+{
+  "_note": "Committed snapshot of local run aggregates. Do not hand-edit \u2014 it is updated automatically after training (record) or rebuilt with `python -m neuroscan.evaluation.results`; run `sync_numbers` to push these into the README.",
+  "runs": {
+    "atcnet_within_bnci2014_001": {
+      "method": "atcnet",
+      "regime": "within",
+      "dataset": "bnci2014_001",
+      "n_classes": 4,
+      "acc": 0.5127,
+      "kappa": 0.3503,
+      "ece": 0.1405
+    },
+    "csp_lda_cross_subject_bnci2014_001": {
+      "method": "csp_lda",
+      "regime": "cross_subject",
+      "dataset": "bnci2014_001",
+      "n_classes": 4,
+      "acc": 0.3823,
+      "kappa": 0.1764,
+      "ece": 0.1346
+    },
+    "csp_lda_cross_subject_shin2017_nback": {
+      "method": "csp_lda",
+      "regime": "cross_subject",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.339,
+      "kappa": 0.0085,
+      "ece": 0.2494
+    },
+    "csp_lda_within_bnci2014_001": {
+      "method": "csp_lda",
+      "regime": "within",
+      "dataset": "bnci2014_001",
+      "n_classes": 4,
+      "acc": 0.5976,
+      "kappa": 0.4635,
+      "ece": 0.1395
+    },
+    "fnirs_lda_cross_subject_shin2017_nback": {
+      "method": "fnirs_lda",
+      "regime": "cross_subject",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.4416,
+      "kappa": 0.1624,
+      "ece": 0.2723
+    },
+    "riemann_acm_cross_subject_bnci2014_001": {
+      "method": "riemann_acm",
+      "regime": "cross_subject",
+      "dataset": "bnci2014_001",
+      "n_classes": 4,
+      "acc": 0.3513,
+      "kappa": 0.135,
+      "ece": 0.4764
+    },
+    "riemann_acm_within_bnci2014_001": {
+      "method": "riemann_acm",
+      "regime": "within",
+      "dataset": "bnci2014_001",
+      "n_classes": 4,
+      "acc": 0.7382,
+      "kappa": 0.6509,
+      "ece": 0.0863
+    },
+    "riemann_cross_subject_bnci2014_001": {
+      "method": "riemann",
+      "regime": "cross_subject",
+      "dataset": "bnci2014_001",
+      "n_classes": 4,
+      "acc": 0.3574,
+      "kappa": 0.1433,
+      "ece": 0.3755
+    },
+    "riemann_cross_subject_shin2017_nback": {
+      "method": "riemann",
+      "regime": "cross_subject",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.3291,
+      "kappa": -0.0064,
+      "ece": 0.4741
+    },
+    "riemann_recenter_acm_bnci2014_001": {
+      "method": "riemann_recenter_acm",
+      "regime": "cross_subject",
+      "dataset": "bnci2014_001",
+      "n_classes": null,
+      "acc": 0.4695,
+      "kappa": 0.2927,
+      "ece": null
+    },
+    "riemann_recenter_ts_bnci2014_001": {
+      "method": "riemann_recenter_ts",
+      "regime": "cross_subject",
+      "dataset": "bnci2014_001",
+      "n_classes": null,
+      "acc": 0.4961,
+      "kappa": 0.3282,
+      "ece": null
+    },
+    "riemann_within_bnci2014_001": {
+      "method": "riemann",
+      "regime": "within",
+      "dataset": "bnci2014_001",
+      "n_classes": 4,
+      "acc": 0.7063,
+      "kappa": 0.609,
+      "ece": 0.1097
+    }
+  }
+}

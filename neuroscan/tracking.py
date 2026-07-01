@@ -21,9 +21,10 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[1]
-_MLRUNS = _ROOT / "mlruns"
-_DB_URI = f"sqlite:///{(_ROOT / 'mlflow.db').as_posix()}"
+from core.config import REPO
+
+_MLRUNS = REPO / "mlruns"
+_DB_URI = f"sqlite:///{(REPO / 'mlflow.db').as_posix()}"
 
 _active = None   # the live mlflow module while a run is open, else None
 
@@ -171,17 +172,16 @@ def save_model(clf, name: str, run_dir: str | Path | None = None) -> Path | None
 def backfill(experiment: str = "mindscape") -> None:
     """One-shot: log existing runs/<name>/aggregate.json as runs, so the UI has history.
     Skips runs already tracked (have .mlflow_run_id).  `python -m neuroscan.tracking`."""
-    runs_dir = _ROOT / "runs"
+    from neuroscan.evaluation import results   # shared aggregate->metrics normalizer (both schemas)
     n = 0
-    for aj in sorted(runs_dir.glob("**/aggregate.json")):
+    for aj in sorted((REPO / "runs").glob("**/aggregate.json")):
         rd = aj.parent
         if (rd / ".mlflow_run_id").exists():
             continue
         res = json.loads(aj.read_text())
         with run(experiment, rd.name, params={k: res.get(k) for k in ("method", "regime", "n_classes")},
                  run_dir=rd):
-            fm = res.get("fold_mean", {})
-            metrics({f"{k}_mean": v for k, v in fm.items()})
+            metrics({f"{k}_mean": v for k, v in (results.read_metrics(res) or {}).items() if v is not None})
             artifact(aj)
         n += 1
         print(f"backfilled {rd.name}")

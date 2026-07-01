@@ -34,6 +34,8 @@ def main():
     ap.add_argument("--fmin", type=float, default=8.0, help="band low cut (Hz); 4 = broadband for DL")
     ap.add_argument("--fmax", type=float, default=32.0, help="band high cut (Hz); 40 = broadband for DL")
     ap.add_argument("--out", default=None, help="write aggregate.json here")
+    ap.add_argument("--no-record", action="store_true",
+                    help="skip updating the committed results.json snapshot (use for scratch/experimental runs)")
     args = ap.parse_args()
 
     cfg = EpochCfg(resample=args.resample, fmin=args.fmin, fmax=args.fmax)
@@ -57,8 +59,10 @@ def main():
 
     out = run_dir / "aggregate.json"
     out.write_text(json.dumps(res, indent=2))
-    from neuroscan.evaluation import modelcard
+    from neuroscan.evaluation import modelcard, results
     modelcard.write(res, args.dataset, args.regime, run_dir / "CARD.md")
+    if not args.no_record and results.record(run_dir):
+        print(f"   recorded -> results.json ({run_dir.name})")
     ref_regime = "within_subject" if args.regime == "within" else "cross_subject"
     print(f"\nfold-mean acc {res['fold_mean']['acc']:.3f} | pooled acc {res['pooled']['acc']:.3f} "
           f"| ece {res['fold_mean']['ece']:.3f}")
