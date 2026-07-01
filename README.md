@@ -121,17 +121,31 @@ change.
 | EEG · CSP + LDA | <!--r:csp_lda_cross_subject_shin2017_nback_eeg.acc-->0.410<!--/r--> (κ 0.12) | <!--r:csp_lda_within_shin2017_nback_eeg.acc-->0.568<!--/r--> (κ 0.35) |
 | EEG · Riemann (tangent space) | <!--r:riemann_cross_subject_shin2017_nback_eeg.acc-->0.424<!--/r--> (κ 0.14) | <!--r:riemann_within_shin2017_nback_eeg.acc-->0.538<!--/r--> (κ 0.31) |
 
-Two findings fall straight out of the same-task design:
+**Anchored to the field's honest benchmark — the numbers are modest by design.** [BenchNIRS](https://doi.org/10.3389/fnrgo.2023.994969)
+(Benerradi 2023) is the rigorous fNIRS-ML benchmark whose whole point is that *proper* cross-subject
+evaluation gives near-chance results — exposing that many published fNIRS accuracies are inflated by
+improper (within-session / personalised) validation. On this exact Shin n-back it reports LDA **0.389**
+(3-class). We reproduced its pipeline on our data (**0.392**;
+[`repro_benchnirs`](neuroscan/experiments/repro_benchnirs.py)), then ran our `fnirs_lda` under its *matched*
+5-fold GroupKFold protocol: **0.429** — a *modest* **+3.7 pp** from keeping full spatial resolution +
+shrinkage-LDA (both still sit only ~6–10 pp above the 0.333 floor; this is a hard task, not a leap). The
+LOSO 0.442 is ~1 pp higher again, from training on more subjects. So: honest, reproducible, marginally
+above the rigorous benchmark — *not* the 70–90% improper validation produces.
+
+Two findings from the same-task design:
 - **Method–signal match is modality-specific.** On EEG, covariance methods **work** — CSP/Riemann read the
-  workload's band-power (frontal theta / parietal alpha) covariance, above chance. On fNIRS the *same*
-  methods sit at chance (shown in the covariance-mismatch run, not tabled): the workload there is the **mean
-  HbO amplitude**, which covariance discards by centering — so fNIRS needs amplitude features (mean/slope/peak)
-  → LDA. Same task, opposite right-tool: the feature must match the *signal*, and the signal is the modality.
-- **Opposite generalization — now proven, not inferred.** EEG shows **within ≫ cross** (0.54–0.57 vs 0.41–0.43):
-  subject-specific spatial patterns. fNIRS shows **within ≈ cross** (0.42 both): the prefrontal response is
-  stereotyped across people, so pooling subjects helps. Because it's *one task*, this is the modality's
-  behaviour with no task confound — and it's exactly the **complementarity that motivates fusion** (EEG strong
-  per-subject, fNIRS robust across subjects). That fusion is the next Stage-3 step.
+  workload's band-power (frontal theta / parietal alpha) covariance, above chance. On fNIRS, *naive
+  raw-signal* covariance sits at chance (our covariance-mismatch run): the workload is the **mean HbO
+  amplitude**, which raw covariance centers away, so amplitude features (mean/slope/peak) → LDA is the right
+  tool here. (Not a categorical law — Riemannian-*done-right* decodes fNIRS *motor imagery* within-subject,
+  Näher 2025; it's just unproven for workload / cross-subject. See [`research/`](research/deep_dives/2026-07-01_fnirs_decoding_sota.md).)
+- **Modest signal — read within-vs-cross carefully.** EEG within (0.54–0.57) clearly exceeds cross
+  (0.41–0.43): real subject-specific spatial structure. fNIRS sits ~0.42 *both*, only ~9 pp above chance —
+  weak either way, so the within≈cross similarity is as much "little signal to lose" as any stereotypy, and
+  the tiny per-subject test sets (9 epochs) make the ordering noisy. The honest read: **fNIRS workload barely
+  transfers cross-subject** (exactly what BenchNIRS found), and we reproduce that. Whether the weak fNIRS
+  signal nonetheless *adds* to EEG is the **fusion question** (Stage 3) — complementarity is the motivation,
+  not yet a result.
 - **The field's transfer trick didn't help here.** Per-subject z-scoring (the standard fNIRS cross-subject
   fix) gave no gain — a slight drop (0.442 → 0.420) on this single run — most likely because our per-epoch
   baseline-correction already removes the offset it targets. (One run, not a claim that z-scoring is useless.)

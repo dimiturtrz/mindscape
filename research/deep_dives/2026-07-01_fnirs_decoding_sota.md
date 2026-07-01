@@ -178,7 +178,7 @@ Best performer: **Shrinkage-LDA** for n<30 subjects [S5], outperforms standard L
 
 - [S4] Blankertz B, Lemm S, Treder M, Haufe S, Müller KR. "Single-trial analysis and classification of ERP components—A comparison with fMRI." *NeuroImage* 50(3):786-798, 2010.
 
-- [S5] Lyu B, Pham T, et al. "Benchmarking framework for machine learning classification from fNIRS data." *Frontiers in Neuroergonomics* 4:994969, 2023. https://www.frontiersin.org/journals/neuroergonomics/articles/10.3389/fnrgo.2023.994969/
+- [S5] Benerradi J, Clos J, Landowska A, Valstar MF, Wilson ML. "Benchmarking framework for machine learning classification from fNIRS data." *Frontiers in Neuroergonomics* 4:994969, 2023. https://www.frontiersin.org/journals/neuroergonomics/articles/10.3389/fnrgo.2023.994969/ — **[VERIFIED + REPRODUCED]** authors corrected from an earlier Haiku misattribution to "Lyu"; the 38.9% LDA on Shin n-back was confirmed from the primary source AND reproduced on our data (0.392) via `neuroscan/experiments/repro_benchnirs.py`. Repo: gitlab.com/HanBnrd/benchnirs.
 
 - [S6] Ledoit O, Wolf M. "Honey, I shrunk the sample covariance matrix." *The Journal of Portfolio Management* 30(4):110-119, 2004.
 
