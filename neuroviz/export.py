@@ -99,10 +99,10 @@ def _riemann_patterns(ep, labels):
     how much that channel's own power drives the logit for the class. Parallel to CSP patterns, but here
     the feature is the covariance itself (no spatial filters). Returns {class: [w per channel]}, normalized.
     """
-    from baselines import riemann
+    from baselines.riemann import TangentSpace
     X = ep.get_data() * 1e6
-    clf = riemann.fit(X.astype(np.float64), np.asarray(labels), method="ts")
-    lr = clf.named_steps["logisticregression"]
+    clf = TangentSpace().fit(X.astype(np.float64), np.asarray(labels))
+    lr = clf.pipe_.named_steps["logisticregression"]
     coef = np.atleast_2d(lr.coef_)                         # [n_class, n_tri] over upper-triangular cov entries
     classes = [str(c) for c in lr.classes_]
     if coef.shape[0] == 1 and len(classes) == 2:           # binary LR: one row = class[1] vs class[0]

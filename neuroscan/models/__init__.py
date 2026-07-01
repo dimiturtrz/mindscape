@@ -13,21 +13,26 @@ def method_names() -> list[str]:
     return ["csp_lda", "riemann", "riemann_acm", "fnirs_lda", *sorted(MODELS)]
 
 
-def get_method(name: str):
-    """Return (fit_fn, score_fn) for a method name (baseline or braindecode decoder)."""
-    if name == "csp_lda":
-        from baselines import csp_lda
-        return csp_lda.fit, csp_lda.score
-    if name == "riemann":
-        from baselines import riemann
-        return riemann.fit, riemann.score
-    if name == "fnirs_lda":
-        from baselines import fnirs_features
-        return fnirs_features.fit, fnirs_features.score
-    if name == "riemann_acm":
-        import functools
+def _adapt(cls, **hp):
+    """Adapt a Baseline class to the harness (fit_fn, score_fn) contract — a fresh instance is built and
+    fitted per fold, and the fitted object scores itself."""
+    return (lambda X, y: cls(**hp).fit(X, y), lambda clf, X: clf.score(X))
 
-        from baselines import riemann
-        return functools.partial(riemann.fit, method="acm"), riemann.score
+
+def get_method(name: str):
+    """Return (fit_fn, score_fn) for a method name. Baselines are Baseline classes adapted to the
+    contract; braindecode decoders come from decoders.make."""
+    if name == "csp_lda":
+        from baselines.csp_lda import CspLda
+        return _adapt(CspLda)
+    if name == "riemann":
+        from baselines.riemann import TangentSpace
+        return _adapt(TangentSpace)
+    if name == "riemann_acm":
+        from baselines.riemann import Acm
+        return _adapt(Acm)
+    if name == "fnirs_lda":
+        from baselines.fnirs_features import FnirsLda
+        return _adapt(FnirsLda)
     from neuroscan.models.decoders import make
     return make(name)
