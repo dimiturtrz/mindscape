@@ -69,5 +69,18 @@ Strong mechanistic grasp; proactively added the mitochondria/aerobic-efficiency 
 
 **To lock:** over-supply → net HbO rise (anti-correlation); Mayer-worst = in-band; fMRI-BOLD = HbR/paramagnetic.
 
-### maths + approaches sections — pending
-_(next: Beer–Lambert + the 2×2 chromophore solve; then classical vs DL decoders.)_
+### 2026-07-01 — quiz M5 (maths section) · ~5/6
+1. *Beer–Lambert* — ✓✓ `I=I₀·10^(−εcL)` (exponential form); "3 unknowns, can't get most." (linear: A=log(I₀/I)=εcL).
+2. *Why plain BL breaks* — ✓ path unknown after scatter + inhomogeneous; DPF≈6×distance. Fix: differences
+   cancel the **unknown scatter-loss `G`** (not `c`) → leaves Δc.
+3. *Relative only* — ✓✓ unknown `G`/path → absolute c unrecoverable, only changes survive.
+4. *Two wavelengths* — ✓✓ oxy/deoxy differ by λ; **2 eqns 2 unknowns → invert 2×2 extinction matrix**.
+5. *Isosbestic straddle* — ✓✓ at ~800 nm ε_HbO=ε_HbR → rows collapse → singular; straddle = condition the solve.
+6. *Features / why covariance fails* — ~½. Got "aggregate features for slow events" + a correct **bonus**
+   (fNIRS spatially local, no volume conduction → low cross-channel corr). Missed the core: covariance is
+   **mean-centered → deletes the mean amplitude that IS the fNIRS signal** → CSP/Riemann at chance.
+
+**To lock:** `G` cancels in differences; covariance-fails-because-mean-centered. **Bonus banked:** fNIRS locality.
+
+### approaches section — pending
+_(next: classical mean+slope+peak→LDA vs DL 1D-CNN/LSTM/fNIRS-T; why DL rarely beats features on small data.)_
