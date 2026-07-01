@@ -21,6 +21,8 @@ baselines/       the quarantine ceiling — standard reported methods (CSP+LDA, 
 | `core/data/eeg/base.py` | the canonical schema + `DatasetAdapter` protocol + a reusable MOABB motor-imagery adapter |
 | `core/data/eeg/registry.py` | name → adapter; "add a dataset = one file + one line" |
 | `core/data/eeg/braindecode_pre.py` | the braindecode-canonical preprocessing path (continuous-signal EMS → windows) for faithful reproductions |
+| `core/data/registry.py` | unified name → adapter registry across modalities (EEG + fNIRS) — add a dataset = one factory + one line |
+| `core/data/fnirs/` | the hemodynamic modality: `base.py` (FnirsCfg + bandpass/epoch), `shin2017.py` (Shin n-back adapter, parses HbO/HbR from the raw `.mat`) — same [n,ch,t]+meta schema, so the same store/harness ride on it |
 | `core/export_onnx.py` | ONNX export + INT8 quant + a **parity gate** (optional edge-deploy tail, first-class not bolted on) |
 | `core/reference.py` + `reference.yaml` | published SOTA ceilings as cited config, surfaced next to every result |
 
@@ -36,11 +38,12 @@ baselines/       the quarantine ceiling — standard reported methods (CSP+LDA, 
 | `models/transforms.py` | standardizers (z-score / EMS / identity) + sliding-window crops, independently testable |
 | `models/__init__.py` | `get_method(name)` — one registry unifying the CSP / Riemann baselines and the nets |
 | `tracking.py` | guarded local-sqlite MLflow (no-op if absent); `save_model` persists trained models (torch `.pt` / sklearn `.joblib`) to `runs/<name>/models/` + as an artifact |
-| `experiments/` | thin CLIs: `run` (decode under a regime), `align` (cross-subject Riemannian re-centering), `quantize` (optional edge deploy), `reproduce_atcnet` (faithful reproduction) |
+| `experiments/` | thin CLIs: `run` (EEG decode under a regime), `run_fnirs` (fNIRS workload decode), `align` (cross-subject Riemannian re-centering), `quantize` (optional edge deploy), `reproduce_atcnet` (faithful reproduction) |
 
 ### `baselines/` and the rest
 - `baselines/csp_lda.py` — CSP + LDA, the standard motor-imagery reference, isolated from the decoders under test.
 - `baselines/riemann.py` — Riemannian methods: tangent-space + LR, MDM, ACM (time-delay covariances), and `recenter_covariances` (cross-subject manifold re-centering). The strongest classical baseline + the transfer fix.
+- `baselines/fnirs_features.py` — the fNIRS-standard decode: per-channel mean+slope+peak of ΔHbO/ΔHbR → scaler → LDA. The amplitude features covariance methods discard; the right tool for the hemodynamic modality.
 - `neuroviz/` — the 2D motor-imagery viewer (topomaps + CSP patterns + Riemann discriminant + waveforms); Python export → dependency-free web app.
 - `tests/` — a pyramid: `unit/` (equivalence-class per module) + `integration/` (module chains: data→splits→harness, decoder→export→parity).
 

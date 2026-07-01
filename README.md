@@ -1,4 +1,4 @@
-# mindscape — honest, efficient non-invasive neural decoding (EEG)
+# mindscape — honest, efficient non-invasive neural decoding (EEG + fNIRS)
 
 **What this is.** mindscape decodes **motor imagery** from non-invasive EEG and asks the question most
 demos skip: *a decoder that scores ~60% on a subject's own recordings — how far does it fall on a person
@@ -100,6 +100,29 @@ Three honest findings fall out:
 **Published ceilings** (cited, not chased): FBCSP 0.65 · EEGNet 0.70 · ShallowConvNet 0.74 · ATCNet 0.81 ·
 transformer SOTA 0.88; cross-subject SOTA 0.74.
 
+## Second modality — fNIRS mental-workload (Shin n-back)
+A different signal **and** a different task: **hemodynamic** fNIRS (ΔHbO/ΔHbR, 10 Hz) decoding **mental
+workload** — which n-back load level (0/2/3-back) a subject holds in working memory. Same harness, new
+modality — the eval spine is modality-agnostic; only the adapter + decoder change.
+
+**fNIRS n-back workload** (Shin · 26 subjects · 3-class · **chance 0.333** — a separate table by design;
+different task, chance, and generalization regime than the EEG motor imagery above):
+
+| method | cross-subject (LOSO) | within (session-2 holdout) |
+|---|---|---|
+| **mean+slope+peak → LDA** | **0.442** (κ 0.16) | **0.415** (κ 0.12) |
+
+The result is the **method–signal match**, not the accuracy:
+- **Covariance methods don't apply** — not shown as benchmarks, because they're a categorical mismatch. CSP
+  and Riemannian decoders (the EEG winners) sit at chance on fNIRS: they read the *covariance*, but the
+  workload signal is the **mean HbO amplitude**, which covariance discards by centering. The right features
+  are amplitude-based (mean, slope, peak of the hemodynamic response) → LDA, the fNIRS-BCI workhorse.
+- **Opposite generalization to EEG.** Here cross-subject (0.442) ≈ within (0.415): the prefrontal workload
+  response is more stereotyped across people than motor imagery, and per-subject data is tiny, so pooling
+  subjects *helps*. In EEG, within ≫ cross. Two modalities, opposite behaviour.
+- **The field's transfer trick is redundant here.** Per-subject z-scoring (the standard fNIRS cross-subject
+  fix) gave no gain (0.442 → 0.420) — our per-epoch baseline-correction already removes the offset it targets.
+
 ## Honest limits (measured, not assumed)
 Competent on a public benchmark, **not** a finished system:
 - **Reproduction is partial.** Best within-subject ~0.62 vs published 0.81; clean subjects reproduce
@@ -128,6 +151,8 @@ uv run python -m neuroscan.experiments.run --method csp_lda --regime within --te
 uv run python -m neuroscan.experiments.run --method csp_lda --regime cross_subject   # the OOD gap
 # the strongest classical baseline — covariances on a Riemannian manifold:
 uv run python -m neuroscan.experiments.run --method riemann --regime within
+# the second modality — fNIRS mental-workload (amplitude features, not covariance):
+uv run python -m neuroscan.experiments.run_fnirs --method fnirs_lda --regime cross_subject
 # a deep decoder, GPU:
 uv run python -m neuroscan.experiments.run --method atcnet --regime within --resample 250 --fmin 4 --fmax 40
 # the neuroviz demo:
