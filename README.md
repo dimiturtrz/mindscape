@@ -1,19 +1,29 @@
 # mindscape — honest, efficient non-invasive neural decoding (EEG + fNIRS)
 
-**What this is.** mindscape decodes **motor imagery** from non-invasive EEG and asks the question most
-demos skip: *a decoder that scores ~60% on a subject's own recordings — how far does it fall on a person
-it never saw?* On **BCI Competition IV-2a** (4-class motor imagery, 9 subjects, the standard benchmark),
-a CSP+LDA decoder hits **0.598 within-subject** but drops to **0.391 leave-one-subject-out** — a
-**21-point generalization gap** (chance = 25%). That measured gap, and the calibration under it, is the
-contribution — not the headline accuracy. The second through-line is **deployability**: the decoders are
-tiny and export to ONNX at millisecond-scale CPU latency.
+**What this is.** mindscape decodes non-invasive neural signals — **EEG and fNIRS** — and asks the question
+most demos skip: *a decoder that scores ~60% on a subject's own recordings — how far does it fall on a
+person it never saw?* The contribution is the **honest cross-subject evaluation** (and what it reveals), not
+a leaderboard number — across two tasks:
+
+- **Motor imagery** (EEG, BCI-2a). CSP+LDA hits **0.598 within-subject** but drops to **0.391**
+  leave-one-subject-out — a **21-point generalization gap** (chance 25%) — which Riemannian **re-centering**
+  then closes (→ **0.501**). The gap measured *and* fixed.
+- **Mental workload** (Shin n-back — EEG · fNIRS · fusion). Both modalities decode the *same* task, so
+  differences are the modality not the task. Honest cross-subject accuracy is near-floor (anchored to the
+  BenchNIRS benchmark), but the two modalities are genuinely **complementary** — an oracle picking the right
+  one per block hits **0.69** vs best-single **0.47**. Yet **no fusion — naive, learned, or calibrated —
+  cashes that headroom**, because a decoder's confidence doesn't track its correctness. A rigorous
+  negative-with-direction, plus a real transfer lever found on the way (per-subject calibration lifts EEG
+  band-power **0.41 → 0.51** cross-subject — the workload-task analog of the re-centering above).
+
+Two through-lines under both tasks: the **evaluation regime is the product** — a split is a *criteria filter*
+over the data cloud, so every run self-documents exactly what it held out — and **deployability**: the
+decoders are edge-tiny and export to ONNX at millisecond-scale CPU latency.
 
 It's also how **I'm** ramping into neural decoding: built on public data, the signal-processing /
-time-series / calibration / edge-inference discipline carried from prior ML work, the **neuroscience and
-the decoding methods learned as I go.** Status: **Stage 1** (EEG decode + honest eval + cross-subject
-transfer — the gap measured *and* closed) is done; **Stage 2** (fNIRS, a second modality — parallel) and
-**Stage 3** (hybrid fusion + harder semantic decoding) build on it. Efficient edge deploy is an optional,
-method-dependent tail (our nets are already edge-tiny). Full plan → **[docs/PLAN.md](docs/PLAN.md)**.
+calibration / edge-inference discipline carried from prior ML work, the **neuroscience and decoding methods
+learned as I go.** Next: input-level learned fusion (to chase that oracle headroom) + harder semantic
+decoding. Full plan → **[docs/PLAN.md](docs/PLAN.md)**.
 
 ## See the signal the decoder reads — [neuroviz](neuroviz/)
 ![neuroviz — fNIRS n-back workload: the HbO hemodynamic response animating over prefrontal cortex, HbO/HbR waveforms, and the decoder's ground-truth-vs-prediction readout](neuroviz/docs/media/demo.webp)
@@ -185,7 +195,7 @@ clearly above chance) and they **fail on different blocks**.
 | best single modality | <!--r:fusion_cross_subject_kfold_shin2017_nback.best_single-->0.474<!--/r--> |
 | late fusion (what naive averaging gets) | <!--r:fusion_cross_subject_kfold_shin2017_nback.late-->0.468<!--/r--> |
 | **oracle — *either* modality correct** | **<!--r:fusion_cross_subject_kfold_shin2017_nback.oracle_either-->0.688<!--/r-->** |
-| oracle headroom over best single | **+<!--r:fusion_cross_subject_kfold_shin2017_nback.oracle_either-fusion_cross_subject_kfold_shin2017_nback.best_single-->+0.214<!--/r-->** |
+| oracle headroom over best single | **<!--r:fusion_cross_subject_kfold_shin2017_nback.oracle_either-fusion_cross_subject_kfold_shin2017_nback.best_single-->+0.214<!--/r-->** |
 | error correlation (φ) | <!--r:fusion_cross_subject_kfold_shin2017_nback.err_corr-->0.053<!--/r--> |
 | EEG-only-right / fNIRS-only-right / both-wrong | 0.215 / 0.255 / <!--r:fusion_cross_subject_kfold_shin2017_nback.both_wrong-->0.312<!--/r--> |
 
@@ -220,37 +230,43 @@ reliability from features the probabilities don't expose. Now motivated by a con
 *complementarity demonstrated, every output-space fusion insufficient (and why), input-level learned fusion
 warranted.*
 
+**A transfer lever found on the way — and fusion's last stand.** On the EEG side, three *zero-calibration*
+feature families — covariance (CSP/Riemann), absolute band-power, relative band-power — all land ~0.43
+cross-subject; workload band-power is subject-idiosyncratic in **absolute scale**, which points straight at
+the fix. Adding **per-subject unsupervised calibration** (z-score each subject by its own feature statistics —
+no labels, the EEG analog of the Riemannian re-centering that closed the motor-imagery gap) recovers EEG
+band-power to **<!--r:calibration_ablation_shin2017_nback_eeg.eeg_zcalib-->0.511<!--/r-->** (honest
+held-out-calibration-half) up to **<!--r:calibration_ablation_shin2017_nback_eeg.eeg_ztrans-->0.581<!--/r-->**
+(transductive), from <!--r:calibration_ablation_shin2017_nback_eeg.eeg_raw-->0.407<!--/r--> raw — so the ~0.43
+number is the *zero-calibration* floor, not a ceiling, and with calibration **EEG (0.51–0.58) becomes the
+stronger modality**, above fNIRS (~0.47, which doesn't benefit — its per-epoch baseline correction already
+removes the offset). Crucially, **fusion still doesn't beat that best single modality even after the fix**: a
+compact input-level gate (per-modality encoders + a per-trial mixing gate, nested GroupKFold) scores
+**<!--r:fusion_gate_cross_subject_kfold_shin2017_nback.gate-->0.573<!--/r-->** — tying z-scored-EEG-alone
+(<!--r:calibration_ablation_shin2017_nback_eeg.eeg_z_best-->0.581<!--/r-->), capturing none of the (now larger,
+<!--r:calibration_ablation_shin2017_nback_eeg.oracle_z-->0.766<!--/r-->) oracle headroom — the learned gate
+fails for the same reason every output-space combiner did.
+
 Two honesty caveats. (1) The oracle is an **upper bound** — a perfect selector is unattainable; a real gate
 captures only a fraction. It proves headroom *exists*, not that we can claim it. (2) The literature offers no
 free lunch: every published Shin n-back fusion number (96–98 %) is **within-subject** (inflated exactly as
 BenchNIRS predicts), the one honest EEG-fNIRS fusion LOSO figure *drops* 34 pts (DC-AGIN 96.98 %→62.56 %), and
 on the hardest real contrast (2- vs 3-back) fusion *loses* to fNIRS — so a learned model must be small
 (compact cross-attention, the only thing that fits n=26) and gated on **strict nested GroupKFold**, or it will
-reproduce that collapse. On the EEG side, three *zero-calibration* feature families — covariance
-(CSP/Riemann), absolute band-power, relative band-power — all land ~0.43 cross-subject; workload band-power is
-subject-idiosyncratic in **absolute scale**, which points straight at the fix. Adding **per-subject
-unsupervised calibration** (z-score each subject by its own feature statistics — no labels, the EEG analog of
-the Riemannian re-centering that closed the motor-imagery gap) recovers EEG band-power to
-**<!--r:calibration_ablation_shin2017_nback_eeg.eeg_zcalib-->0.511<!--/r-->** (honest held-out-calibration-half)
-up to **<!--r:calibration_ablation_shin2017_nback_eeg.eeg_ztrans-->0.581<!--/r-->** (transductive), from
-<!--r:calibration_ablation_shin2017_nback_eeg.eeg_raw-->0.407<!--/r--> raw — so the ~0.43 number is the
-*zero-calibration* floor, not a ceiling, and with calibration **EEG (0.51–0.58) becomes the stronger
-modality**, above fNIRS (~0.47, which doesn't benefit — its per-epoch baseline correction already removes the
-offset). Crucially, **fusion still doesn't beat that best single modality even after the fix**: a compact
-input-level gate (per-modality encoders + a per-trial mixing gate, nested GroupKFold) scores
-**<!--r:fusion_gate_cross_subject_kfold_shin2017_nback.gate-->0.573<!--/r-->** — tying z-scored-EEG-alone
-(<!--r:calibration_ablation_shin2017_nback_eeg.eeg_z_best-->0.581<!--/r-->), capturing none of the (now larger,
-<!--r:calibration_ablation_shin2017_nback_eeg.oracle_z-->0.766<!--/r-->) oracle headroom. The learned gate fails
-for the same reason every output-space combiner did. Full audit + citations:
-[`research/`](research/deep_dives/2026-07-01_eeg_fnirs_fusion_sota.md); the calibration ablation in
-[`tasks/workload/calibration_ablation.py`](neuroscan/tasks/workload/calibration_ablation.py), the gate in
-[`tasks/workload/fusion_gate.py`](neuroscan/tasks/workload/fusion_gate.py).
+reproduce that collapse.
+
+Full audit + citations: [`research/`](research/deep_dives/2026-07-01_eeg_fnirs_fusion_sota.md); the calibration
+ablation in [`tasks/workload/calibration_ablation.py`](neuroscan/tasks/workload/calibration_ablation.py), the
+gate in [`tasks/workload/fusion_gate.py`](neuroscan/tasks/workload/fusion_gate.py).
 
 ## Honest limits (measured, not assumed)
 Competent on a public benchmark, **not** a finished system:
 - **Reproduction is partial.** Best within-subject ~0.62 vs published 0.81; clean subjects reproduce
   (A03 ~0.79 vs published peak ~0.85), hard subjects lag ~0.15 — documented in [`research/`](research/),
   not hidden. The contribution is the measured OOD gap + calibration + efficiency, not the peak.
+- **Fusion is a negative result.** On the Shin workload task, complementarity is real but no realizable
+  fusion (naive, learned, or calibrated) beats the best single modality — the value is the rigorous null +
+  the mechanism, not a win. The input-level gate that *might* cash the oracle headroom is future work.
 - **Neuroscience is a ramp.** The signal-processing / eval discipline carries from prior work; the
   decoding methods and neuroscience are learned as I go.
 - **Not a device.** Public research data only; no real-time online BCI, no clinical or prospective validation.
@@ -276,10 +292,13 @@ uv run python -m neuroscan.tasks.run --method csp_lda --regime cross_subject   #
 uv run python -m neuroscan.tasks.run --method riemann --regime within
 # the second modality — fNIRS mental-workload (amplitude features, not covariance):
 uv run python -m neuroscan.tasks.workload.run_fnirs --method fnirs_lda --regime cross_subject
+# EEG+fNIRS fusion on the same task — complementarity + the aggregation sweep (a rigorous null):
+uv run python -m neuroscan.tasks.workload.run_fusion --regime cross_subject_kfold
 # a deep decoder, GPU:
 uv run python -m neuroscan.tasks.run --method atcnet --regime within --resample 250 --fmin 4 --fmax 40
-# the neuroviz demo:
-uv run python -m neuroviz.export --subject 1 && python -m http.server 8000 -d neuroviz/web
+# the neuroviz demo (EEG / fNIRS / Fusion complementarity view):
+uv run python -m neuroviz.export --subject 1 && uv run python -m neuroviz.export_fusion \
+  && python -m http.server 8000 -d neuroviz/web
 uv run pytest -q
 ```
 Runs log to a local MLflow (`uv run mlflow ui --backend-store-uri sqlite:///mlflow.db`) and write
