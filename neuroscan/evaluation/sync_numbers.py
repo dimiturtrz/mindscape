@@ -5,8 +5,9 @@ Wrap any run-derived number in the README with a marker:
     | within-subject | **<!--r:csp_lda_within_bnci2014_001.acc-->0.598<!--/r-->** | ...
 
 The text between the markers is REGENERATED from results.json on every sync; the comments render invisibly
-on GitHub. An expression is either `<run_name>.<field>` (field = acc|kappa|ece) or a difference of two such
-terms `a.acc-b.acc` (for the within→cross gap), formatted with an explicit signed unicode minus.
+on GitHub. An expression is either `<run_name>.<field>` (field = acc|kappa|ece, plus fusion per-role fields
+eeg|fnirs|late|feature) or a difference of two such terms `a.acc-b.acc` (for the within→cross gap),
+formatted with an explicit signed unicode minus.
 
     uv run python -m neuroscan.evaluation.sync_numbers            # rewrite README in place
     uv run python -m neuroscan.evaluation.sync_numbers --check    # exit 1 if anything is stale (CI gate)
@@ -28,7 +29,7 @@ _README = REPO / "README.md"
 _DP = 3          # decimals shown in the README (snapshot keeps more; see results._PRECISION)
 
 _MARKER = re.compile(r"<!--r:([^>]+?)-->(.*?)<!--/r-->")
-_TERM = re.compile(r"^([\w.]+?)\.(acc|kappa|ece)$")
+_TERM = re.compile(r"^([\w.]+?)\.(acc|kappa|ece|eeg|fnirs|late|feature)$")
 
 
 def _lookup(runs: dict, term: str) -> float:

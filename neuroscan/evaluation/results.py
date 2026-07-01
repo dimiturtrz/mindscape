@@ -69,12 +69,16 @@ def _row(name: str, agg: dict) -> dict | None:
     if m is None:
         return None
     method, regime, dataset = _split_name(name)
+    # fusion runs carry a per-role breakdown (eeg/fnirs/late/feature) — pass it through so the
+    # 4-role comparison table can address each role as its own marker field.
+    roles = agg.get("per_role_mean") if isinstance(agg.get("per_role_mean"), dict) else {}
     return {
         "method": agg.get("method", method),
         "regime": agg.get("regime", regime),
         "dataset": dataset,
         "n_classes": agg.get("n_classes"),
         **{k: (round(v, _PRECISION) if isinstance(v, (int, float)) else v) for k, v in m.items()},
+        **{k: round(v, _PRECISION) for k, v in roles.items() if isinstance(v, (int, float))},
     }
 
 

@@ -24,7 +24,7 @@ waveforms** and the decoder's **ground truth vs prediction + cross-subject score
 ERD topomaps + CSP/Riemann patterns. The picture shows the signal each decoder consumes *and whether it got
 it right*. → **[neuroviz/](neuroviz/)**
 
-## The contribution — the generalization gap, measured
+## Experiment 1 · Motor imagery (EEG only) — the generalization gap, measured
 The science layer is **signal → preprocess → decode → evaluate**, and the *evaluation regime* is the
 point. Every decoder is one `(fit_fn, score_fn)` pair fed through a single harness; the **regime** —
 within-subject, cross-subject (leave-one-subject-out), cross-session — is a **criteria filter over the
@@ -106,7 +106,7 @@ Three honest findings fall out:
 **Published ceilings** (cited, not chased): FBCSP 0.65 · EEGNet 0.70 · ShallowConvNet 0.74 · ATCNet 0.81 ·
 transformer SOTA 0.88; cross-subject SOTA 0.74.
 
-## Second modality — n-back mental workload, EEG **vs** fNIRS on the *same* task (Shin)
+## Experiment 2 · n-back workload (EEG · fNIRS · fusion) on the *same* task (Shin)
 Decode **mental workload** — which n-back load (0/2/3-back) a subject holds in working memory — from the
 Shin hybrid set, where EEG and fNIRS were recorded **simultaneously**. So both modalities decode *one
 identical task*, and any difference below is the **modality, not the task** — the clean comparison the
@@ -133,10 +133,15 @@ evaluation gives near-chance results — exposing that many published fNIRS accu
 improper (within-session / personalised) validation. On this exact Shin n-back it reports LDA **0.389**
 (3-class). We reproduced its pipeline on our data (**0.392**;
 [`repro_benchnirs`](neuroscan/experiments/repro_benchnirs.py)), then ran our `fnirs_lda` under its *matched*
-5-fold GroupKFold protocol: **0.429** — a *modest* **+3.7 pp** from keeping full spatial resolution +
-shrinkage-LDA (both still sit only ~6–10 pp above the 0.333 floor; this is a hard task, not a leap). The
-LOSO 0.442 is ~1 pp higher again, from training on more subjects. So: honest, reproducible, marginally
-above the rigorous benchmark — *not* the 70–90% improper validation produces.
+5-fold GroupKFold protocol: **<!--r:fnirs_lda_cross_subject_kfold_shin2017_nback.acc-->0.474<!--/r-->**
+(**+8.2 pp** over that anchor), and LOSO **<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.454<!--/r-->**
+(**+6.2 pp**). That margin is wider than the *modest* gap an earlier run showed (0.429) — the difference is
+the val-carve fix: the folds now train on the full non-test set instead of silently discarding a 20 % slice,
+which a shrinkage-LDA on ~13-dim features converts into a few points. Read it conservatively: the lift over
+plain LDA comes from **full spatial resolution + shrinkage** and **more training data**, not a new method — and
+even at 0.474 we sit only **~14 pp above the 0.333 floor**, still an order of magnitude short of the 70–90 %
+that improper (within-session / personalised) validation produces. Honest, reproducible, above the rigorous
+benchmark for explainable reasons — *not* a leap.
 
 Two findings from the same-task design:
 - **Method–signal match is modality-specific.** On EEG, covariance methods **work** — CSP/Riemann read the
@@ -150,11 +155,30 @@ Two findings from the same-task design:
   weak either way, so the within≈cross similarity is as much "little signal to lose" as any stereotypy, and
   the tiny per-subject test sets (9 epochs) make the ordering noisy. The honest read: **fNIRS workload barely
   transfers cross-subject** (exactly what BenchNIRS found), and we reproduce that. Whether the weak fNIRS
-  signal nonetheless *adds* to EEG is the **fusion question** (Stage 3) — complementarity is the motivation,
-  not yet a result.
+  signal nonetheless *adds* to EEG is the **fusion question** — answered below, and the answer is **no gain**.
 - **The field's transfer trick didn't help here.** Per-subject z-scoring (the standard fNIRS cross-subject
-  fix) gave no gain — a slight drop (0.442 → 0.420) on this single run — most likely because our per-epoch
-  baseline-correction already removes the offset it targets. (One run, not a claim that z-scoring is useless.)
+  fix) gave no gain — a slight drop on this single run — most likely because our per-epoch baseline-correction
+  already removes the offset it targets. (One run, not a claim that z-scoring is useless.)
+
+### Fusion — does the second modality *add*? (null result)
+Both decoders run on the **same aligned epochs** (EEG log-band-power + fNIRS mean/slope/peak), so fusion is a
+clean test: does combining beat the better single modality? Two schemes — **late** (average class
+probabilities) and **feature** (concatenate features → one LDA) — under one **5-fold GroupKFold** so all four
+roles share identical folds (fusion needs per-epoch EEG↔fNIRS pairing, which LOSO's single-subject test sets
+make too small to read):
+
+| role (5-fold GroupKFold, matched folds) | acc | vs best single |
+|---|---|---|
+| chance | 0.333 | — |
+| EEG alone (CSP+LDA) | <!--r:fusion_cross_subject_kfold_shin2017_nback.eeg-->0.430<!--/r--> | — |
+| **fNIRS alone (mean/slope/peak → LDA)** | **<!--r:fusion_cross_subject_kfold_shin2017_nback.fnirs-->0.474<!--/r-->** | best |
+| Late fusion (avg probabilities) | <!--r:fusion_cross_subject_kfold_shin2017_nback.late-->0.468<!--/r--> | **−0.006** |
+| Feature fusion (concat → LDA) | <!--r:fusion_cross_subject_kfold_shin2017_nback.feature-->0.434<!--/r--> | **−0.040** |
+
+**Neither fusion beats fNIRS alone** — late fusion ties it, feature fusion drops toward the weaker EEG. On
+~700 blocks with both modalities near the floor, there's no complementarity to exploit: fusion can't
+manufacture signal that isn't separably there. An honest, on-thesis null — the point of the experiment was to
+*measure* whether the second modality helps, not to assume it does.
 
 ## Honest limits (measured, not assumed)
 Competent on a public benchmark, **not** a finished system:

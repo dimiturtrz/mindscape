@@ -73,6 +73,19 @@
       "kappa": 0.1816,
       "ece": 0.2736
     },
+    "fusion_cross_subject_kfold_shin2017_nback": {
+      "method": "fusion",
+      "regime": "cross_subject_kfold",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.4679,
+      "kappa": null,
+      "ece": null,
+      "eeg": 0.4301,
+      "fnirs": 0.4743,
+      "late": 0.4679,
+      "feature": 0.4341
+    },
     "riemann_acm_cross_subject_bnci2014_001": {
       "method": "riemann_acm",
       "regime": "cross_subject",
