@@ -1,0 +1,85 @@
+"""Canonical results snapshot — the committed bridge between local runs and the README.
+
+The authoritative numbers live in `runs/<name>/aggregate.json` (gitignored, one per run) and, for the
+cross-run UI, in mlflow. Neither is in the repo, so a fresh clone / CI can't read them — and the README
+tables were hand-typed, which is how they drift (a claim said "not implemented" while the table showed the
+number). This script closes that loop: it scans the local run aggregates and writes ONE committed
+`results.json` snapshot. `sync_numbers.py` then injects those numbers into the README between markers, so
+the prose can't drift from the measured result.
+
+    uv run python -m neuroscan.evaluation.results          # runs/ -> results.json (repo root, committed)
+
+`results.json` is a *snapshot*, not the source of truth — regenerate it after a run that changes a headline
+number, commit it, then run sync_numbers. Two aggregate schemas exist and both are normalized here:
+  - harness runs:  {"method","regime","n_classes","fold_mean":{"acc","kappa","ece"}}
+  - align.py runs: {"method","regime","acc_mean","kappa_mean","per_fold":[...]}
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[2]
+_RUNS = _ROOT / "runs"
+_OUT = _ROOT / "results.json"
+
+# datasets whose run-dir suffix we recognize (longest match first so shin2017_nback beats bnci2014_001)
+_DATASETS = ("bnci2014_001", "shin2017_nback", "shin2017")
+
+
+def _split_name(name: str) -> tuple[str, str, str]:
+    """runs/<method>_<regime>_<dataset> -> (method, regime, dataset). Regime is one token here
+    (`within` / `cross_subject` / `cross_session`); dataset is the recognized suffix."""
+    dataset = next((d for d in _DATASETS if name.endswith(d)), "")
+    stem = name[: -(len(dataset) + 1)] if dataset else name
+    for regime in ("cross_subject", "cross_session", "within"):
+        if stem.endswith(regime):
+            return stem[: -(len(regime) + 1)], regime, dataset
+    return stem, "", dataset
+
+
+def _metrics(agg: dict) -> dict | None:
+    """Pull (acc, kappa, ece) from either aggregate schema. None if neither present."""
+    fm = agg.get("fold_mean")
+    if isinstance(fm, dict) and "acc" in fm:
+        return {"acc": fm.get("acc"), "kappa": fm.get("kappa"), "ece": fm.get("ece")}
+    if "acc_mean" in agg:
+        return {"acc": agg.get("acc_mean"), "kappa": agg.get("kappa_mean"), "ece": agg.get("ece_mean")}
+    return None
+
+
+def collect(runs_dir: Path = _RUNS) -> dict:
+    """Scan runs/*/aggregate.json -> {run_name: {method,regime,dataset,n_classes,acc,kappa,ece}}."""
+    out: dict[str, dict] = {}
+    for agg_path in sorted(runs_dir.glob("*/aggregate.json")):
+        name = agg_path.parent.name
+        agg = json.loads(agg_path.read_text())
+        m = _metrics(agg)
+        if m is None:
+            continue
+        method, regime, dataset = _split_name(name)
+        out[name] = {
+            "method": agg.get("method", method),
+            "regime": agg.get("regime", regime),
+            "dataset": dataset,
+            "n_classes": agg.get("n_classes"),
+            **{k: (round(v, 4) if isinstance(v, (int, float)) else v) for k, v in m.items()},
+        }
+    return out
+
+
+def write(out_path: Path = _OUT, runs_dir: Path = _RUNS) -> Path:
+    runs = collect(runs_dir)
+    payload = {
+        "_note": "Committed snapshot of local run aggregates. Do not hand-edit — regenerate with "
+                 "`python -m neuroscan.evaluation.results`, then `sync_numbers` to update the README.",
+        "runs": runs,
+    }
+    out_path.write_text(json.dumps(payload, indent=2) + "\n")
+    return out_path
+
+
+if __name__ == "__main__":
+    p = write()
+    n = len(json.loads(p.read_text())["runs"])
+    print(f"wrote {p.relative_to(_ROOT)} — {n} run(s)")

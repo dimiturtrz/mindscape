@@ -35,9 +35,9 @@ generalization number from an inflated one.
 
 | regime | accuracy | kappa | ECE |
 |---|---|---|---|
-| within-subject | **0.598** | 0.463 | 0.139 |
-| **cross-subject (leave-one-subject-out)** | **0.382** | 0.176 | 0.135 |
-| **gap** | **−0.216** | −0.287 | |
+| within-subject | **<!--r:csp_lda_within_bnci2014_001.acc-->0.598<!--/r-->** | <!--r:csp_lda_within_bnci2014_001.kappa-->0.464<!--/r--> | <!--r:csp_lda_within_bnci2014_001.ece-->0.140<!--/r--> |
+| **cross-subject (leave-one-subject-out)** | **<!--r:csp_lda_cross_subject_bnci2014_001.acc-->0.382<!--/r-->** | <!--r:csp_lda_cross_subject_bnci2014_001.kappa-->0.176<!--/r--> | <!--r:csp_lda_cross_subject_bnci2014_001.ece-->0.135<!--/r--> |
+| **gap** | **<!--r:csp_lda_cross_subject_bnci2014_001.acc-csp_lda_within_bnci2014_001.acc-->−0.215<!--/r-->** | <!--r:csp_lda_cross_subject_bnci2014_001.kappa-csp_lda_within_bnci2014_001.kappa-->−0.287<!--/r--> | |
 
 The mean understates it: per subject, cross-subject accuracy spans **0.24–0.54**, and three subjects land
 **at or below chance** on a person they never saw. A "working" motor-imagery BCI is near-useless on
@@ -57,10 +57,10 @@ whitening), target included and **unsupervised**. We implemented it ([`neuroscan
 
 | method (leave-one-subject-out) | cross-subject acc |
 |---|---|
-| CSP+LDA | 0.382 |
-| Riemann (tangent space) | 0.357 |
-| Riemann ACM (time-delay cov) | 0.351 |
-| **Riemann + re-centering** | **0.496** |
+| CSP+LDA | <!--r:csp_lda_cross_subject_bnci2014_001.acc-->0.382<!--/r--> |
+| Riemann (tangent space) | <!--r:riemann_cross_subject_bnci2014_001.acc-->0.357<!--/r--> |
+| Riemann ACM (time-delay cov) | <!--r:riemann_acm_cross_subject_bnci2014_001.acc-->0.351<!--/r--> |
+| **Riemann + re-centering** | **<!--r:riemann_recenter_ts_bnci2014_001.acc-->0.496<!--/r-->** |
 
 **+0.139** over plain tangent space — the displacement *was* the gap. And it's the *location*, not the
 features: ACM (richer time-delay covariances) scores 0.351 alone and **0.470 even with re-centering** —
@@ -79,8 +79,8 @@ single-thread — `python -m neuroscan.models.profile`):
 
 | model | role | params | FLOPs | CPU latency | within-subj acc | kappa |
 |---|---|---|---|---|---|---|
-| CSP+LDA | baseline | — | — | — | 0.598 | 0.463 |
-| **Riemann (tangent space + LR)** | baseline | — | — | — | **0.706** | **0.609** |
+| CSP+LDA | baseline | — | — | — | <!--r:csp_lda_within_bnci2014_001.acc-->0.598<!--/r--> | <!--r:csp_lda_within_bnci2014_001.kappa-->0.464<!--/r--> |
+| **Riemann (tangent space + LR)** | baseline | — | — | — | **<!--r:riemann_within_bnci2014_001.acc-->0.706<!--/r-->** | **<!--r:riemann_within_bnci2014_001.kappa-->0.609<!--/r-->** |
 | **EEGNet** | compact CNN | **3.7K** | 13.7M | 1.5 ms | 0.606 | 0.475 |
 | **ATCNet** | attention + TCN | 114K | **2.8M** | 4.2 ms | 0.619 | 0.492 |
 | EEGConformer | transformer | 871K | 72M | 4.2 ms | — | — |
@@ -116,7 +116,7 @@ different task, chance, and generalization regime than the EEG motor imagery abo
 
 | method | cross-subject (LOSO) | within (session-2 holdout) |
 |---|---|---|
-| **mean+slope+peak → LDA** | **0.442** (κ 0.16) | **0.415** (κ 0.12) |
+| **mean+slope+peak → LDA** | **<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.442<!--/r-->** (κ 0.16) | **0.415** (κ 0.12) |
 
 The result is the **method–signal match**, not the accuracy:
 - **Covariance methods don't apply** — not shown as benchmarks, because they're a categorical mismatch. CSP
