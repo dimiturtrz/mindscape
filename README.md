@@ -16,12 +16,13 @@ transfer — the gap measured *and* closed) is done; **Stage 2** (fNIRS, a secon
 method-dependent tail (our nets are already edge-tiny). Full plan → **[docs/PLAN.md](docs/PLAN.md)**.
 
 ## See the signal the decoder reads — [neuroviz](neuroviz/)
-![neuroviz — mu/beta ERD animated over a motor-imagery trial; the contralateral motor cortex desynchronizes, the C3↔C4 hot spot flipping by imagined hand](neuroviz/docs/media/demo.gif)
+![neuroviz — fNIRS n-back workload: the HbO hemodynamic response animating over prefrontal cortex, HbO/HbR waveforms, and the decoder's ground-truth-vs-prediction readout](neuroviz/docs/media/demo.gif)
 
-Imagining one hand **desynchronizes the opposite motor cortex** (mu/beta power drop over C3↔C4) — the
-motor-imagery signature, animated over the trial. The viewer (dependency-free 2D topomaps + CSP spatial
-patterns + C3/Cz/C4 waveforms) shows the signal the decoder consumes, the way the field actually looks at
-it. → **[neuroviz/](neuroviz/)**
+One dependency-free viewer for **both modalities** (EEG motor imagery · fNIRS mental workload). Shown: the
+fNIRS **hemodynamic response** — prefrontal HbO rising and peaking over the n-back trial — with **HbO/HbR
+waveforms** and the decoder's **ground truth vs prediction + cross-subject score**. Switch to EEG for mu/beta
+ERD topomaps + CSP/Riemann patterns. The picture shows the signal each decoder consumes *and whether it got
+it right*. → **[neuroviz/](neuroviz/)**
 
 ## The contribution — the generalization gap, measured
 The science layer is **signal → preprocess → decode → evaluate**, and the *evaluation regime* is the
