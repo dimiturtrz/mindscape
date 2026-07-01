@@ -37,5 +37,11 @@ def _shin2017_nback():
     return adapter("nback")
 
 
-register("bnci2014_001", _bnci2014_001)     # EEG motor imagery
-register("shin2017_nback", _shin2017_nback)  # fNIRS n-back workload
+def _shin2017_nback_eeg():
+    from core.data.eeg.shin2017_nback_eeg import adapter
+    return adapter()
+
+
+register("bnci2014_001", _bnci2014_001)          # EEG motor imagery
+register("shin2017_nback", _shin2017_nback)       # fNIRS n-back workload
+register("shin2017_nback_eeg", _shin2017_nback_eeg)  # EEG n-back workload (same task as fNIRS -> Table B)

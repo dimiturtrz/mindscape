@@ -53,6 +53,20 @@ def leave_one_subject_out(meta: pl.DataFrame):
         yield sub, train, val, test
 
 
+def grouped_kfold(meta: pl.DataFrame, k: int = 5):
+    """Yield (fold_name, train, val, test) for k-fold cross-SUBJECT CV — subjects partitioned into k
+    test groups, each subject tested exactly once. This is the BenchNIRS 'generalised' protocol
+    (sklearn GroupKFold); LOSO is the k = n_subjects limit. Fewer, larger test folds than LOSO (so each
+    trains on ~(k-1)/k of subjects, vs LOSO's n-1). test = a group of subjects; val = carve of the rest."""
+    from sklearn.model_selection import GroupKFold
+
+    subs = sorted(meta["subject"].unique().to_list())
+    gkf = GroupKFold(n_splits=k)
+    for i, (_tr, te) in enumerate(gkf.split(list(range(len(subs))), groups=subs)):
+        train, val, test = make_split(meta, test_subjects=[subs[j] for j in te])
+        yield f"fold{i}", train, val, test
+
+
 def within_subject(meta: pl.DataFrame, subject: str, test_sessions=(), val_frac: float = 0.2,
                    seed: int = 0) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     """One subject in isolation. If the dataset has distinct train/eval sessions, pass the eval

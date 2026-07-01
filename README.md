@@ -106,26 +106,52 @@ Three honest findings fall out:
 **Published ceilings** (cited, not chased): FBCSP 0.65 · EEGNet 0.70 · ShallowConvNet 0.74 · ATCNet 0.81 ·
 transformer SOTA 0.88; cross-subject SOTA 0.74.
 
-## Second modality — fNIRS mental-workload (Shin n-back)
-A different signal **and** a different task: **hemodynamic** fNIRS (ΔHbO/ΔHbR, 10 Hz) decoding **mental
-workload** — which n-back load level (0/2/3-back) a subject holds in working memory. Same harness, new
-modality — the eval spine is modality-agnostic; only the adapter + decoder change.
+## Second modality — n-back mental workload, EEG **vs** fNIRS on the *same* task (Shin)
+Decode **mental workload** — which n-back load (0/2/3-back) a subject holds in working memory — from the
+Shin hybrid set, where EEG and fNIRS were recorded **simultaneously**. So both modalities decode *one
+identical task*, and any difference below is the **modality, not the task** — the clean comparison the
+motor-imagery EEG couldn't give (different task, different chance). Same harness; only the adapter + decoder
+change.
 
-**fNIRS n-back workload** (Shin · 26 subjects · 3-class · **chance 0.333** — a separate table by design;
-different task, chance, and generalization regime than the EEG motor imagery above):
+**n-back workload** (Shin · 26 subjects · 3-class · **chance 0.333**):
 
-| method | cross-subject (LOSO) | within (session-2 holdout) |
+| modality · method | cross-subject (LOSO) | within (held-out block-series) |
 |---|---|---|
-| **mean+slope+peak → LDA** | **<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.442<!--/r-->** (κ 0.16) | **0.415** (κ 0.12) |
+| **fNIRS · mean+slope+peak → LDA** | **<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.442<!--/r-->** (κ 0.16) | **0.415** (κ 0.12) |
+| EEG · CSP + LDA | <!--r:csp_lda_cross_subject_shin2017_nback_eeg.acc-->0.410<!--/r--> (κ 0.12) | <!--r:csp_lda_within_shin2017_nback_eeg.acc-->0.568<!--/r--> (κ 0.35) |
+| EEG · Riemann (tangent space) | <!--r:riemann_cross_subject_shin2017_nback_eeg.acc-->0.424<!--/r--> (κ 0.14) | <!--r:riemann_within_shin2017_nback_eeg.acc-->0.538<!--/r--> (κ 0.31) |
 
-The result is the **method–signal match**, not the accuracy:
-- **Covariance methods don't apply** — not shown as benchmarks, because they're a categorical mismatch. CSP
-  and Riemannian decoders (the EEG winners) sit at chance on fNIRS: they read the *covariance*, but the
-  workload signal is the **mean HbO amplitude**, which covariance discards by centering. The right features
-  are amplitude-based (mean, slope, peak of the hemodynamic response) → LDA, the fNIRS-BCI workhorse.
-- **Opposite generalization to EEG.** Here cross-subject (0.442) ≈ within (0.415): the prefrontal workload
-  response is more stereotyped across people than motor imagery, and per-subject data is tiny, so pooling
-  subjects *helps*. In EEG, within ≫ cross. Two modalities, opposite behaviour.
+_On the "within" column — read it as a **soft** ceiling._ The Shin n-back is **one ~33-min continuous
+recording** per subject, split into 3 block-series (9 blocks each); "within" holds out the last series, so
+train and test are the *same recording* minutes apart — a temporal-generalization test, **not** a separate
+session like the BCI-2a two-day protocol. So the within numbers (EEG 0.57 especially) are a lenient ceiling;
+the EEG within≫cross gap is directionally real but partly flattered by that temporal proximity.
+
+**Anchored to the field's honest benchmark — the numbers are modest by design.** [BenchNIRS](https://doi.org/10.3389/fnrgo.2023.994969)
+(Benerradi 2023) is the rigorous fNIRS-ML benchmark whose whole point is that *proper* cross-subject
+evaluation gives near-chance results — exposing that many published fNIRS accuracies are inflated by
+improper (within-session / personalised) validation. On this exact Shin n-back it reports LDA **0.389**
+(3-class). We reproduced its pipeline on our data (**0.392**;
+[`repro_benchnirs`](neuroscan/experiments/repro_benchnirs.py)), then ran our `fnirs_lda` under its *matched*
+5-fold GroupKFold protocol: **0.429** — a *modest* **+3.7 pp** from keeping full spatial resolution +
+shrinkage-LDA (both still sit only ~6–10 pp above the 0.333 floor; this is a hard task, not a leap). The
+LOSO 0.442 is ~1 pp higher again, from training on more subjects. So: honest, reproducible, marginally
+above the rigorous benchmark — *not* the 70–90% improper validation produces.
+
+Two findings from the same-task design:
+- **Method–signal match is modality-specific.** On EEG, covariance methods **work** — CSP/Riemann read the
+  workload's band-power (frontal theta / parietal alpha) covariance, above chance. On fNIRS, *naive
+  raw-signal* covariance sits at chance (our covariance-mismatch run): the workload is the **mean HbO
+  amplitude**, which raw covariance centers away, so amplitude features (mean/slope/peak) → LDA is the right
+  tool here. (Not a categorical law — Riemannian-*done-right* decodes fNIRS *motor imagery* within-subject,
+  Näher 2025; it's just unproven for workload / cross-subject. See [`research/`](research/deep_dives/2026-07-01_fnirs_decoding_sota.md).)
+- **Modest signal — read within-vs-cross carefully.** EEG within (0.54–0.57) clearly exceeds cross
+  (0.41–0.43): real subject-specific spatial structure. fNIRS sits ~0.42 *both*, only ~9 pp above chance —
+  weak either way, so the within≈cross similarity is as much "little signal to lose" as any stereotypy, and
+  the tiny per-subject test sets (9 epochs) make the ordering noisy. The honest read: **fNIRS workload barely
+  transfers cross-subject** (exactly what BenchNIRS found), and we reproduce that. Whether the weak fNIRS
+  signal nonetheless *adds* to EEG is the **fusion question** (Stage 3) — complementarity is the motivation,
+  not yet a result.
 - **The field's transfer trick didn't help here.** Per-subject z-scoring (the standard fNIRS cross-subject
   fix) gave no gain — a slight drop (0.442 → 0.420) on this single run — most likely because our per-epoch
   baseline-correction already removes the offset it targets. (One run, not a claim that z-scoring is useless.)
