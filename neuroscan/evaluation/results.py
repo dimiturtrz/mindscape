@@ -50,8 +50,11 @@ def _split_name(name: str) -> tuple[str, str, str]:
     return stem, "", dataset
 
 
-def _metrics(agg: dict) -> dict | None:
-    """Pull (acc, kappa, ece) from either aggregate schema. None if neither present."""
+def read_metrics(agg: dict) -> dict | None:
+    """Pull (acc, kappa, ece) from either aggregate schema. None if neither present.
+
+    The one place that knows both run-aggregate shapes; reused by tracking.backfill so the schema
+    knowledge isn't duplicated."""
     fm = agg.get("fold_mean")
     if isinstance(fm, dict) and "acc" in fm:
         return {"acc": fm.get("acc"), "kappa": fm.get("kappa"), "ece": fm.get("ece")}
@@ -62,7 +65,7 @@ def _metrics(agg: dict) -> dict | None:
 
 def _row(name: str, agg: dict) -> dict | None:
     """Normalize one aggregate.json -> a snapshot row, or None if it has no usable metrics."""
-    m = _metrics(agg)
+    m = read_metrics(agg)
     if m is None:
         return None
     method, regime, dataset = _split_name(name)

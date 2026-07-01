@@ -35,9 +35,9 @@ def test_split_name_regime_and_dataset():
 
 
 def test_metrics_handles_both_schemas():
-    assert results._metrics(_harness(ACC, KAPPA, ECE)) == {"acc": ACC, "kappa": KAPPA, "ece": ECE}
-    assert results._metrics({"acc_mean": ACC, "kappa_mean": KAPPA}) == {"acc": ACC, "kappa": KAPPA, "ece": None}
-    assert results._metrics({"nothing": 1}) is None
+    assert results.read_metrics(_harness(ACC, KAPPA, ECE)) == {"acc": ACC, "kappa": KAPPA, "ece": ECE}
+    assert results.read_metrics({"acc_mean": ACC, "kappa_mean": KAPPA}) == {"acc": ACC, "kappa": KAPPA, "ece": None}
+    assert results.read_metrics({"nothing": 1}) is None
 
 
 def test_collect_rounds_to_precision(tmp_path):
