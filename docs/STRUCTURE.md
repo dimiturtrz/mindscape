@@ -21,7 +21,7 @@ baselines/       the quarantine ceiling — standard reported methods (CSP+LDA, 
 | `core/data/eeg/base.py` | the canonical schema + `DatasetAdapter` protocol + a reusable MOABB motor-imagery adapter |
 | `core/data/eeg/registry.py` | name → adapter; "add a dataset = one file + one line" |
 | `core/data/eeg/braindecode_pre.py` | the braindecode-canonical preprocessing path (continuous-signal EMS → windows) for faithful reproductions |
-| `core/export_onnx.py` | ONNX export + INT8 quant + a **parity gate** (Stage 2 deploy is first-class, not bolted on) |
+| `core/export_onnx.py` | ONNX export + INT8 quant + a **parity gate** (optional edge-deploy tail, first-class not bolted on) |
 | `core/reference.py` + `reference.yaml` | published SOTA ceilings as cited config, surfaced next to every result |
 
 ### `neuroscan/` — the science / contribution layer
@@ -36,7 +36,7 @@ baselines/       the quarantine ceiling — standard reported methods (CSP+LDA, 
 | `models/transforms.py` | standardizers (z-score / EMS / identity) + sliding-window crops, independently testable |
 | `models/__init__.py` | `get_method(name)` — one registry unifying the CSP / Riemann baselines and the nets |
 | `tracking.py` | guarded local-sqlite MLflow (no-op if absent); `save_model` persists trained models (torch `.pt` / sklearn `.joblib`) to `runs/<name>/models/` + as an artifact |
-| `experiments/` | thin CLIs: `run` (decode under a regime), `align` (cross-subject Riemannian re-centering), `quantize` (Stage 2), `reproduce_atcnet` (faithful reproduction) |
+| `experiments/` | thin CLIs: `run` (decode under a regime), `align` (cross-subject Riemannian re-centering), `quantize` (optional edge deploy), `reproduce_atcnet` (faithful reproduction) |
 
 ### `baselines/` and the rest
 - `baselines/csp_lda.py` — CSP + LDA, the standard motor-imagery reference, isolated from the decoders under test.

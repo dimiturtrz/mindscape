@@ -10,9 +10,10 @@ tiny and export to ONNX at millisecond-scale CPU latency.
 
 It's also how **I'm** ramping into neural decoding: built on public data, the signal-processing /
 time-series / calibration / edge-inference discipline carried from prior ML work, the **neuroscience and
-the decoding methods learned as I go.** Status: **Stage 0** (a reproduced decode + a verified eval
-harness) is done; Stage 1 (toward communication / semantic decoding) and Stage 2 (efficient on-device)
-build on it. Full plan → **[docs/PLAN.md](docs/PLAN.md)**.
+the decoding methods learned as I go.** Status: **Stage 1** (EEG decode + honest eval + cross-subject
+transfer — the gap measured *and* closed) is done; **Stage 2** (fNIRS, a second modality — parallel) and
+**Stage 3** (hybrid fusion + harder semantic decoding) build on it. Efficient edge deploy is an optional,
+method-dependent tail (our nets are already edge-tiny). Full plan → **[docs/PLAN.md](docs/PLAN.md)**.
 
 ## See the signal the decoder reads — [neuroviz](neuroviz/)
 ![neuroviz — mu/beta ERD animated over a motor-imagery trial; the contralateral motor cortex desynchronizes, the C3↔C4 hot spot flipping by imagined hand](neuroviz/docs/media/demo.gif)
@@ -91,8 +92,8 @@ Three honest findings fall out:
   manifold **re-centering** that closes that gap is the next step, not implemented yet.
 - **Tiny doesn't cost accuracy here.** The 3.7K-parameter EEGNet is within noise of the 30×-larger
   ATCNet (0.606 vs 0.619) on the same protocol — the edge-deployable model gives up essentially nothing.
-- **Already edge-sized.** These nets are ~26 KB as ONNX with sub-ms inference; the Stage-2 tail exports
-  with a **parity gate** (fp32 ONNX must match torch < 1e-3) and benchmarks INT8 — which *adds* overhead
+- **Already edge-sized.** These nets are ~26 KB as ONNX with sub-ms inference; the optional edge-deploy tail
+  exports with a **parity gate** (fp32 ONNX must match torch < 1e-3) and benchmarks INT8 — which *adds* overhead
   at this scale rather than saving. The deploy story isn't "shrink it," it's "already small, measured."
   ([`core/export_onnx.py`](core/export_onnx.py), [`neuroscan/experiments/quantize.py`](neuroscan/experiments/quantize.py))
 
