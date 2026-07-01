@@ -29,12 +29,11 @@ const LAYOUT = {
   minFrameMs: 20,         // floor so the fast EEG animation doesn't blur
 };
 
-// per-frame interval from the REAL signal duration, so playback speed tracks input length
-// (EEG's ~4.5 s epoch animates ~5× faster than fNIRS's ~22 s window — synchronized to the data).
+// ideal ms per frame from the REAL signal duration / speed (NO floor — the floor is handled by advancing
+// multiple frames per tick, so high speeds keep scaling instead of clamping).
 function frameIntervalMs(){
   const ft=state.data.frame_times, n=ft.length;
-  const realDt=(ft[n-1]-ft[0])/(n-1);   // seconds per frame in the actual recording
-  return Math.max(LAYOUT.minFrameMs, realDt*1000/state.speed);
+  return (ft[n-1]-ft[0])/(n-1)*1000/state.speed;   // seconds/frame * 1000 / speed
 }
 
 // diverging colormap (RdBu_r): t in [0,1] -> [r,g,b]
@@ -172,7 +171,11 @@ let timer=null;
 function play(on){
   state.playing=on; $("play").textContent=on?"❚❚":"▶";
   if(timer){clearInterval(timer);timer=null;}
-  if(on) timer=setInterval(()=>{ state.frame=(state.frame+1)%nFrames(); render(); }, frameIntervalMs());
+  if(on){
+    const ideal=frameIntervalMs();
+    const step=Math.max(1, Math.ceil(LAYOUT.minFrameMs/ideal));   // sub-floor interval -> skip frames instead of clamping
+    timer=setInterval(()=>{ state.frame=(state.frame+step)%nFrames(); render(); }, ideal*step);
+  }
 }
 
 // TWO separate axes: `view` = the SIGNAL being looked at (the raw response — mu/beta or the HbO response);
