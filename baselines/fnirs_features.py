@@ -58,7 +58,7 @@ class FnirsLda(Baseline):
         self.pipe_.fit(_features(X), y)
         return self
 
-    def score(self, X):
+    def predict_proba(self, X):
         return self.pipe_.predict_proba(_features(X))
 
 
@@ -68,4 +68,4 @@ def fit(X: np.ndarray, y: np.ndarray) -> Baseline:
 
 
 def score(clf: Baseline, X: np.ndarray) -> np.ndarray:
-    return clf.score(X)
+    return clf.predict_proba(X)

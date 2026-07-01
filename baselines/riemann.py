@@ -66,7 +66,7 @@ class _RiemannBaseline(Baseline):
         self.pipe_.fit(np.asarray(X, dtype=np.float64), y)
         return self
 
-    def score(self, X):
+    def predict_proba(self, X):
         return self.pipe_.predict_proba(np.asarray(X, dtype=np.float64))
 
 
@@ -129,5 +129,5 @@ def fit(X: np.ndarray, y: np.ndarray, method: str = "ts", estimator: str = "oas"
 
 
 def score(clf: Baseline, X: np.ndarray) -> np.ndarray:
-    """Back-compat shim — the fitted object scores itself."""
-    return clf.score(X)
+    """Back-compat shim — the fitted object returns its own probabilities."""
+    return clf.predict_proba(X)
