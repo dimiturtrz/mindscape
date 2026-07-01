@@ -162,8 +162,15 @@ function renderResult(){
     `<span class="rmut">  ·  ${head}</span>`;
 }
 
+function fitTopo(){                               // square canvas filling its flex box (leftover panel height)
+  const cv=$("topo"), box=cv.parentElement;
+  const s=Math.max(1, Math.floor(Math.min(box.clientWidth, box.clientHeight)));
+  if(cv.width!==s){ cv.width=s; cv.height=s; }
+  cv.style.width=s+"px"; cv.style.height=s+"px";
+}
+
 function render(){
-  fitCanvas($("topo")); fitCanvas($("waves"));   // CSS lays both out; sync each pixel buffer to its size
+  fitTopo(); fitCanvas($("waves"));
   renderTopo(); renderWaves(); renderResult();
   $("scrub").value=state.frame;
   $("tlabel").textContent=`${state.data.frame_times[state.frame].toFixed(1)} s`;
