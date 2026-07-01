@@ -24,7 +24,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="shin2017_nback")
     ap.add_argument("--method", default="fnirs_lda", choices=models.method_names())
-    ap.add_argument("--regime", default="cross_subject", choices=["within", "cross_subject"])
+    ap.add_argument("--regime", default="cross_subject", choices=["within", "cross_subject", "cross_subject_kfold"])
     ap.add_argument("--test-session", default="2", help="within-subject: session held out as test")
     ap.add_argument("--l-freq", type=float, default=0.01)
     ap.add_argument("--h-freq", type=float, default=0.2)

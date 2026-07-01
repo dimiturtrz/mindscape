@@ -30,8 +30,11 @@ def folds_for(meta, regime: str, test_sessions=()):
     elif regime == "cross_subject":
         for s, tr, _val, te in splits.leave_one_subject_out(meta):
             out.append((s, tr, te))
+    elif regime == "cross_subject_kfold":
+        for name, tr, _val, te in splits.grouped_kfold(meta, k=5):
+            out.append((name, tr, te))
     else:
-        raise ValueError(f"unknown regime {regime!r} (want 'within' or 'cross_subject')")
+        raise ValueError(f"unknown regime {regime!r} (want within / cross_subject / cross_subject_kfold)")
     return out
 
 

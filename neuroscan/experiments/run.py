@@ -30,7 +30,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="bnci2014_001")
     ap.add_argument("--method", default="csp_lda", choices=models.method_names())
-    ap.add_argument("--regime", default="within", choices=["within", "cross_subject"])
+    ap.add_argument("--regime", default="within", choices=["within", "cross_subject", "cross_subject_kfold"])
     ap.add_argument("--test-session", default=None,
                     help="within-subject: hold out this session as test (the standard 2a protocol)")
     ap.add_argument("--resample", type=float, default=128.0,

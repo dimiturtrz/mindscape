@@ -55,6 +55,15 @@
       "kappa": 0.3526,
       "ece": 0.373
     },
+    "fnirs_lda_cross_subject_kfold_shin2017_nback": {
+      "method": "fnirs_lda",
+      "regime": "cross_subject_kfold",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.4291,
+      "kappa": 0.1437,
+      "ece": 0.251
+    },
     "fnirs_lda_cross_subject_shin2017_nback": {
       "method": "fnirs_lda",
       "regime": "cross_subject",
