@@ -1,7 +1,7 @@
 """Decoder method registry — one place that maps a method name to its (fit_fn, score_fn) pair.
 
 Unifies the handcrafted baseline (CSP+LDA, plain functions) and the braindecode decoders (built via
-decoders.make) behind one lookup, so entrypoints (experiments/run, calibrate, quantize) don't each
+decoders.make) behind one lookup, so entrypoints (tasks (run, workload/*, motor_imagery/*)) don't each
 re-implement the csp-vs-net branch. The harness contract is the same for all: `fit(X,y)->clf`,
 `score(clf,X)->probs[n,C]`.
 """

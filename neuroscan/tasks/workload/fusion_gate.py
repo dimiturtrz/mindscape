@@ -18,7 +18,7 @@ the learned output-mixing gate captures none of the oracle headroom either — c
 finding that the per-trial reliability signal is not in the probabilities. The real transfer lever the
 investigation surfaced is the per-subject normalization (see mindscape-lpv follow-up), not the fusion.
 
-    python -m neuroscan.experiments.fusion_gate --no-record   # 5-fold GroupKFold (negative result; not recorded)
+    python -m neuroscan.tasks.workload.fusion_gate --no-record   # 5-fold GroupKFold (negative result; not recorded)
 """
 from __future__ import annotations
 

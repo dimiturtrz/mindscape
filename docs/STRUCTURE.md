@@ -103,7 +103,7 @@ _Diagrams are kept coarse (layer + contract) on purpose — they map to folders 
 | `models/transforms.py` | standardizers (z-score / EMS / identity) + sliding-window crops, independently testable |
 | `models/__init__.py` | `get_method(name)` — one registry over the `core.decoder.Decoder` contract: baselines and nets share a single `predict_proba` scorer; only the builder differs (a fresh baseline object, or `decoders.make` for a net) |
 | `tracking.py` | guarded local-sqlite MLflow (no-op if absent); `save_model` persists trained models (torch `.pt` / sklearn `.joblib`) to `runs/<name>/models/` + as an artifact |
-| `experiments/` | thin CLIs: `run` (EEG decode under a regime), `run_fnirs` (fNIRS workload decode), `align` (cross-subject Riemannian re-centering), `quantize` (optional edge deploy), `reproduce_atcnet` (faithful reproduction) |
+| `tasks/` | thin CLIs organized **by decoding task**. Root: `run` (generic EEG decode under a regime — serves both tasks via `--dataset`), `reproduce_all` (regenerate the canonical numbers). `tasks/motor_imagery/`: `align` (cross-subject Riemannian re-centering), `reproduce_atcnet` (faithful reproduction), `quantize` (optional edge deploy). `tasks/workload/`: `run_fnirs` (fNIRS decode), `run_fusion` (EEG+fNIRS fusion + complementarity/aggregation sweep), `fusion_gate` (compact learned gate — honest negative), `repro_benchnirs` (BenchNIRS anchor) |
 
 ### `baselines/` and the rest
 Method **objects**, not loose functions: each classical method is a class owning its hyperparameters

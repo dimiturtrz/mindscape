@@ -11,7 +11,7 @@ Two fusion levels, both kept dumb (tiny data → no room for a learned fusion mo
 
 Reported under the matched 5-fold GroupKFold (benchmark-comparable), alongside the unimodal baselines.
 
-    python -m neuroscan.experiments.run_fusion --regime cross_subject_kfold
+    python -m neuroscan.tasks.workload.run_fusion --regime cross_subject_kfold
 """
 from __future__ import annotations
 

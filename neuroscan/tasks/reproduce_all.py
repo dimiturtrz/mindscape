@@ -2,8 +2,8 @@
 the heavy stack once) with parallel folds. Use after a protocol/harness change so every committed number
 is refreshed consistently, instead of firing off N cold `uv run` processes.
 
-    python -m neuroscan.experiments.reproduce_all              # all canonical runs
-    python -m neuroscan.experiments.reproduce_all --cross-only # just the cross-subject set
+    python -m neuroscan.tasks.reproduce_all              # all canonical runs
+    python -m neuroscan.tasks.reproduce_all --cross-only # just the cross-subject set
 
 Recentering (the transfer fix) has its own parallel entrypoint — run `align` / `align --augment` after.
 """

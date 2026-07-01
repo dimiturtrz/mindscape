@@ -24,7 +24,7 @@ waveforms** and the decoder's **ground truth vs prediction + cross-subject score
 ERD topomaps + CSP/Riemann patterns. The picture shows the signal each decoder consumes *and whether it got
 it right*. → **[neuroviz/](neuroviz/)**
 
-## Experiment 1 · Motor imagery (EEG only) — the generalization gap, measured
+## Task · Motor imagery (BCI-2a, EEG) — the generalization gap, measured
 The science layer is **signal → preprocess → decode → evaluate**, and the *evaluation regime* is the
 point. Every decoder is one `(fit_fn, score_fn)` pair fed through a single harness; the **regime** —
 within-subject, cross-subject (leave-one-subject-out), cross-session — is a **criteria filter over the
@@ -53,7 +53,7 @@ subject's covariance cloud sits at a different location on the SPD manifold, so 
 others misses them — not because the ERD contrast differs, but because the cloud is *displaced*. The
 field's fix is **Riemannian re-centering** (Zanini et al. 2018): congruence-transport every subject's
 covariances to the identity by their own Riemannian mean (`C → M⁻¹ᐟ² C M⁻¹ᐟ²` — the manifold version of
-whitening), target included and **unsupervised**. We implemented it ([`neuroscan/experiments/align.py`](neuroscan/experiments/align.py)):
+whitening), target included and **unsupervised**. We implemented it ([`neuroscan/tasks/motor_imagery/align.py`](neuroscan/tasks/motor_imagery/align.py)):
 
 | method (leave-one-subject-out) | cross-subject acc |
 |---|---|
@@ -101,12 +101,12 @@ Three honest findings fall out:
 - **Already edge-sized.** These nets are ~26 KB as ONNX with sub-ms inference; the optional edge-deploy tail
   exports with a **parity gate** (fp32 ONNX must match torch < 1e-3) and benchmarks INT8 — which *adds* overhead
   at this scale rather than saving. The deploy story isn't "shrink it," it's "already small, measured."
-  ([`core/export_onnx.py`](core/export_onnx.py), [`neuroscan/experiments/quantize.py`](neuroscan/experiments/quantize.py))
+  ([`core/export_onnx.py`](core/export_onnx.py), [`neuroscan/tasks/motor_imagery/quantize.py`](neuroscan/tasks/motor_imagery/quantize.py))
 
 **Published ceilings** (cited, not chased): FBCSP 0.65 · EEGNet 0.70 · ShallowConvNet 0.74 · ATCNet 0.81 ·
 transformer SOTA 0.88; cross-subject SOTA 0.74.
 
-## Experiment 2 · n-back workload (EEG · fNIRS · fusion) on the *same* task (Shin)
+## Task · Mental workload / n-back (Shin) — one task, three approaches: EEG · fNIRS · fusion
 Decode **mental workload** — which n-back load (0/2/3-back) a subject holds in working memory — from the
 Shin hybrid set, where EEG and fNIRS were recorded **simultaneously**. So both modalities decode *one
 identical task*, and any difference below is the **modality, not the task** — the clean comparison the
@@ -132,7 +132,7 @@ the EEG within≫cross gap is directionally real but partly flattered by that te
 evaluation gives near-chance results — exposing that many published fNIRS accuracies are inflated by
 improper (within-session / personalised) validation. On this exact Shin n-back it reports LDA **0.389**
 (3-class). We reproduced its pipeline on our data (**0.392**;
-[`repro_benchnirs`](neuroscan/experiments/repro_benchnirs.py)), then ran our `fnirs_lda` under its *matched*
+[`repro_benchnirs`](neuroscan/tasks/workload/repro_benchnirs.py)), then ran our `fnirs_lda` under its *matched*
 5-fold GroupKFold protocol: **<!--r:fnirs_lda_cross_subject_kfold_shin2017_nback.acc-->0.474<!--/r-->**
 (**+8.2 pp** over that anchor), and LOSO **<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.454<!--/r-->**
 (**+6.2 pp**). That margin is wider than the *modest* gap an earlier run showed (0.429) — the difference is
@@ -237,7 +237,7 @@ input-level gate (per-modality encoders + a per-trial mixing gate, nested GroupK
 z-scored-EEG-alone (0.581), capturing none of the (now larger, 0.766) oracle headroom. The learned gate fails
 for the same reason every output-space combiner did. Full audit + citations:
 [`research/`](research/deep_dives/2026-07-01_eeg_fnirs_fusion_sota.md); calibration + gate in
-[`experiments/fusion_gate.py`](neuroscan/experiments/fusion_gate.py).
+[`tasks/workload/fusion_gate.py`](neuroscan/tasks/workload/fusion_gate.py).
 
 ## Honest limits (measured, not assumed)
 Competent on a public benchmark, **not** a finished system:
@@ -263,14 +263,14 @@ Downloads land under `<root>/raw/`; the epoch cache under `<root>/processed/` (c
 uv sync                                              # .venv from pyproject + uv.lock; prefix commands with `uv run`
 cp paths.example.yaml paths.yaml                     # set the one data root
 # the headline contrast — the same decoder, two regimes:
-uv run python -m neuroscan.experiments.run --method csp_lda --regime within --test-session 1test
-uv run python -m neuroscan.experiments.run --method csp_lda --regime cross_subject   # the OOD gap
+uv run python -m neuroscan.tasks.run --method csp_lda --regime within --test-session 1test
+uv run python -m neuroscan.tasks.run --method csp_lda --regime cross_subject   # the OOD gap
 # the strongest classical baseline — covariances on a Riemannian manifold:
-uv run python -m neuroscan.experiments.run --method riemann --regime within
+uv run python -m neuroscan.tasks.run --method riemann --regime within
 # the second modality — fNIRS mental-workload (amplitude features, not covariance):
-uv run python -m neuroscan.experiments.run_fnirs --method fnirs_lda --regime cross_subject
+uv run python -m neuroscan.tasks.workload.run_fnirs --method fnirs_lda --regime cross_subject
 # a deep decoder, GPU:
-uv run python -m neuroscan.experiments.run --method atcnet --regime within --resample 250 --fmin 4 --fmax 40
+uv run python -m neuroscan.tasks.run --method atcnet --regime within --resample 250 --fmin 4 --fmax 40
 # the neuroviz demo:
 uv run python -m neuroviz.export --subject 1 && python -m http.server 8000 -d neuroviz/web
 uv run pytest -q

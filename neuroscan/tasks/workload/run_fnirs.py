@@ -5,8 +5,8 @@ modality-agnostic. The right decoder differs though: covariance methods (csp_lda
 because fNIRS class info is in the HbO amplitude the covariance discards; `fnirs_lda` (mean+slope+peak ->
 LDA) is the field-standard that actually reads it.
 
-    python -m neuroscan.experiments.run_fnirs --method fnirs_lda --regime cross_subject
-    python -m neuroscan.experiments.run_fnirs --method fnirs_lda --regime within --test-session 2
+    python -m neuroscan.tasks.workload.run_fnirs --method fnirs_lda --regime cross_subject
+    python -m neuroscan.tasks.workload.run_fnirs --method fnirs_lda --regime within --test-session 2
 """
 from __future__ import annotations
 

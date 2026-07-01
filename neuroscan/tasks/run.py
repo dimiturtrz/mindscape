@@ -1,17 +1,17 @@
 """Entrypoint: decode a registered EEG dataset under a chosen regime, through the eval harness. Class count
 is read from the data (not assumed 4), so it serves motor imagery AND the 3-class EEG n-back workload.
 
-    python -m neuroscan.experiments.run --method csp_lda --regime within
-    python -m neuroscan.experiments.run --method atcnet  --regime within --resample 250
-    python -m neuroscan.experiments.run --method eegnet  --regime cross_subject
+    python -m neuroscan.tasks.run --method csp_lda --regime within
+    python -m neuroscan.tasks.run --method atcnet  --regime within --resample 250
+    python -m neuroscan.tasks.run --method eegnet  --regime cross_subject
     # EEG n-back workload (same task as the fNIRS n-back -> Table B):
-    python -m neuroscan.experiments.run --dataset shin2017_nback_eeg --method riemann \
+    python -m neuroscan.tasks.run --dataset shin2017_nback_eeg --method riemann \
         --regime cross_subject --fmin 4 --fmax 30 --tmin 0 --tmax 40 --resample 100
 
 Methods: csp_lda + riemann + riemann_acm (the classical baselines) and the braindecode decoders (eegnet,
 shallow_fbcsp, deep4, atcnet, eegconformer) — commodity → near-SOTA. The within/cross_subject contrast IS
 the headline: the gap between them is the honest out-of-distribution number. For the cross-subject *fix*
-(Riemannian re-centering), see `experiments/align.py`.
+(Riemannian re-centering), see `motor_imagery/align.py`.
 """
 from __future__ import annotations
 

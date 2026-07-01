@@ -1,6 +1,6 @@
 """Stage-2 tail: train our decoder, then quantize it for the edge and report the honest deployment triad.
 
-    python -m neuroscan.experiments.quantize --method atcnet --resample 250 --fmin 4 --fmax 40
+    python -m neuroscan.tasks.motor_imagery.quantize --method atcnet --resample 250 --fmin 4 --fmax 40
 
 Trains one within-subject model (the realistic edge artifact — a decoder calibrated to its user), exports
 the crop-sized net to ONNX, dynamically quantizes to INT8, and reports fp32-vs-int8 accuracy / size / CPU

@@ -31,7 +31,7 @@ DEFAULTS = {"n_train_crops": 16, "n_test_crops": 8, "log_every": 100, "val_frac"
 
 
 # standardizers + crops live in transforms.py (independently testable). Re-exported with the legacy
-# private names so callers (e.g. experiments/quantize.py) keep working.
+# private names so callers (e.g. tasks/motor_imagery/quantize.py) keep working.
 from neuroscan.models.transforms import crops as _crops          # noqa: E402
 from neuroscan.models.transforms import standardizer as _standardizer  # noqa: E402
 
