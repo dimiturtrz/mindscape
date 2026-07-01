@@ -53,5 +53,21 @@ The fNIRS signal is **slow, amplitude-coded, and shallow**. Every downstream cho
 
 ## Quiz log
 
-_pending — take the M5 quiz to fill this in (numbers to know cold: optical window 650–950 nm, isosbestic
-~800 nm, DPF ≈ 6, HRF peak ~5–8 s, Mayer ~0.1 Hz, separation ~3 cm → ~cortex only)._
+### 2026-07-01 — quiz M5 (domain section) · ~5/6, one skipped
+Strong mechanistic grasp; proactively added the mitochondria/aerobic-efficiency point.
+
+1. *What it measures* — ✓✓ ΔHbO/ΔHbR concentration; indirect (downstream blood) vs EEG's direct electrical.
+2. *Neurovascular coupling* — ✓ energy chain + **aerobic ≈ 20× anaerobic ATP** (correct, self-added). Missing
+   the crux: the brain **over-supplies** O₂ → **HbO net RISES** at the active site (not falls) → that's why
+   HbO↑/HbR↓ **anti-correlate**.
+3. *Why light / shallow* — ✓✓ optical window (blood low / water high), scattering ≫ absorption → reflectance
+   near source + can't go deep. Add: NIR reads oxygenation *because* HbO/HbR absorb NIR differently.
+4. *Why slow* — ✓✓ hemodynamics lag the spiking; ~5 s delay; long trials; peak then slow decay. (peak ~5–8 s).
+5. *fNIRS vs fMRI* — ⬜ skipped. Same physiology; fMRI-BOLD ∝ −HbR (paramagnetic), magnetic vs optical sensor.
+6. *Confounds* — ✓ cardiac/respiration filterable; got **Mayer ~once/10 s**. Reinforced: Mayer is worst
+   *because* ~0.1 Hz **overlaps the task/HRF band** → can't filter → needs short-separation channels.
+
+**To lock:** over-supply → net HbO rise (anti-correlation); Mayer-worst = in-band; fMRI-BOLD = HbR/paramagnetic.
+
+### maths + approaches sections — pending
+_(next: Beer–Lambert + the 2×2 chromophore solve; then classical vs DL decoders.)_
