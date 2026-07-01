@@ -175,10 +175,18 @@ make too small to read):
 | Late fusion (avg probabilities) | <!--r:fusion_cross_subject_kfold_shin2017_nback.late-->0.468<!--/r--> | **−0.006** |
 | Feature fusion (concat → LDA) | <!--r:fusion_cross_subject_kfold_shin2017_nback.feature-->0.434<!--/r--> | **−0.040** |
 
-**Neither fusion beats fNIRS alone** — late fusion ties it, feature fusion drops toward the weaker EEG. On
-~700 blocks with both modalities near the floor, there's no complementarity to exploit: fusion can't
-manufacture signal that isn't separably there. An honest, on-thesis null — the point of the experiment was to
-*measure* whether the second modality helps, not to assume it does.
+**Neither fusion beats fNIRS alone** — late fusion ties it, feature fusion drops toward the weaker EEG. These
+are the two simplest schemes; the SOTA is **cross-modal attention** (MBC-ATT, TSMMF-style bidirectional
+transformers). We don't run those, and the literature says why it wouldn't rescue this: **every published
+Shin n-back fusion number (96–98 %) is *within-subject*** — inflated exactly as BenchNIRS predicts. There is
+**no published honest cross-subject 0/2/3-back result where fusion beats both single modalities**; the one
+quantified honest EEG-fNIRS fusion LOSO drop is **−34 pts** (DC-AGIN 96.98 %→62.56 %), and on the hardest
+*real* contrast (2- vs 3-back) fusion (59 %) *loses* to fNIRS (61 %). So this null isn't a weak-method
+artifact — it's the **missing honest datapoint**: a clean subject-wise GroupKFold with per-modality + fusion
+breakdown, which the field skips. On ~700 near-floor blocks there's no separable complementarity to exploit,
+and a compact cross-attention model (the only candidate that fits n=26) is expected to *match*, not beat,
+fNIRS — its value would be a rigorous negative, not a win. Full audit + citations:
+[`research/`](research/deep_dives/2026-07-01_eeg_fnirs_fusion_sota.md).
 
 ## Honest limits (measured, not assumed)
 Competent on a public benchmark, **not** a finished system:
