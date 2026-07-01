@@ -69,14 +69,15 @@ def _erd_frames(ep, labels, fmin, fmax, n_frames=N_FRAMES, baseline_s=BASELINE_S
     t = np.arange(T) / sf
     base_mask = t < baseline_s
     edges = np.linspace(0, T, n_frames + 1).astype(int)
+    widths = np.diff(edges)                                 # samples per frame-bin (uneven; T need not divide)
     frames = {}
     for c in sorted(set(labels)):
         p = power[labels == c].mean(0)                     # [ch, t]
         base = p[:, base_mask].mean(1, keepdims=True) + 1e-20
         erd = (p - base) / base                            # ERD ratio per channel per time
-        fr = [erd[:, edges[i]:edges[i + 1]].mean(1).tolist() for i in range(n_frames)]
-        frames[str(c)] = fr
-    ftimes = [float((edges[i] + edges[i + 1]) / 2 / sf) for i in range(n_frames)]
+        binned = np.add.reduceat(erd, edges[:-1], axis=1) / widths   # [ch, n_frames] mean per bin
+        frames[str(c)] = binned.T.tolist()                 # -> [n_frames][ch]
+    ftimes = ((edges[:-1] + edges[1:]) / 2 / sf).tolist()
     return frames, ftimes
 
 

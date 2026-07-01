@@ -42,11 +42,12 @@ def _frames(X, y, chan_slice, n_frames=N_FRAMES):
     Returns ({class: [frame][ch]}, frame_times) — the hemodynamic response building over the trial."""
     T = X.shape[2]
     edges = np.linspace(0, T, n_frames + 1).astype(int)
+    widths = np.diff(edges)                                  # samples per frame-bin (uneven)
     frames = {}
     for c in sorted(set(y.tolist())):
         m = X[y == c][:, chan_slice, :].mean(0)             # [36, t] mean HbO/HbR
-        frames[CLASS_NAMES[c]] = [m[:, edges[i]:edges[i + 1]].mean(1).tolist() for i in range(n_frames)]
-    ftimes = [float((edges[i] + edges[i + 1]) / 2 / 10.0 - 2.0) for i in range(n_frames)]  # tmin=-2 s
+        frames[CLASS_NAMES[c]] = (np.add.reduceat(m, edges[:-1], axis=1) / widths).T.tolist()
+    ftimes = ((edges[:-1] + edges[1:]) / 2 / 10.0 - 2.0).tolist()   # tmin=-2 s
     return frames, ftimes
 
 
