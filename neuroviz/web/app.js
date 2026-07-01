@@ -162,8 +162,14 @@ function renderResult(){
     `<span class="rmut">  ·  ${head}</span>`;
 }
 
+function fitTopo(){                              // topomap sizes to the (now wider) left panel, square
+  const cv=$("topo"), wrap=cv.parentElement;
+  const w=Math.max(240, Math.min(Math.floor(wrap.clientWidth), 520));
+  if(cv.width!==w){ cv.width=w; cv.height=w; }
+}
+
 function render(){
-  fitCanvas($("waves"));
+  fitTopo(); fitCanvas($("waves"));
   renderTopo(); renderWaves(); renderResult();
   $("scrub").value=state.frame;
   $("tlabel").textContent=`${state.data.frame_times[state.frame].toFixed(1)} s`;

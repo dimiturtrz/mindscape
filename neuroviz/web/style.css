@@ -8,7 +8,7 @@ h1 { margin:0; font-size:clamp(18px,2.4vw,24px); letter-spacing:.5px; }
 .head-modality { align-items:flex-end; }
 .seg-lg button { height:34px; padding:0 18px; font-size:14px; }
 .seg-lg { height:34px; }
-main { display:grid; grid-template-columns:minmax(360px,420px) 1fr; gap:18px; padding:18px 24px;
+main { display:grid; grid-template-columns:minmax(440px,46%) 1fr; gap:18px; padding:18px 24px;
   height:calc(100vh - 132px); }
 @media (max-width:900px){ main{ grid-template-columns:1fr; height:auto; } }
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px;
@@ -20,12 +20,12 @@ h2 { margin:0 0 10px; font-size:14px; font-weight:600; color:var(--mut); }
 .controls { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; margin-bottom:12px; }
 label { color:var(--mut); display:flex; gap:6px; align-items:center; }
 select { background:#0e1116; color:var(--ink); border:1px solid var(--line); border-radius:7px;
-  padding:0 8px; height:30px; }
-.seg { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; height:30px; }
+  padding:0 10px; height:34px; font-size:13.5px; }
+.seg { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; height:34px; }
 .mapsel { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; }
 .mapgroup { display:flex; flex-direction:column; gap:4px; }
-.glabel { font-size:10.5px; color:var(--mut); letter-spacing:.3px; }
-.seg button { background:transparent; color:var(--mut); border:0; height:30px; padding:0 12px; box-sizing:border-box; cursor:pointer; font:inherit; }
+.glabel { font-size:11.5px; color:var(--mut); letter-spacing:.3px; }
+.seg button { background:transparent; color:var(--mut); border:0; height:34px; padding:0 14px; box-sizing:border-box; cursor:pointer; font:inherit; font-size:13.5px; }
 .seg button.on { background:var(--accent); color:#fff; }
 .topo-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; }
 canvas { background:transparent; }
@@ -33,10 +33,10 @@ canvas { background:transparent; }
 .classbar button, .cspbar button { background:#0e1116; color:var(--mut); border:1px solid var(--line);
   border-radius:999px; padding:4px 12px; cursor:pointer; font:inherit; }
 .classbar button.on, .cspbar button.on { border-color:var(--accent); color:var(--ink); }
-.player { display:flex; align-items:center; gap:10px; width:340px; }
+.player { display:flex; align-items:center; gap:10px; width:min(94%,480px); }
 .player button { background:var(--accent); color:#fff; border:0; border-radius:7px; width:34px; height:30px; cursor:pointer; font-size:13px; }
 .player input[type=range] { flex:1; accent-color:var(--accent); }
-.speedbar { display:flex; align-items:center; gap:10px; width:340px; }
+.speedbar { display:flex; align-items:center; gap:10px; width:min(94%,480px); }
 .speedbar input[type=range] { flex:1; accent-color:var(--accent); }
 .speedbar[hidden] { display:none; }
 .tlabel { color:var(--mut); font-variant-numeric:tabular-nums; width:46px; text-align:right; }
