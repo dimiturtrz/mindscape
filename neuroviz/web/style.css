@@ -36,6 +36,9 @@ canvas { background:transparent; }
 .player { display:flex; align-items:center; gap:10px; width:340px; }
 .player button { background:var(--accent); color:#fff; border:0; border-radius:7px; width:34px; height:30px; cursor:pointer; font-size:13px; }
 .player input[type=range] { flex:1; accent-color:var(--accent); }
+.speedbar { display:flex; align-items:center; gap:10px; width:340px; }
+.speedbar input[type=range] { flex:1; accent-color:var(--accent); }
+.speedbar[hidden] { display:none; }
 .tlabel { color:var(--mut); font-variant-numeric:tabular-nums; width:46px; text-align:right; }
 .cbar { display:flex; align-items:center; gap:8px; color:var(--mut); font-size:12px; }
 .cgrad { width:160px; height:10px; border-radius:6px;

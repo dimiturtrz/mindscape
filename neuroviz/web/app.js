@@ -5,7 +5,7 @@
 // modality-aware: EEG (mu/beta + CSP/Riemann) or fNIRS (HbO/HbR + LDA). state.map is a frame key
 // ("mu"/"beta"/"HbO"/"HbR") or a decoder view ("csp0…", "riemann", "lda"). Controls are built from the
 // data's own keys, so one viewer renders both modalities.
-const state = { data:null, modality:null, map:null, cls:null, frame:25, playing:false };
+const state = { data:null, modality:null, map:null, cls:null, frame:25, playing:false, speed:3 };
 const $ = (id) => document.getElementById(id);
 const isCsp = () => state.map.startsWith("csp");
 const isRiemann = () => state.map === "riemann";
@@ -33,7 +33,7 @@ const LAYOUT = {
 function frameIntervalMs(){
   const ft=state.data.frame_times, n=ft.length;
   const realDt=(ft[n-1]-ft[0])/(n-1);   // seconds per frame in the actual recording
-  return Math.max(LAYOUT.minFrameMs, realDt*1000/LAYOUT.playbackSpeed);
+  return Math.max(LAYOUT.minFrameMs, realDt*1000/state.speed);
 }
 
 // diverging colormap (RdBu_r): t in [0,1] -> [r,g,b]
@@ -222,6 +222,7 @@ function sync(){
   $("classbar").hidden=!isPerClass();         // class applies to signal + Riemann + LDA (per-class), not CSP
   const animated=isSignal();                  // only the signal maps have time frames
   $("player").hidden=!animated;
+  $("speedbar").hidden=!animated;
   if(!animated) play(false);
 }
 
@@ -273,6 +274,8 @@ async function init(){
   subjSel.onchange=()=>{play(false);loadSubject(state.modality, subjSel.value);};
   $("play").onclick=()=>play(!state.playing);
   $("scrub").oninput=()=>{play(false);state.frame=+$("scrub").value;render();};
+  $("speed").oninput=()=>{ state.speed=+$("speed").value; $("speedlabel").textContent=state.speed.toFixed(1)+"×";
+                          if(state.playing) play(true); };   // restart timer with the new interval
   let rz; window.addEventListener("resize",()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(state.data) render(); },120); });
   loadModality(Object.keys(mods).find(m=>mods[m] && mods[m].length));
 }
