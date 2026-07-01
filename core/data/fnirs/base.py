@@ -10,12 +10,13 @@ Canonical n-back workload labels (fixed so a decoder's classes mean the same eve
 """
 from __future__ import annotations
 
-import numpy as np
 from pydantic import BaseModel
 
-# canonical workload classes (n-back load level)
-CANONICAL_NBACK: dict[str, int] = {"0-back": 0, "2-back": 1, "3-back": 2}
-CANONICAL_NBACK_NAMES: dict[int, str] = {v: k for k, v in CANONICAL_NBACK.items()}
+# Cross-modality primitives (bandpass, block epoching, n-back labels) live in the neutral data layer
+# (core/data/signal) so the EEG adapter doesn't import "up" into fNIRS. Re-exported here so existing
+# `from core.data.fnirs.base import bandpass / epoch_blocks / CANONICAL_NBACK` call sites keep working.
+from core.data.signal import (  # noqa: F401
+    CANONICAL_NBACK, CANONICAL_NBACK_NAMES, bandpass, block_epochs)
 
 
 class FnirsCfg(BaseModel):
@@ -38,26 +39,7 @@ class FnirsCfg(BaseModel):
         return f"b{f(self.l_freq)}-{f(self.h_freq)}_t{f(self.tmin)}-{f(self.tmax)}_r{rs}"
 
 
-def bandpass(X: np.ndarray, l_freq: float, h_freq: float, fs: float, order: int = 4) -> np.ndarray:
-    """Zero-phase Butterworth bandpass on continuous [ch, T] (filtfilt — no phase shift on the slow HRF)."""
-    from scipy.signal import butter, filtfilt
-    nyq = fs / 2.0
-    b, a = butter(order, [l_freq / nyq, min(h_freq, nyq * 0.99) / nyq], btype="band")
-    return filtfilt(b, a, X, axis=-1)
-
-
-def epoch_blocks(cont: np.ndarray, onsets: np.ndarray, y: np.ndarray, fs: float, cfg: FnirsCfg
-                 ) -> tuple[np.ndarray, np.ndarray]:
-    """Cut a continuous [ch, T] recording into baseline-corrected epochs at `onsets` (samples).
-    Returns (X [n, ch, t] float32, y [n]) — epochs whose window falls off the recording are dropped."""
-    a, b = int(round(cfg.tmin * fs)), int(round(cfg.tmax * fs))
-    nb = int(round(cfg.baseline_s * fs))
-    T = cont.shape[1]
-    onsets, y = np.asarray(onsets), np.asarray(y)
-    valid = (onsets + a >= 0) & (onsets + b <= T)                           # window fully on the recording
-    if not valid.any():                                                     # all epochs fell off the edge
-        return np.empty((0, cont.shape[0], b - a), np.float32), np.empty(0, np.int64)
-    idx = onsets[valid][:, None] + np.arange(a, b)                          # [n_valid, b-a] sample indices
-    segs = cont[:, idx].transpose(1, 0, 2).astype(np.float32)              # [n_valid, ch, b-a]
-    base = segs[:, :, :nb].mean(axis=2, keepdims=True) if nb > 0 else 0.0   # per-epoch pre-onset baseline
-    return segs - base, y[valid].astype(np.int64)
+def epoch_blocks(cont, onsets, y, fs: float, cfg: FnirsCfg) -> tuple:
+    """Baseline-corrected block epoching per the fNIRS recipe — a thin FnirsCfg adapter over the shared
+    `signal.block_epochs` (the modality-agnostic windowing op)."""
+    return block_epochs(cont, onsets, y, fs, cfg.tmin, cfg.tmax, cfg.baseline_s)

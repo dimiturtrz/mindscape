@@ -22,11 +22,12 @@ import polars as pl
 
 from core.config import raw_dir
 from core.data.eeg.base import EpochCfg
-from core.data.fnirs.base import CANONICAL_NBACK, bandpass
+from core.data.signal import CANONICAL_NBACK, bandpass, block_epochs
 
 _ROOT = "shin2017_eeg"
-_N_EEG = 28          # first 28 clab entries are EEG; the last two (HEOG, VEOG) are EOG — dropped
-_BLOCK_TMAX = 40.0   # default block window (s) when cfg.tmax is None — the n-back task period
+_N_EEG = 28              # first 28 clab entries are EEG; the last two (HEOG, VEOG) are EOG — dropped
+_BLOCK_TMAX = 40.0       # default block window (s) when cfg.tmax is None — the n-back task period
+_BLOCKS_PER_SERIES = 9   # 27 blocks = 3 recording series of 9 (the 'session' grouping; see get_data)
 
 
 class Shin2017NbackEegAdapter:
@@ -78,7 +79,7 @@ class Shin2017NbackEegAdapter:
             cont = bandpass(cont, cfg.fmin, cfg.fmax, fs)
             order = np.argsort(onsets)                                  # chronological
             onsets, y = onsets[order], y[order]
-            X, ye = _epoch(cont, onsets, y, fs, cfg.tmin, tmax)
+            X, ye = block_epochs(cont, onsets, y, fs, cfg.tmin, tmax, baseline_s=0.0)   # no baseline: CSP/Riemann read covariance
             if cfg.resample and cfg.resample != fs:
                 from scipy.signal import resample as _rs
                 X = _rs(X, int(round(X.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
@@ -86,24 +87,11 @@ class Shin2017NbackEegAdapter:
             Xs.append(X)
             ys.append(ye)
             subj += [str(sub)] * n
-            sess += [str(i // 9) for i in range(n)]                     # 27 blocks -> 3 series of 9
+            sess += [str(i // _BLOCKS_PER_SERIES) for i in range(n)]     # 27 blocks -> 3 recording series
             run += ["0"] * n
         X = np.concatenate(Xs).astype(np.float32)
         y = np.concatenate(ys).astype(np.int64)
         return X, y, pl.DataFrame({"subject": subj, "session": sess, "run": run})
-
-
-def _epoch(cont, onsets, y, fs, tmin, tmax):
-    """Slice [onset+tmin, onset+tmax) per block onset -> (X [n,ch,L] f32, y). No baseline subtraction:
-    CSP/Riemann read the covariance, which is mean-invariant. Windows off the recording edge are dropped."""
-    a, b = int(round(tmin * fs)), int(round(tmax * fs))
-    T = cont.shape[1]
-    valid = (onsets + a >= 0) & (onsets + b <= T)
-    if not valid.any():
-        return np.empty((0, cont.shape[0], b - a), np.float32), np.empty(0, np.int64)
-    ix = onsets[valid][:, None] + np.arange(a, b)
-    X = cont[:, ix].transpose(1, 0, 2).astype(np.float32)              # [n_valid, ch, L]
-    return X, y[valid].astype(np.int64)
 
 
 def adapter() -> Shin2017NbackEegAdapter:
