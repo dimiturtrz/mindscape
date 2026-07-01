@@ -72,8 +72,10 @@ def _row(name: str, agg: dict) -> dict | None:
     # fusion runs carry a per-role breakdown (eeg/fnirs/late/feature) — pass it through so the
     # 4-role comparison table can address each role as its own marker field.
     roles = agg.get("per_role_mean") if isinstance(agg.get("per_role_mean"), dict) else {}
-    # fusion also carries a complementarity block (oracle_either / err_corr / …) — pass through as fields
+    # fusion also carries complementarity + aggregation-sweep blocks — pass their scalars through as fields
     comp = agg.get("complementarity") if isinstance(agg.get("complementarity"), dict) else {}
+    sweep = agg.get("aggregation") if isinstance(agg.get("aggregation"), dict) else {}
+    comp = {**sweep, **comp}                                 # comp wins on any key overlap
     return {
         "method": agg.get("method", method),
         "regime": agg.get("regime", regime),

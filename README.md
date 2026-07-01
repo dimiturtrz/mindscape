@@ -190,12 +190,33 @@ clearly above chance) and they **fail on different blocks**.
 **The signal for fusion is there.** A per-trial oracle that always picked the right modality would hit
 **0.688** — **+21 pts** over the best single decoder — and the errors are near-independent (φ ≈ 0.05): EEG
 uniquely rescues ~21 % of blocks, fNIRS ~26 %, and both miss only ~31 %. So the ceiling here is **not the
-data** — it's the **fusion mechanism**. Averaging probabilities and concatenating features can't exploit that
-headroom because they can't tell *which* modality to trust on a given trial; they wash the two weak,
-differently-wrong signals together. Capturing it needs a **per-trial gate / learned cross-modal attention**
-(MBC-ATT, TSMMF-style) — which is now motivated by a concrete target (close the 0.468 → 0.688 gap), not a
-hope. That is the honest, forward-looking result: *complementarity demonstrated, naive fusion insufficient,
-learned fusion warranted.*
+data** — it's the **fusion mechanism**. But which mechanism? We swept every **output-space** combiner, cheap
+to learned, each fit without touching test data (stacking + temperature on an inner GroupKFold over the train
+subjects):
+
+| output-space aggregator | acc | vs best single |
+|---|---|---|
+| mean (late) | <!--r:fusion_cross_subject_kfold_shin2017_nback.mean-->0.469<!--/r--> | −0.005 |
+| product (naïve Bayes) | <!--r:fusion_cross_subject_kfold_shin2017_nback.product-->0.463<!--/r--> | −0.011 |
+| confidence-weighted | <!--r:fusion_cross_subject_kfold_shin2017_nback.conf_weight-->0.467<!--/r--> | −0.007 |
+| max-confidence pick | <!--r:fusion_cross_subject_kfold_shin2017_nback.maxconf_pick-->0.462<!--/r--> | −0.013 |
+| stacking (meta-LDA, nested CV) | <!--r:fusion_cross_subject_kfold_shin2017_nback.stacking-->0.469<!--/r--> | −0.005 |
+| calibrated mean | <!--r:fusion_cross_subject_kfold_shin2017_nback.cal_mean-->0.469<!--/r--> | −0.005 |
+| calibrated conf-weighted | <!--r:fusion_cross_subject_kfold_shin2017_nback.cal_conf_weight-->0.467<!--/r--> | −0.007 |
+
+**Every one loses to fNIRS alone** — including *learned* stacking and *temperature-calibrated* weighting. The
+reason is a single measured fact: **confidence does not predict correctness.** A modality's peak probability
+is barely higher when it's right than when it's wrong (gap: EEG **+<!--r:fusion_cross_subject_kfold_shin2017_nback.eeg_conf_gap-->0.023<!--/r-->**,
+fNIRS **+<!--r:fusion_cross_subject_kfold_shin2017_nback.fnirs_conf_gap-->0.038<!--/r-->**), and calibration
+doesn't fix the *ordering*, only the scale. So the reliability signal a per-trial selector needs **is not in
+the probabilities at all** — no output-space rule can recover the oracle headroom.
+
+That localizes the fix precisely: capturing it needs a gate that reads the **input signals** (raw EEG/fNIRS),
+not the decisions — i.e. **learned cross-modal attention** (MBC-ATT, TSMMF-style), which can learn per-trial
+reliability from features the probabilities don't expose. Now motivated by a concrete target (close the
+0.468 → 0.688 gap) *and* a proven reason the cheap paths can't. The honest, forward-looking result:
+*complementarity demonstrated, every output-space fusion insufficient (and why), input-level learned fusion
+warranted.*
 
 Two honesty caveats. (1) The oracle is an **upper bound** — a perfect selector is unattainable; a real gate
 captures only a fraction. It proves headroom *exists*, not that we can claim it. (2) The literature offers no
