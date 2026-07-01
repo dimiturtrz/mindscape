@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from omegaconf import OmegaConf
 
-_REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parent.parent   # repo root — the one place that computes it
 
 
 def to_native_path(path_str: str) -> str:
@@ -48,7 +48,7 @@ def data_root(sub: str | None = None) -> Path:
     if env:
         raw = env
     else:
-        cfg = _REPO / "paths.yaml"
+        cfg = REPO / "paths.yaml"
         if not cfg.exists():
             raise FileNotFoundError(
                 f"{cfg} not found — copy paths.example.yaml -> paths.yaml and set `data:` "

@@ -20,11 +20,12 @@ import argparse
 import json
 import re
 import sys
-from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[2]
-_RESULTS = _ROOT / "results.json"
-_README = _ROOT / "README.md"
+from core.config import REPO
+
+_RESULTS = REPO / "results.json"
+_README = REPO / "README.md"
+_DP = 3          # decimals shown in the README (snapshot keeps more; see results._PRECISION)
 
 _MARKER = re.compile(r"<!--r:([^>]+?)-->(.*?)<!--/r-->")
 _TERM = re.compile(r"^([\w.]+?)\.(acc|kappa|ece)$")
@@ -45,38 +46,32 @@ def _lookup(runs: dict, term: str) -> float:
 
 def _render(runs: dict, expr: str) -> str:
     expr = expr.strip()
-    if "-" in expr and not expr.startswith("-"):
+    if "-" in expr and not expr.startswith("-"):          # a.field-b.field -> signed within→cross gap
         a, b = expr.split("-", 1)
         gap = _lookup(runs, a) - _lookup(runs, b)
-        return f"{'−' if gap < 0 else '+'}{abs(gap):.3f}"   # signed, unicode minus (matches README)
-    return f"{_lookup(runs, expr):.3f}"
+        return f"{'−' if gap < 0 else '+'}{abs(gap):.{_DP}f}"     # unicode minus, matches README
+    return f"{_lookup(runs, expr):.{_DP}f}"
+
+
+def _markers(runs: dict, text: str) -> list[tuple[str, str, str, str]]:
+    """(full_match, expr, current_text, rendered) for every marker in document order."""
+    return [(m[0], m[1], m[2], _render(runs, m[1])) for m in _MARKER.finditer(text)]
 
 
 def sync(check: bool = False) -> int:
     runs = json.loads(_RESULTS.read_text())["runs"]
     text = _README.read_text(encoding="utf-8")
-    stale: list[str] = []
-
-    def repl(m: re.Match) -> str:
-        expr, cur = m.group(1), m.group(2)
-        new = _render(runs, expr)
-        if new != cur:
-            stale.append(f"{expr}: {cur!r} -> {new!r}")
-        return f"<!--r:{expr}-->{new}<!--/r-->"
-
-    new_text = _MARKER.sub(repl, text)
-    n = len(_MARKER.findall(text))
+    marks = _markers(runs, text)
+    stale = [f"{expr}: {cur!r} -> {new!r}" for _old, expr, cur, new in marks if cur != new]
     if check:
-        if stale:
-            print(f"STALE ({len(stale)}/{n} markers out of date):")
-            for s in stale:
-                print(f"  {s}")
-            return 1
-        print(f"ok — {n} marker(s) in sync")
-        return 0
-    if new_text != text:
-        _README.write_text(new_text, encoding="utf-8")
-    print(f"synced {n} marker(s); updated {len(stale)}")
+        for s in stale:
+            print(f"  {s}")
+        print(f"{'STALE' if stale else 'ok'} — {len(stale)}/{len(marks)} marker(s) out of sync")
+        return 1 if stale else 0
+    for old, expr, _cur, new in marks:
+        text = text.replace(old, f"<!--r:{expr}-->{new}<!--/r-->", 1)
+    _README.write_text(text, encoding="utf-8")
+    print(f"synced {len(marks)} marker(s); updated {len(stale)}")
     return 0
 
 

@@ -21,9 +21,10 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[1]
-_MLRUNS = _ROOT / "mlruns"
-_DB_URI = f"sqlite:///{(_ROOT / 'mlflow.db').as_posix()}"
+from core.config import REPO
+
+_MLRUNS = REPO / "mlruns"
+_DB_URI = f"sqlite:///{(REPO / 'mlflow.db').as_posix()}"
 
 _active = None   # the live mlflow module while a run is open, else None
 

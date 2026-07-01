@@ -26,9 +26,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[2]
-_RUNS = _ROOT / "runs"
-_OUT = _ROOT / "results.json"
+from core.config import REPO
+
+_RUNS = REPO / "runs"
+_OUT = REPO / "results.json"
+_PRECISION = 4          # decimals kept in the snapshot (display rounding is sync_numbers' job)
 _NOTE = ("Committed snapshot of local run aggregates. Do not hand-edit — it is updated automatically after "
          "training (record) or rebuilt with `python -m neuroscan.evaluation.results`; run `sync_numbers` to "
          "push these into the README.")
@@ -69,7 +71,7 @@ def _row(name: str, agg: dict) -> dict | None:
         "regime": agg.get("regime", regime),
         "dataset": dataset,
         "n_classes": agg.get("n_classes"),
-        **{k: (round(v, 4) if isinstance(v, (int, float)) else v) for k, v in m.items()},
+        **{k: (round(v, _PRECISION) if isinstance(v, (int, float)) else v) for k, v in m.items()},
     }
 
 

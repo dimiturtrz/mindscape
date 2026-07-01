@@ -3,12 +3,11 @@ read against the literature, never in a vacuum. Cite, don't chase (honesty rule)
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 from omegaconf import OmegaConf
 
-_REPO = Path(__file__).resolve().parent.parent
-_REF = _REPO / "reference.yaml"
+from core.config import REPO
+
+_REF = REPO / "reference.yaml"
 
 
 def ceilings(dataset: str, regime: str) -> dict:
