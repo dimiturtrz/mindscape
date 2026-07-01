@@ -12,9 +12,15 @@
       <h1>neuroviz</h1>
       <p class="sub" id="sub"></p>
     </div>
-    <div class="mapgroup head-modality">
-      <span class="glabel">modality</span>
-      <div class="seg seg-lg" id="modality"><!-- EEG / fNIRS buttons, built in JS --></div>
+    <div class="head-selectors">
+      <div class="mapgroup head-modality">
+        <span class="glabel">task</span>
+        <div class="seg seg-lg" id="task"><!-- Motor imagery / Mental workload, built in JS --></div>
+      </div>
+      <div class="mapgroup head-modality" id="approach-group">
+        <span class="glabel">modality</span>
+        <div class="seg" id="approach"><!-- the task's modalities (EEG / fNIRS / Fusion), built in JS --></div>
+      </div>
     </div>
   </header>
 

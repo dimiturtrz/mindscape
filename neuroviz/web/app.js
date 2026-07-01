@@ -350,24 +350,40 @@ function renderFusion(){
 async function init(){
   const man=await (await fetch("data/manifest.json")).json();
   const mods=man.modalities||{eeg:man.subjects||[]};      // back-compat with the old flat manifest
-  const modBar=$("modality"), subjSel=$("subject");
+  const taskBar=$("task"), appBar=$("approach"), appGroup=$("approach-group"), subjSel=$("subject");
+
+  // task > modality: the toggle is two-tier because the modalities belong to DIFFERENT tasks — EEG here is
+  // BCI-2a motor imagery; fNIRS + Fusion are the Shin workload task. Pick the task, then the approach within.
+  const MOD_LABEL={eeg:"EEG",fnirs:"fNIRS",fusion:"Fusion"};
+  const has=(m)=> m==="fusion" ? !!man.fusion : !!(mods[m] && mods[m].length);
+  const TASKS=[
+    {key:"mi", label:"Motor imagery", mods:["eeg"].filter(has)},
+    {key:"wl", label:"Mental workload", mods:["fnirs", "fusion"].filter(has)},
+  ].filter(t=>t.mods.length);
+  const taskOf=(m)=> TASKS.find(t=>t.mods.includes(m));
+
+  function buildApproach(t, active){                      // the modalities within the active task
+    appBar.innerHTML="";
+    t.mods.forEach(m=>{ const b=document.createElement("button"); b.textContent=MOD_LABEL[m]; b.dataset.m=m;
+      b.className=m===active?"on":""; b.onclick=()=>loadModality(m); appBar.appendChild(b); });
+    appGroup.hidden = t.mods.length<2;                    // hide when a task has a single modality (MI -> EEG)
+  }
 
   function loadModality(mod){
-    [...modBar.children].forEach(b=>b.classList.toggle("on", b.dataset.m===mod));
     play(false);
-    if(mod==="fusion"){ subjSel.parentElement.hidden=true; loadFusion(); return; }
-    showFusion(false); subjSel.parentElement.hidden=false;
-    subjSel.innerHTML="";
-    mods[mod].forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent="subject "+s;subjSel.appendChild(o);});
-    loadSubject(mod, mods[mod][0]);
+    if(mod==="fusion"){ subjSel.parentElement.hidden=true; loadFusion(); }
+    else {
+      showFusion(false); subjSel.parentElement.hidden=false; subjSel.innerHTML="";
+      mods[mod].forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent="subject "+s;subjSel.appendChild(o);});
+      loadSubject(mod, mods[mod][0]);
+    }
+    const t=taskOf(mod);                                  // keep both tiers in sync with the loaded modality
+    [...taskBar.children].forEach(b=>b.classList.toggle("on", b.dataset.t===t.key));
+    buildApproach(t, mod);
   }
-  const MOD_LABEL={eeg:"EEG",fnirs:"fNIRS"};
-  Object.keys(mods).filter(m=>mods[m] && mods[m].length).forEach(mod=>{
-    const b=document.createElement("button"); b.textContent=MOD_LABEL[mod]||mod.toUpperCase(); b.dataset.m=mod;
-    b.onclick=()=>loadModality(mod); modBar.appendChild(b);
-  });
-  if(man.fusion){ const b=document.createElement("button"); b.textContent="Fusion"; b.dataset.m="fusion";
-    b.onclick=()=>loadModality("fusion"); modBar.appendChild(b); }
+
+  TASKS.forEach(t=>{ const b=document.createElement("button"); b.textContent=t.label; b.dataset.t=t.key;
+    b.onclick=()=>loadModality(t.mods[0]); taskBar.appendChild(b); });   // a task loads its first modality
   subjSel.onchange=()=>{play(false);loadSubject(state.modality, subjSel.value);};
   $("play").onclick=()=>play(!state.playing);
   $("scrub").oninput=()=>{play(false);state.frame=+$("scrub").value;render();};
