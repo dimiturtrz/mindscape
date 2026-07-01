@@ -317,8 +317,9 @@ SNR all vary per person — which is precisely why cross-subject transfer collap
 uv run pytest -q          # unit (equivalence-class) + integration (module chains)
 ```
 A pyramid: a wide unit base testing each module by equivalence class (metrics, the split-as-criteria
-logic, transforms, calibration, the profiler), and an integration layer for the chains units can't cover
-(data cloud → splits → harness end-to-end; decoder → ONNX export → parity).
+logic, transforms, calibration, the profiler) — `tests/unit/` **mirrors the source tree**, so a module's
+tests live where the module does. The integration layer covers the chains units can't (data cloud → splits
+→ harness end-to-end; decoder → ONNX export → parity) and stays scenario-based.
 
 ## How it's built
 Agent-driven build, human-owned judgment — coding agents scaffold the plumbing; the modeling decisions,
