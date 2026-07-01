@@ -93,7 +93,7 @@ function renderTopo(){
     : isLda()
     ? `LDA workload discriminant, ${cls} — per-channel weight of the amplitude-feature decoder (mean HbO). Switch class to compare load levels.`
     : state.modality==="fnirs"
-    ? `${state.map} response, ${cls} — the hemodynamic response building over the trial (red = concentration rise); scrub time to watch it peak ~5–8 s.`
+    ? `Hemodynamic response (HbO), ${cls} — building over the trial (red = concentration rise); scrub time to watch it peak ~5–8 s. Both chromophores are in the waveforms →`
     : `${state.map} ERD, ${cls} — blue = motor cortex desynchronizing; switch class to see the active side move.`;
 }
 

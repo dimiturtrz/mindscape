@@ -118,7 +118,6 @@ def main():
     print(f"fNIRS subject {args.subject}: {len(X)} epochs, {len(names)} ch, classes {sorted(set(y.tolist()))}")
 
     hbo, ftimes = _frames(X, y, slice(0, 36))
-    hbr, _ = _frames(X, y, slice(36, 72))
     data = {
         "modality": "fnirs",
         "subject": str(args.subject),
@@ -126,7 +125,7 @@ def main():
         "channels": names,
         "pos": pos.tolist(),
         "classes": [CLASS_NAMES[c] for c in sorted(set(y.tolist()))],
-        "frames": {"HbO": hbo, "HbR": hbr},                # signal maps (the chromophores)
+        "frames": {"response": hbo},                       # one signal topomap (HbO activation); HbR is in the waveforms
         "frame_times": ftimes,
         "lda_patterns": _lda_patterns(X, y),               # decoder view (per-class HbO weight)
         "waveforms": _waveforms(X, y, names),
