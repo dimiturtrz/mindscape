@@ -51,7 +51,6 @@ def brier(probs: np.ndarray, y_true: np.ndarray) -> float:
 
 def confusion(y_true: np.ndarray, y_pred: np.ndarray, n_classes: int) -> np.ndarray:
     """[n_classes, n_classes] integer confusion matrix (rows = true, cols = pred)."""
-    cm = np.zeros((n_classes, n_classes), dtype=np.int64)
-    for t, p in zip(np.asarray(y_true), np.asarray(y_pred)):
-        cm[int(t), int(p)] += 1
-    return cm
+    t, p = np.asarray(y_true, dtype=np.int64), np.asarray(y_pred, dtype=np.int64)
+    flat = np.bincount(t * n_classes + p, minlength=n_classes * n_classes)   # 2D histogram, vectorized
+    return flat.reshape(n_classes, n_classes)
