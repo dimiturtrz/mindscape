@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-N_FRAMES = 40                    # hemodynamic-response animation frames
+N_FRAMES = 200                   # animation frames ≈ native 10 Hz over the 22 s window (~30 fps at 3× speed)
 CLASS_NAMES = {0: "0-back", 1: "2-back", 2: "3-back"}
 
 
