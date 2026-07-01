@@ -94,8 +94,10 @@ Three honest findings fall out:
   classical baseline is a strong, cheap floor to clear — not that DL loses. But its
   *cross-subject* score is **0.357**, no better than CSP (0.382): plain tangent space doesn't transfer — the
   manifold **re-centering** closes that gap (→ 0.496; see the transfer table above).
-- **Tiny doesn't cost accuracy here.** The 3.7K-parameter EEGNet is within noise of the 30×-larger
-  ATCNet (0.606 vs 0.619) on the same protocol — the edge-deployable model gives up essentially nothing.
+- **Tiny doesn't cost accuracy here.** The 3.7K-parameter EEGNet lands ~1 point behind the 30×-larger
+  ATCNet (0.606 vs 0.619) on the same protocol — single seed, no per-model tuning, no error bars, so read
+  it as *comparable, not distinguishable* rather than a significance claim: the edge-deployable model gives
+  up little at this scale.
 - **Already edge-sized.** These nets are ~26 KB as ONNX with sub-ms inference; the optional edge-deploy tail
   exports with a **parity gate** (fp32 ONNX must match torch < 1e-3) and benchmarks INT8 — which *adds* overhead
   at this scale rather than saving. The deploy story isn't "shrink it," it's "already small, measured."
@@ -124,8 +126,9 @@ The result is the **method–signal match**, not the accuracy:
 - **Opposite generalization to EEG.** Here cross-subject (0.442) ≈ within (0.415): the prefrontal workload
   response is more stereotyped across people than motor imagery, and per-subject data is tiny, so pooling
   subjects *helps*. In EEG, within ≫ cross. Two modalities, opposite behaviour.
-- **The field's transfer trick is redundant here.** Per-subject z-scoring (the standard fNIRS cross-subject
-  fix) gave no gain (0.442 → 0.420) — our per-epoch baseline-correction already removes the offset it targets.
+- **The field's transfer trick didn't help here.** Per-subject z-scoring (the standard fNIRS cross-subject
+  fix) gave no gain — a slight drop (0.442 → 0.420) on this single run — most likely because our per-epoch
+  baseline-correction already removes the offset it targets. (One run, not a claim that z-scoring is useless.)
 
 ## Honest limits (measured, not assumed)
 Competent on a public benchmark, **not** a finished system:
