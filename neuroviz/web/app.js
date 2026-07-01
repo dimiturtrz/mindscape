@@ -123,11 +123,13 @@ function renderWaves(){
       for(let i=0;i<trace.length;i++){const x=pad+(W-pad-6)*i/(trace.length-1),y=y0-(trace[i]/m)*(rowH*LAYOUT.waveAmp);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
       ctx.stroke(); };
     ctx.strokeStyle="#222937";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,y0);ctx.lineTo(W-6,y0);ctx.stroke();
-    if(twoTrace){                                                   // both chromophores, one scale, fixed colors
-      const m=Math.max(...raw.hbo.map(Math.abs),...raw.hbr.map(Math.abs))||1;
-      line(raw.hbr,m,"#5b9dff",1.0);                               // HbR cool
-      line(raw.hbo,m,"#ff7a5c",1.2);                               // HbO warm (on top)
-      ctx.fillStyle="rgba(230,233,239,0.55)";ctx.fillText(ch,3,y0);
+    if(twoTrace){                                                   // both chromophores: red/blue hue, but
+      const m=Math.max(...raw.hbo.map(Math.abs),...raw.hbr.map(Math.abs))||1;   // paler/sharper by CONTRIBUTION
+      const vi=idxOf[ch], c=(vi==null)?0.4:Math.min(1,Math.abs(vals[vi])/mm);   // to the current view (like EEG)
+      const a=0.22+0.78*c, w=0.6+1.3*c;
+      line(raw.hbr,m,`rgba(91,157,255,${a})`,w);                   // HbR cool
+      line(raw.hbo,m,`rgba(255,122,92,${a})`,w);                   // HbO warm (on top)
+      ctx.fillStyle=`rgba(230,233,239,${0.35+0.5*c})`;ctx.fillText(ch,3,y0);
     } else {                                                        // EEG single trace, colored by contribution
       const m=Math.max(...raw.map(Math.abs))||1;
       const vi=idxOf[ch], c=(vi==null)?0:Math.min(1,Math.abs(vals[vi])/mm);
