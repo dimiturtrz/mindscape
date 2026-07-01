@@ -104,11 +104,12 @@ function renderWaves(){
   // color each channel by its CONTRIBUTION to the current view (the same per-channel values the topomap uses)
   const vals=currentValues(), mm=scaleMax(), idxOf={};
   d.channels.forEach((n,i)=>idxOf[n]=i);
-  const pad=LAYOUT.wavePad, rowH=H/chans.length, tc=d.frame_times[state.frame], cx=pad+(W-pad-6)*(tc/t[t.length-1]);
-  ctx.font="10px system-ui"; ctx.textBaseline="middle";
   const twoTrace = wf[chans[0]] && !Array.isArray(wf[chans[0]]);    // fNIRS: {hbo,hbr} per channel
+  const top = twoTrace ? 16 : 0;                                    // gutter so the HbO/HbR legend clears row 0
+  const pad=LAYOUT.wavePad, rowH=(H-top)/chans.length, tc=d.frame_times[state.frame], cx=pad+(W-pad-6)*(tc/t[t.length-1]);
+  ctx.font="10px system-ui"; ctx.textBaseline="middle";
   chans.forEach((ch,r)=>{
-    const y0=r*rowH+rowH/2, raw=wf[ch];
+    const y0=top+r*rowH+rowH/2, raw=wf[ch];
     const line=(trace,m,col,w)=>{ ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();
       for(let i=0;i<trace.length;i++){const x=pad+(W-pad-6)*i/(trace.length-1),y=y0-(trace[i]/m)*(rowH*LAYOUT.waveAmp);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
       ctx.stroke(); };
@@ -126,7 +127,7 @@ function renderWaves(){
       ctx.fillStyle=`rgba(230,233,239,${0.4+0.5*c})`;ctx.fillText(ch,3,y0);
     }
   });
-  if(twoTrace){ ctx.fillStyle="#ff7a5c";ctx.fillText("HbO",pad,10); ctx.fillStyle="#5b9dff";ctx.fillText("HbR",pad+30,10); }
+  if(twoTrace){ ctx.fillStyle="#ff7a5c";ctx.fillText("HbO",pad,7); ctx.fillStyle="#5b9dff";ctx.fillText("HbR",pad+30,7); }
   ctx.strokeStyle="#ff6a5a";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,H);ctx.stroke();
   ctx.fillStyle="#8b94a3";ctx.textBaseline="alphabetic";ctx.fillText(`${t[t.length-1].toFixed(1)} s`,W-34,H-4);
 }
