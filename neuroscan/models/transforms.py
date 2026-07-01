@@ -58,8 +58,7 @@ def crops(X: np.ndarray, crop_len: int, n_crops: int):
     Returns (Xc [N*n_crops, ch, crop_len], trial_index [N*n_crops])."""
     T = X.shape[2]
     starts = np.linspace(0, T - crop_len, n_crops).round().astype(int)
-    chunks, tidx = [], []
-    for s in starts:
-        chunks.append(X[:, :, s:s + crop_len])
-        tidx.append(np.arange(len(X)))
-    return np.concatenate(chunks, 0), np.concatenate(tidx, 0)
+    idx = starts[:, None] + np.arange(crop_len)             # [n_crops, crop_len] sample indices per crop
+    Xc = X[:, :, idx].transpose(2, 0, 1, 3).reshape(-1, X.shape[1], crop_len)   # [n_crops*N, ch, crop_len]
+    tidx = np.tile(np.arange(len(X)), n_crops)              # trial each crop-row came from
+    return Xc, tidx

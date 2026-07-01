@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from baselines.base import Baseline
+
 
 def _augment(X: np.ndarray, order: int, lag: int) -> np.ndarray:
     """Time-delay embedding (Augmented Covariance Method): stack `order` lagged copies of each trial so
@@ -49,35 +51,83 @@ def recenter_covariances(C: np.ndarray) -> np.ndarray:
     return np.einsum("ij,njk,kl->nil", W, C, W)
 
 
-def fit(X: np.ndarray, y: np.ndarray, method: str = "ts", estimator: str = "oas",
-        order: int = 4, lag: int = 8):
-    """Fit a Riemannian classifier. `method`:
-      - "ts"  : tangent space + LR (strong classical reference)
-      - "mdm" : Minimum Distance to Mean (parameter-free)
-      - "acm" : Augmented Covariance Method — time-delay-embedded covariance (`order` lagged copies at
-                stride `lag`) + tangent space + LR. Folds temporal dynamics into the SPD matrix.
-    `estimator`: covariance shrinkage (OAS keeps matrices SPD on short/noisy trials)."""
-    from pyriemann.classification import MDM
+class _RiemannBaseline(Baseline):
+    """Covariance estimate -> a subclass-defined manifold classifier. Shares the float64 cast pyriemann
+    needs; subclasses supply the sklearn pipeline via `_build`. The fitted pipeline lives on `self.pipe_`."""
+
+    def __init__(self, estimator: str = "oas"):
+        self.estimator = estimator                       # covariance shrinkage (OAS keeps short trials SPD)
+
+    def _build(self):                                    # -> sklearn Pipeline
+        raise NotImplementedError
+
+    def fit(self, X, y):
+        self.pipe_ = self._build()
+        self.pipe_.fit(np.asarray(X, dtype=np.float64), y)
+        return self
+
+    def predict_proba(self, X):
+        return self.pipe_.predict_proba(np.asarray(X, dtype=np.float64))
+
+
+def _cov(estimator: str):
     from pyriemann.estimation import Covariances
-    from pyriemann.tangentspace import TangentSpace
+    return Covariances(estimator=estimator)
+
+
+def _tangent_lr():
+    from pyriemann.tangentspace import TangentSpace as _TS
     from sklearn.linear_model import LogisticRegression
-    from sklearn.pipeline import make_pipeline
-    from sklearn.preprocessing import FunctionTransformer
-
-    cov = Covariances(estimator=estimator)
-    ts_lr = [TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0)]
-    if method == "mdm":
-        pipe = make_pipeline(cov, MDM(metric="riemann"))
-    elif method == "ts":
-        pipe = make_pipeline(cov, *ts_lr)
-    elif method == "acm":
-        aug = FunctionTransformer(_augment, kw_args={"order": order, "lag": lag}, validate=False)
-        pipe = make_pipeline(aug, cov, *ts_lr)
-    else:
-        raise ValueError(f"unknown riemann method {method!r}; use 'ts', 'mdm', or 'acm'")
-    pipe.fit(X.astype(np.float64), y)
-    return pipe
+    return [_TS(metric="riemann"), LogisticRegression(max_iter=500, C=1.0)]
 
 
-def score(pipe, X: np.ndarray) -> np.ndarray:
-    return pipe.predict_proba(X.astype(np.float64))
+class TangentSpace(_RiemannBaseline):
+    """Tangent-space projection at the geometric mean -> logistic regression. The strong classical
+    reference (what MOABB benchmarks and what wins real BCI competitions)."""
+
+    def _build(self):
+        from sklearn.pipeline import make_pipeline
+        return make_pipeline(_cov(self.estimator), *_tangent_lr())
+
+
+class Mdm(_RiemannBaseline):
+    """Minimum Distance to Mean — assign each trial to the nearest class geometric-mean covariance
+    (Riemannian distance). Parameter-free, no real training."""
+
+    def _build(self):
+        from pyriemann.classification import MDM
+        from sklearn.pipeline import make_pipeline
+        return make_pipeline(_cov(self.estimator), MDM(metric="riemann"))
+
+
+class Acm(_RiemannBaseline):
+    """Augmented Covariance Method: time-delay-embed (`order` lagged copies at stride `lag`) before the
+    covariance, folding temporal dynamics into the SPD matrix, then tangent space + LR."""
+
+    def __init__(self, order: int = 4, lag: int = 8, estimator: str = "oas"):
+        super().__init__(estimator)
+        self.order, self.lag = order, lag
+
+    def _build(self):
+        from sklearn.pipeline import make_pipeline
+        from sklearn.preprocessing import FunctionTransformer
+        aug = FunctionTransformer(_augment, kw_args={"order": self.order, "lag": self.lag}, validate=False)
+        return make_pipeline(aug, _cov(self.estimator), *_tangent_lr())
+
+
+_METHODS = {"ts": TangentSpace, "mdm": Mdm, "acm": Acm}
+
+
+def fit(X: np.ndarray, y: np.ndarray, method: str = "ts", estimator: str = "oas",
+        order: int = 4, lag: int = 8) -> Baseline:
+    """Back-compat shim — build the method object for `method` and fit it. Prefer the classes directly
+    (TangentSpace/Mdm/Acm); this keeps the old `fit(X, y, method=...)` call sites working."""
+    if method not in _METHODS:
+        raise ValueError(f"unknown riemann method {method!r}; use one of {sorted(_METHODS)}")
+    kw = {"order": order, "lag": lag, "estimator": estimator} if method == "acm" else {"estimator": estimator}
+    return _METHODS[method](**kw).fit(X, y)
+
+
+def score(clf: Baseline, X: np.ndarray) -> np.ndarray:
+    """Back-compat shim — the fitted object returns its own probabilities."""
+    return clf.predict_proba(X)

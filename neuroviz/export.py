@@ -69,14 +69,15 @@ def _erd_frames(ep, labels, fmin, fmax, n_frames=N_FRAMES, baseline_s=BASELINE_S
     t = np.arange(T) / sf
     base_mask = t < baseline_s
     edges = np.linspace(0, T, n_frames + 1).astype(int)
+    widths = np.diff(edges)                                 # samples per frame-bin (uneven; T need not divide)
     frames = {}
     for c in sorted(set(labels)):
         p = power[labels == c].mean(0)                     # [ch, t]
         base = p[:, base_mask].mean(1, keepdims=True) + 1e-20
         erd = (p - base) / base                            # ERD ratio per channel per time
-        fr = [erd[:, edges[i]:edges[i + 1]].mean(1).tolist() for i in range(n_frames)]
-        frames[str(c)] = fr
-    ftimes = [float((edges[i] + edges[i + 1]) / 2 / sf) for i in range(n_frames)]
+        binned = np.add.reduceat(erd, edges[:-1], axis=1) / widths   # [ch, n_frames] mean per bin
+        frames[str(c)] = binned.T.tolist()                 # -> [n_frames][ch]
+    ftimes = ((edges[:-1] + edges[1:]) / 2 / sf).tolist()
     return frames, ftimes
 
 
@@ -98,10 +99,10 @@ def _riemann_patterns(ep, labels):
     how much that channel's own power drives the logit for the class. Parallel to CSP patterns, but here
     the feature is the covariance itself (no spatial filters). Returns {class: [w per channel]}, normalized.
     """
-    from baselines import riemann
+    from baselines.riemann import TangentSpace
     X = ep.get_data() * 1e6
-    clf = riemann.fit(X.astype(np.float64), np.asarray(labels), method="ts")
-    lr = clf.named_steps["logisticregression"]
+    clf = TangentSpace().fit(X.astype(np.float64), np.asarray(labels))
+    lr = clf.pipe_.named_steps["logisticregression"]
     coef = np.atleast_2d(lr.coef_)                         # [n_class, n_tri] over upper-triangular cov entries
     classes = [str(c) for c in lr.classes_]
     if coef.shape[0] == 1 and len(classes) == 2:           # binary LR: one row = class[1] vs class[0]
@@ -148,8 +149,8 @@ def _predictions(subject: int):
     probs = np.asarray(csp_lda.score(clf, Xte))
     pred = probs.argmax(1)
     per = {}
-    for c in sorted(set(yte.tolist())):
-        i = int(np.where(yte == c)[0][0])
+    for c in sorted(np.unique(yte).tolist()):
+        i = int((yte == c).argmax())
         per[CANONICAL_MI_NAMES[c]] = {"truth": CANONICAL_MI_NAMES[c], "pred": CANONICAL_MI_NAMES[int(pred[i])],
                                       "probs": [round(float(p), 3) for p in probs[i]],
                                       "correct": bool(pred[i] == c)}

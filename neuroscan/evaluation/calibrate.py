@@ -26,33 +26,55 @@ from neuroscan.evaluation import metrics
 from neuroscan.models import decoders
 
 
+class TemperatureScaler:
+    """Post-hoc temperature scaling (Guo 2017): one scalar T (logits -> logits/T), fit on a held-out val
+    set by minimizing NLL with the model frozen. The object OWNS T and the two operations that use it —
+    `.fit` sets T, `.ece` reports ECE at the fitted T (or an override). Softmax argmax is unchanged, so
+    accuracy is untouched; only confidence (ECE) moves."""
+
+    def __init__(self, T: float = 1.0):
+        self.T = T
+
+    def fit(self, logits: np.ndarray, labels: np.ndarray) -> "TemperatureScaler":
+        import torch
+
+        z = torch.tensor(logits, dtype=torch.float32)
+        y = torch.tensor(labels, dtype=torch.long)
+        logT = torch.zeros(1, requires_grad=True)
+        opt = torch.optim.LBFGS([logT], lr=0.05, max_iter=80)
+        nll = torch.nn.CrossEntropyLoss()
+
+        def closure():                                       # LBFGS requires a closure
+            opt.zero_grad()
+            loss = nll(z / logT.exp(), y)
+            loss.backward()
+            return loss
+
+        opt.step(closure)
+        self.T = float(logT.exp().detach())
+        return self
+
+    def probs(self, logits: np.ndarray, T: float | None = None) -> np.ndarray:
+        """Numerically-stable softmax(logits / T); T defaults to the fitted self.T."""
+        z = logits / (self.T if T is None else T)
+        z = z - z.max(1, keepdims=True)
+        p = np.exp(z)
+        return p / p.sum(1, keepdims=True)
+
+    def ece(self, logits: np.ndarray, labels: np.ndarray, T: float | None = None) -> float:
+        p = self.probs(logits, T)
+        conf, pred = p.max(1), p.argmax(1)
+        return metrics.ece(conf, (pred == labels).astype(float))[0]
+
+
 def fit_temperature(logits: np.ndarray, labels: np.ndarray) -> float:
-    """T>0 minimizing NLL of softmax(logits/T) vs labels (LBFGS on log T). Model frozen; one scalar."""
-    import torch
-
-    z = torch.tensor(logits, dtype=torch.float32)
-    y = torch.tensor(labels, dtype=torch.long)
-    logT = torch.zeros(1, requires_grad=True)
-    opt = torch.optim.LBFGS([logT], lr=0.05, max_iter=80)
-    nll = torch.nn.CrossEntropyLoss()
-
-    def closure():
-        opt.zero_grad()
-        loss = nll(z / logT.exp(), y)
-        loss.backward()
-        return loss
-
-    opt.step(closure)
-    return float(logT.exp().detach())
+    """Back-compat shim — prefer `TemperatureScaler().fit(logits, labels)`."""
+    return TemperatureScaler().fit(logits, labels).T
 
 
 def ece_at(logits: np.ndarray, labels: np.ndarray, T: float = 1.0) -> float:
-    """ECE of softmax(logits/T) vs labels."""
-    z = logits / T
-    z = z - z.max(1, keepdims=True)
-    p = np.exp(z); p /= p.sum(1, keepdims=True)
-    conf, pred = p.max(1), p.argmax(1)
-    return metrics.ece(conf, (pred == labels).astype(float))[0]
+    """Back-compat shim — ECE of softmax(logits / T)."""
+    return TemperatureScaler(T).ece(logits, labels)
 
 
 def main():
@@ -80,22 +102,21 @@ def main():
         Xte, yte = store.gather(test)
         clf = fit(Xtr, ytr)
         lv, lt = clf.predict_logits(Xva), clf.predict_logits(Xte)
-        T = fit_temperature(lv, yva)
-        r = {"subject": str(s), "T": round(T, 3),
-             "val_ece_uncal": ece_at(lv, yva, 1.0), "val_ece_temp": ece_at(lv, yva, T),
-             "test_ece_uncal": ece_at(lt, yte, 1.0), "test_ece_temp": ece_at(lt, yte, T),
+        ts = TemperatureScaler().fit(lv, yva)                # fit T on in-session val
+        r = {"subject": str(s), "T": round(ts.T, 3),
+             "val_ece_uncal": ts.ece(lv, yva, T=1.0), "val_ece_temp": ts.ece(lv, yva),
+             "test_ece_uncal": ts.ece(lt, yte, T=1.0), "test_ece_temp": ts.ece(lt, yte),
              "test_acc": metrics.accuracy(yte, lt.argmax(1))}
         rows.append(r)
         print(f"  s{r['subject']}  T {T:.2f} | val ECE {r['val_ece_uncal']:.3f}->{r['val_ece_temp']:.3f} | "
               f"test ECE {r['test_ece_uncal']:.3f}->{r['test_ece_temp']:.3f}  (acc {r['test_acc']:.3f})")
 
-    def mean(k):
-        return float(np.mean([r[k] for r in rows]))
-
+    m = {k: float(np.mean([r[k] for r in rows]))
+         for k in ("T", "val_ece_uncal", "val_ece_temp", "test_ece_uncal", "test_ece_temp")}
     summary = {"method": args.method, "regime": "within_calibration", "n": len(rows),
-               "T_mean": mean("T"),
-               "val_ece": {"uncal": mean("val_ece_uncal"), "temp": mean("val_ece_temp")},
-               "test_ece": {"uncal": mean("test_ece_uncal"), "temp": mean("test_ece_temp")},
+               "T_mean": m["T"],
+               "val_ece": {"uncal": m["val_ece_uncal"], "temp": m["val_ece_temp"]},
+               "test_ece": {"uncal": m["test_ece_uncal"], "temp": m["test_ece_temp"]},
                "per_subject": rows}
     # the headline read: how much of the val-ECE fix transfers to the cross-session test
     val_fix = summary["val_ece"]["uncal"] - summary["val_ece"]["temp"]

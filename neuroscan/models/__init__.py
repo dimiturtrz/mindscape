@@ -13,21 +13,27 @@ def method_names() -> list[str]:
     return ["csp_lda", "riemann", "riemann_acm", "fnirs_lda", *sorted(MODELS)]
 
 
-def get_method(name: str):
-    """Return (fit_fn, score_fn) for a method name (baseline or braindecode decoder)."""
-    if name == "csp_lda":
-        from baselines import csp_lda
-        return csp_lda.fit, csp_lda.score
-    if name == "riemann":
-        from baselines import riemann
-        return riemann.fit, riemann.score
-    if name == "fnirs_lda":
-        from baselines import fnirs_features
-        return fnirs_features.fit, fnirs_features.score
-    if name == "riemann_acm":
-        import functools
+def _proba(clf, X):
+    """The single scorer for every Decoder — classical baseline or braindecode net both expose it."""
+    return clf.predict_proba(X)
 
-        from baselines import riemann
-        return functools.partial(riemann.fit, method="acm"), riemann.score
+
+def _baseline_classes() -> dict:
+    """name -> Baseline class (lazy import so pyriemann/mne load only when a baseline is actually used)."""
+    from baselines.csp_lda import CspLda
+    from baselines.fnirs_features import FnirsLda
+    from baselines.riemann import Acm, TangentSpace
+    return {"csp_lda": CspLda, "riemann": TangentSpace, "riemann_acm": Acm, "fnirs_lda": FnirsLda}
+
+
+def get_method(name: str):
+    """Return (fit_fn, score_fn) for a method name. Every method is a Decoder (fit -> self, predict_proba),
+    so the scorer is always `_proba`; only the builder differs — a fresh baseline object per fold, or a
+    braindecode net built with its per-model cfg (decoders.make)."""
+    classes = _baseline_classes()
+    if name in classes:
+        cls = classes[name]
+        return (lambda X, y: cls().fit(X, y), _proba)
     from neuroscan.models.decoders import make
-    return make(name)
+    fit, _ = make(name)                      # net builds its own cfg; its scorer is predict_proba too
+    return (fit, _proba)
