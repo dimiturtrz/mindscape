@@ -79,7 +79,7 @@ features: ACM (richer time-delay covariances) scores 0.355 alone and **0.471 eve
 below plain re-centered tangent space (0.501). Removing the per-subject location shift is what transfers;
 adding features on top doesn't. (Re-centering is unsupervised on the target → deployment-real.)
 
-## The decoders — measured
+### The decoders — measured (same BCI-2a task, commodity architectures)
 We reproduce *standard* architectures (the decoder is commodity); the contribution is the eval rigor and
 the efficient deployable, not a leaderboard number. **All our numbers sit below the published ceilings —
 deliberately**: the honest train→eval-session protocol is harder than the pooled within-session CV many
