@@ -9,12 +9,13 @@ a leaderboard number — across two tasks:
   leave-one-subject-out — a **21-point generalization gap** (chance 25%) — which Riemannian **re-centering**
   then closes (→ **0.501**). The gap measured *and* fixed.
 - **Mental workload** (Shin n-back — EEG · fNIRS · fusion). Both modalities decode the *same* task, so
-  differences are the modality not the task. Honest cross-subject accuracy is near-floor (anchored to the
-  BenchNIRS benchmark), but the two modalities are genuinely **complementary** — an oracle picking the right
-  one per block hits **0.69** vs best-single **0.47**. Yet **no fusion — naive, learned, or calibrated —
-  cashes that headroom**, because a decoder's confidence doesn't track its correctness. A rigorous
-  negative-with-direction, plus a real transfer lever found on the way (per-subject calibration lifts EEG
-  band-power **0.41 → 0.51** cross-subject — the workload-task analog of the re-centering above).
+  differences are the modality not the task. Un-aligned, both sit near-floor (anchored to the BenchNIRS
+  benchmark) — but the **same re-centering** from Task 1 lifts EEG **0.45 → 0.60** cross-subject, the biggest
+  workload gain and now the strongest single-modality decoder. That makes fusion a **strong + weak** pair: the
+  two still fail on *different* blocks (oracle **0.75** vs best-single **0.58**), and once EEG is well-aligned
+  its confidence turns informative, so output-space fusion goes from *hurting* to a marginal edge (product
+  **+1.5 pp**) — a wash, not yet a win. The oracle headroom stays mostly uncaptured; the honest next win is
+  lifting the weak modality (fNIRS domain adaptation), not a cleverer combiner.
 
 Two through-lines under both tasks: the **evaluation regime is the product** — a split is a *criteria filter*
 over the data cloud, so every run self-documents exactly what it held out — and **deployability**: the
@@ -32,9 +33,10 @@ One dependency-free viewer, organized **task → modality** (matching the two ta
 → EEG (mu/beta ERD topomaps + CSP/Riemann patterns). **Mental workload** → three approaches on the same
 n-back task: **EEG** (frontal-theta / parietal-alpha band-power topomaps), **fNIRS** (the HbO/HbR hemodynamic
 response building over the trial), and **Fusion** — a per-block **complementarity map** colouring every
-held-out block by which modality got it right, so you see EEG and fNIRS failing on *different* blocks (oracle
-0.69 vs best-single 0.47) while naive fusion cashes none of it. Each view shows the signal a decoder consumes
-*and whether it got it right* — with the honest cross-subject score. → **[neuroviz/](neuroviz/)**
+held-out block by which modality got it right, so you see re-centered EEG (0.58) and fNIRS (0.47) failing on
+*different* blocks (oracle **0.75** vs best-single 0.58) while output-space fusion cashes only a sliver. Each
+view shows the signal a decoder consumes *and whether it got it right* — with the honest cross-subject score.
+→ **[neuroviz/](neuroviz/)**
 
 ## Task · Motor imagery (BCI-2a, EEG) — the generalization gap, measured
 The science layer is **signal → preprocess → decode → evaluate**, and the *evaluation regime* is the
@@ -60,24 +62,45 @@ before/after on the *cross-session* test (ATCNet): test ECE **0.113 → 0.084**.
 whether an in-session calibration fix survives the session shift — not a single in-distribution ECE.
 ([`neuroscan/evaluation/calibrate.py`](neuroscan/evaluation/calibrate.py))
 
-**Closing the cross-subject gap — measured, identified, fixed.** The collapse is a *domain shift*: each
-subject's covariance cloud sits at a different location on the SPD manifold, so a classifier trained on
-others misses them — not because the ERD contrast differs, but because the cloud is *displaced*. The
-field's fix is **Riemannian re-centering** (Zanini et al. 2018): congruence-transport every subject's
-covariances to the identity by their own Riemannian mean (`C → M⁻¹ᐟ² C M⁻¹ᐟ²` — the manifold version of
-whitening), target included and **unsupervised**. We implemented it ([`neuroscan/tasks/motor_imagery/align.py`](neuroscan/tasks/motor_imagery/align.py)):
+**Closing the cross-subject gap — the RPA ladder, reported by regime.** The collapse is a *domain shift*:
+each subject's covariance cloud sits at a different location on the SPD manifold, so a classifier trained on
+others misses them — not because the ERD contrast differs, but because the cloud is *displaced*. **Riemannian
+Procrustes Analysis** (Rodrigues 2019) aligns the domains in three steps; we report where each sits on the
+**deployability axis** — how many *target* labels it needs ([`align.py`](neuroscan/tasks/motor_imagery/align.py)):
 
-| method (leave-one-subject-out) | cross-subject acc |
-|---|---|
-| CSP+LDA | <!--r:csp_lda_cross_subject_bnci2014_001.acc-->0.391<!--/r--> |
-| Riemann (tangent space) | <!--r:riemann_cross_subject_bnci2014_001.acc-->0.360<!--/r--> |
-| Riemann ACM (time-delay cov) | <!--r:riemann_acm_cross_subject_bnci2014_001.acc-->0.355<!--/r--> |
-| **Riemann + re-centering** | **<!--r:riemann_recenter_ts_bnci2014_001.acc-->0.501<!--/r-->** |
+| method (leave-one-subject-out) | target labels | cross-subject acc |
+|---|---|---|
+| CSP+LDA | — | <!--r:csp_lda_cross_subject_bnci2014_001.acc-->0.391<!--/r--> |
+| Riemann (tangent space) | — | <!--r:riemann_cross_subject_bnci2014_001.acc-->0.360<!--/r--> |
+| **+ re-centering** (RPA step 1, Zanini 2018) | **zero-shot** | **<!--r:riemann_recenter_ts_bnci2014_001.acc-->0.501<!--/r-->** |
+| **+ re-scaling** (RPA step 2) | **zero-shot** | **<!--r:riemann_recenter_scale_ts_bnci2014_001.acc-->0.519<!--/r-->** |
+| **full RPA** (+ re-rotate, step 3) | calib 10 % | <!--r:riemann_rpa_c10_bnci2014_001.acc-->0.555<!--/r--> |
+| **full RPA** | calib 20 % | <!--r:riemann_rpa_c20_bnci2014_001.acc-->0.595<!--/r--> |
+| **full RPA** | calib 50 % | **<!--r:riemann_rpa_ts_bnci2014_001.acc-->0.650<!--/r-->** |
+| MDWM | calib 50 % | <!--r:riemann_mdwm_ts_bnci2014_001.acc-->0.412<!--/r--> |
 
-**+0.141** over plain tangent space — the displacement *was* the gap. And it's the *location*, not the
-features: ACM (richer time-delay covariances) scores 0.355 alone and **0.471 even with re-centering** —
-below plain re-centered tangent space (0.501). Removing the per-subject location shift is what transfers;
-adding features on top doesn't. (Re-centering is unsupervised on the target → deployment-real.)
+Two regimes, read them separately. **Zero-shot** (no target labels — deployment-real): re-centering to the
+identity by each subject's own Riemannian mean (`C → M⁻¹ᐟ² C M⁻¹ᐟ²`, the manifold version of whitening)
+closes most of the gap, **0.36 → 0.50**; adding dispersion-alignment (re-scaling) nudges it to **0.52**. The
+displacement *was* the gap — and it's the *location*, not the features (ACM's richer time-delay covariances
+score 0.355 alone, only 0.471 even re-centered). **Calibrated** (a short labelled calibration session): the
+supervised re-rotation aligns *class* structure and lifts further — even **10 %** of a session (≈7 trials/class)
+reaches **0.555**, scaling to **0.650** at 50 %, approaching the within-subject ceiling (0.60–0.66).
+
+**MDWM is the honest negative — and a lesson in robustness.** At its default weighting it scores 0.412, below
+even zero-shot re-centering. Tuning its source↔target tradeoff λ *does* help — but that's the tell: acc swings
+**0.31 → 0.57** across λ (`--set params.mdwm_lambda=…`), and the optimum is **λ = 1 (target-only)**, i.e. the best MDWM
+*ignores the source entirely* — its transfer mechanism adds nothing here, it's just target-calibration MDM.
+A method whose accuracy swings that much with one knob is, all else equal, the harder one to deploy — you'd
+have to re-find λ per setting, and a value tuned here needn't transfer. We haven't *shown* that across
+datasets (that would need a robustness study we haven't run — a fair thing to note, not a proven ranking);
+it's a single-dataset observation plus the general principle that a parameterless method (re-centering: no
+knob, no labels) is preferable when it's competitive. So we report MDWM untuned (0.412) — tuning it up would
+hide exactly the fragility worth showing.
+
+**The one non-negotiable:** the calibrated methods' labels come from a **disjoint** stratified split of the
+held-out subject — fit there, scored on the *remaining* blocks. Test labels never enter the fit; otherwise
+"calibrated transfer" is just leakage. (Same honesty as the fNIRS calibration ablation.)
 
 ### The decoders — measured (same BCI-2a task, commodity architectures)
 We reproduce *standard* architectures (the decoder is commodity); the contribution is the eval rigor and
@@ -129,15 +152,25 @@ change.
 
 | modality · method | cross-subject (LOSO) | within (held-out block-series) |
 |---|---|---|
-| **fNIRS · mean+slope+peak → LDA** | **<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.454<!--/r-->** (κ 0.16) | **0.415** (κ 0.12) |
+| fNIRS · mean+slope+peak → LDA | <!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.454<!--/r--> (κ 0.16) | 0.415 (κ 0.12) |
 | EEG · CSP + LDA | <!--r:csp_lda_cross_subject_shin2017_nback_eeg.acc-->0.432<!--/r--> (κ 0.12) | <!--r:csp_lda_within_shin2017_nback_eeg.acc-->0.568<!--/r--> (κ 0.35) |
 | EEG · Riemann (tangent space) | <!--r:riemann_cross_subject_shin2017_nback_eeg.acc-->0.452<!--/r--> (κ 0.14) | <!--r:riemann_within_shin2017_nback_eeg.acc-->0.538<!--/r--> (κ 0.31) |
+| **EEG · Riemann + re-centering** (the transfer fix) | **<!--r:riemann_recenter_ts_shin2017_nback_eeg.acc-->0.604<!--/r-->** (κ 0.41) | — |
+
+**The transfer fix carries across tasks — and hits harder here.** The same **Riemannian re-centering** that
+closed the motor-imagery gap (Task 1) lifts workload EEG cross-subject from **0.452 → 0.604** (+15 pp, zero-shot,
+no target labels) — the biggest single workload gain, and now the strongest single-modality decoder on this
+task by far (EEG-recentered 0.60 vs fNIRS 0.47). The near-floor EEG cross-subject numbers were the *unaligned*
+covariance clouds; re-centering removes the per-subject location shift the same way it did for MI. (Full RPA
+*loses* to plain re-centering here — 0.464 — the rotation over-fits the small 3-class calib slice; a
+task-specific negative, opposite of MI where it helped.)
 
 _On the "within" column — read it as a **soft** ceiling._ The Shin n-back is **one ~33-min continuous
 recording** per subject, split into 3 block-series (9 blocks each); "within" holds out the last series, so
-train and test are the *same recording* minutes apart — a temporal-generalization test, **not** a separate
-session like the BCI-2a two-day protocol. So the within numbers (EEG 0.57 especially) are a lenient ceiling;
-the EEG within≫cross gap is directionally real but partly flattered by that temporal proximity.
+train and test are the *same recording* minutes apart. Note the re-centered cross-subject number (0.60)
+actually *exceeds* the within-subject Riemann (0.54): not a paradox — cross-subject pools **25 aligned
+subjects** (~675 blocks) while "within" trains on ~18 blocks of one subject, so alignment + volume beats a
+data-starved personal model.
 
 **Anchored to the field's honest benchmark — the numbers are modest by design.** [BenchNIRS](https://doi.org/10.3389/fnrgo.2023.994969)
 (Benerradi 2023) is the rigorous fNIRS-ML benchmark whose whole point is that *proper* cross-subject
@@ -162,90 +195,91 @@ Two findings from the same-task design:
   amplitude**, which raw covariance centers away, so amplitude features (mean/slope/peak) → LDA is the right
   tool here. (Not a categorical law — Riemannian-*done-right* decodes fNIRS *motor imagery* within-subject,
   Näher 2025; it's just unproven for workload / cross-subject. See [`research/`](research/deep_dives/2026-07-01_fnirs_decoding_sota.md).)
-- **Modest signal — read within-vs-cross carefully.** EEG within (0.54–0.57) clearly exceeds cross
-  (0.41–0.43): real subject-specific spatial structure. fNIRS sits ~0.42 *both*, only ~9 pp above chance —
-  weak either way, so the within≈cross similarity is as much "little signal to lose" as any stereotypy, and
-  the tiny per-subject test sets (9 epochs) make the ordering noisy. The honest read: **fNIRS workload barely
-  transfers cross-subject** (exactly what BenchNIRS found), and we reproduce that. Whether the weak fNIRS
-  signal nonetheless *adds* to EEG is the **fusion question** — answered below: naive fusion gains nothing,
-  yet the modalities are genuinely **complementary** (near-independent errors), so learned fusion is warranted.
+- **EEG cross-subject isn't stuck — re-center it (see Fusion below).** Un-aligned EEG cross (~0.43) sits
+  below within (~0.55) — the subject-location-shift story again. **Re-centering flips it to 0.60**, now *above*
+  within-subject (25 aligned subjects beat a data-starved personal model). fNIRS stays ~0.47 (barely transfers,
+  exactly what BenchNIRS found). So the workload task is a **strong (re-centered EEG) + weak (fNIRS)** pair —
+  whether the weak modality *adds* is the **fusion question**, answered below: a marginal edge, large
+  uncaptured complementarity, and the honest next win is a stronger fNIRS, not a cleverer combiner.
 - **The field's transfer trick didn't help here.** Per-subject z-scoring (the standard fNIRS cross-subject
   fix) gave no gain — a slight drop on this single run — most likely because our per-epoch baseline-correction
   already removes the offset it targets. (One run, not a claim that z-scoring is useless.)
 
-### Fusion — the second modality *does* carry independent signal; naive fusion just can't use it
-Both decoders run on the **same aligned epochs** (EEG Riemann tangent-space + fNIRS mean/slope/peak), so
-fusion is a clean test — under one **5-fold GroupKFold** so all four roles share identical folds (fusion needs
-per-epoch EEG↔fNIRS pairing, which LOSO's single-subject test sets make too small to read):
+### Fusion — a strong + weak pair; complementarity is real, output-space fusion barely cashes it
+Both decoders run on the **same aligned epochs** — EEG **re-centered Riemann** (the transfer fix, zero-shot
+per-subject) + fNIRS mean/slope/peak — under one **5-fold GroupKFold** so every role shares identical folds
+(fusion needs per-epoch EEG↔fNIRS pairing, which LOSO's single-subject test sets make too small to read):
 
 | role (5-fold GroupKFold, matched folds) | acc | vs best single |
 |---|---|---|
 | chance | 0.333 | — |
-| EEG alone (Riemann) | <!--r:fusion_cross_subject_kfold_shin2017_nback.eeg-->0.430<!--/r--> | — |
-| **fNIRS alone (mean/slope/peak → LDA)** | **<!--r:fusion_cross_subject_kfold_shin2017_nback.fnirs-->0.474<!--/r-->** | best |
-| Late fusion (avg probabilities) | <!--r:fusion_cross_subject_kfold_shin2017_nback.late-->0.468<!--/r--> | **−0.006** |
-| Feature fusion (concat → LDA) | <!--r:fusion_cross_subject_kfold_shin2017_nback.feature-->0.434<!--/r--> | **−0.040** |
+| fNIRS (mean/slope/peak → LDA) | <!--r:fusion_cross_subject_kfold_shin2017_nback.fnirs-->0.474<!--/r--> | −0.106 |
+| **EEG (re-centered Riemann)** | **<!--r:fusion_cross_subject_kfold_shin2017_nback.eeg-->0.580<!--/r-->** | best |
+| Late fusion (avg probabilities) | <!--r:fusion_cross_subject_kfold_shin2017_nback.late-->0.587<!--/r--> | **+0.007** |
+| Feature fusion (concat → LDA) | <!--r:fusion_cross_subject_kfold_shin2017_nback.feature-->0.564<!--/r--> | −0.016 |
 
-Naively, this reads as a null — **neither fusion beats fNIRS alone**. But that's the wrong conclusion, and the
-**complementarity diagnostic** shows why: the two modalities are near-equal (EEG 0.430 ≈ fNIRS 0.474, both
-clearly above chance) and they **fail on different blocks**.
+Re-centering flips the workload EEG from near-floor to the **strong** modality (0.58 vs fNIRS 0.47 — this is
+the 5-fold number; the LOSO number in Table B is 0.60, a touch higher from more training data per fold), so
+this is a **strong + weak** pair. Late fusion (0.587) now **edges** the best single (+0.7 pp) rather than *losing* to
+it — but that margin is within fold noise, so read it as a **wash-to-slight-edge, not a clean win**. Feature
+fusion (0.564, concatenating the re-centered EEG tangent-space feature + fNIRS amplitude) lands just under the
+best single — a fair feature-level result, not a broken one. The interesting question is the **complementarity**
+— the two modalities still **fail on different blocks**:
 
 | complementarity (same 5-fold) | value |
 |---|---|
-| best single modality | <!--r:fusion_cross_subject_kfold_shin2017_nback.best_single-->0.474<!--/r--> |
-| late fusion (what naive averaging gets) | <!--r:fusion_cross_subject_kfold_shin2017_nback.late-->0.468<!--/r--> |
-| **oracle — *either* modality correct** | **<!--r:fusion_cross_subject_kfold_shin2017_nback.oracle_either-->0.688<!--/r-->** |
-| oracle headroom over best single | **<!--r:fusion_cross_subject_kfold_shin2017_nback.oracle_either-fusion_cross_subject_kfold_shin2017_nback.best_single-->+0.214<!--/r-->** |
-| error correlation (φ) | <!--r:fusion_cross_subject_kfold_shin2017_nback.err_corr-->0.053<!--/r--> |
-| EEG-only-right / fNIRS-only-right / both-wrong | 0.215 / 0.255 / <!--r:fusion_cross_subject_kfold_shin2017_nback.both_wrong-->0.312<!--/r--> |
+| best single modality | <!--r:fusion_cross_subject_kfold_shin2017_nback.best_single-->0.580<!--/r--> |
+| late fusion (what naive averaging gets) | <!--r:fusion_cross_subject_kfold_shin2017_nback.late-->0.587<!--/r--> |
+| **oracle — *either* modality correct** | **<!--r:fusion_cross_subject_kfold_shin2017_nback.oracle_either-->0.752<!--/r-->** |
+| oracle headroom over best single | **<!--r:fusion_cross_subject_kfold_shin2017_nback.oracle_either-fusion_cross_subject_kfold_shin2017_nback.best_single-->+0.172<!--/r-->** |
+| error correlation (φ) | <!--r:fusion_cross_subject_kfold_shin2017_nback.err_corr-->0.107<!--/r--> |
+| EEG-only-right / fNIRS-only-right / both-wrong | 0.28 / 0.17 / <!--r:fusion_cross_subject_kfold_shin2017_nback.both_wrong-->0.248<!--/r--> |
 
-**The signal for fusion is there.** A per-trial oracle that always picked the right modality would hit
-**0.688** — **+21 pts** over the best single decoder — and the errors are near-independent (φ ≈ 0.05): EEG
-uniquely rescues ~21 % of blocks, fNIRS ~26 %, and both miss only ~31 %. So the ceiling here is **not the
-data** — it's the **fusion mechanism**. But which mechanism? We swept every **output-space** combiner, cheap
-to learned, each fit without touching test data (stacking + temperature on an inner GroupKFold over the train
-subjects):
+**The headroom is large and mostly uncaptured.** A per-trial oracle picking the right modality would hit
+**0.752** — **+17 pts** over the best single — with near-independent errors (φ ≈ 0.11): EEG uniquely rescues
+~28 % of blocks, fNIRS ~17 %, only ~25 % beat both. So the ceiling isn't the data, it's the **fusion
+mechanism**. We swept every **output-space** combiner (stacking + temperature fit on an inner GroupKFold over
+the train subjects — no test leakage):
 
 | output-space aggregator | acc | vs best single |
 |---|---|---|
-| mean (late) | <!--r:fusion_cross_subject_kfold_shin2017_nback.mean-->0.469<!--/r--> | −0.005 |
-| product (naïve Bayes) | <!--r:fusion_cross_subject_kfold_shin2017_nback.product-->0.463<!--/r--> | −0.011 |
-| confidence-weighted | <!--r:fusion_cross_subject_kfold_shin2017_nback.conf_weight-->0.467<!--/r--> | −0.007 |
-| max-confidence pick | <!--r:fusion_cross_subject_kfold_shin2017_nback.maxconf_pick-->0.462<!--/r--> | −0.013 |
-| stacking (meta-LDA, nested CV) | <!--r:fusion_cross_subject_kfold_shin2017_nback.stacking-->0.469<!--/r--> | −0.005 |
-| calibrated mean | <!--r:fusion_cross_subject_kfold_shin2017_nback.cal_mean-->0.469<!--/r--> | −0.005 |
-| calibrated conf-weighted | <!--r:fusion_cross_subject_kfold_shin2017_nback.cal_conf_weight-->0.467<!--/r--> | −0.007 |
+| mean (late) | <!--r:fusion_cross_subject_kfold_shin2017_nback.mean-->0.587<!--/r--> | +0.007 |
+| **product (naïve Bayes)** | **<!--r:fusion_cross_subject_kfold_shin2017_nback.product-->0.595<!--/r-->** | **+0.015** |
+| confidence-weighted | <!--r:fusion_cross_subject_kfold_shin2017_nback.conf_weight-->0.580<!--/r--> | ±0.000 |
+| max-confidence pick | <!--r:fusion_cross_subject_kfold_shin2017_nback.maxconf_pick-->0.591<!--/r--> | +0.011 |
+| stacking (meta-LDA, nested CV) | <!--r:fusion_cross_subject_kfold_shin2017_nback.stacking-->0.587<!--/r--> | +0.007 |
+| calibrated mean | <!--r:fusion_cross_subject_kfold_shin2017_nback.cal_mean-->0.587<!--/r--> | +0.007 |
+| calibrated conf-weighted | <!--r:fusion_cross_subject_kfold_shin2017_nback.cal_conf_weight-->0.580<!--/r--> | ±0.000 |
 
-**Every one loses to fNIRS alone** — including *learned* stacking and *temperature-calibrated* weighting. The
-reason is a single measured fact: **confidence does not predict correctness.** A modality's peak probability
-is barely higher when it's right than when it's wrong (gap: EEG **+<!--r:fusion_cross_subject_kfold_shin2017_nback.eeg_conf_gap-->0.023<!--/r-->**,
-fNIRS **+<!--r:fusion_cross_subject_kfold_shin2017_nback.fnirs_conf_gap-->0.038<!--/r-->**), and calibration
-doesn't fix the *ordering*, only the scale. So the reliability signal a per-trial selector needs **is not in
-the probabilities at all** — no output-space rule can recover the oracle headroom.
+**Several combiners now marginally *beat* best-single (product +1.5 pp)** — a real shift from the earlier
+weak+weak version, where *every* combiner lost. The reason is mechanistic: re-centering didn't just raise EEG
+accuracy, it made EEG's **confidence informative**. The correct-vs-wrong peak-probability gap is now
+**+<!--r:fusion_cross_subject_kfold_shin2017_nback.eeg_conf_gap-->0.132<!--/r-->** for EEG (was ~0.02 unaligned)
+vs **+<!--r:fusion_cross_subject_kfold_shin2017_nback.fnirs_conf_gap-->0.038<!--/r-->** for fNIRS — so
+confidence-based combiners (product, max-pick) can *partially* tell which modality to trust. The lesson:
+**output-space fusion works to the extent the modalities are well-calibrated**, and it fails when confidence
+is noise (the weak-modality regime).
 
-That localizes the fix precisely: capturing it needs a gate that reads the **input signals** (raw EEG/fNIRS),
-not the decisions — i.e. **learned cross-modal attention** (MBC-ATT, TSMMF-style), which can learn per-trial
-reliability from features the probabilities don't expose. Now motivated by a concrete target (close the
-0.468 → 0.688 gap) *and* a proven reason the cheap paths can't. The honest, forward-looking result:
-*complementarity demonstrated, every output-space fusion insufficient (and why), input-level learned fusion
-warranted.*
+But the gains are within noise and a long way under the oracle (0.752). Two honest paths to actually cash the
+headroom: **(1) lift the weak modality** — fNIRS cross-subject domain adaptation, so it's a *strong + strong*
+pair where complementarity pays (filed follow-up); **(2)** an input-level gate that reads reliability from the
+raw signals, not just the (still-imperfect) probabilities. The current honest result: *re-centering makes
+fusion stop hurting and marginally help, complementarity is large but mostly uncaptured, and the next win is a
+stronger fNIRS.*
 
-**A transfer lever found on the way — and fusion's last stand.** On the EEG side, three *zero-calibration*
-feature families — covariance (CSP/Riemann), absolute band-power, relative band-power — all land ~0.43
-cross-subject; workload band-power is subject-idiosyncratic in **absolute scale**, which points straight at
-the fix. Adding **per-subject unsupervised calibration** (z-score each subject by its own feature statistics —
-no labels, the EEG analog of the Riemannian re-centering that closed the motor-imagery gap) recovers EEG
-band-power to **<!--r:calibration_ablation_shin2017_nback_eeg.eeg_zcalib-->0.511<!--/r-->** (honest
-held-out-calibration-half) up to **<!--r:calibration_ablation_shin2017_nback_eeg.eeg_ztrans-->0.581<!--/r-->**
-(transductive), from <!--r:calibration_ablation_shin2017_nback_eeg.eeg_raw-->0.407<!--/r--> raw — so the ~0.43
-number is the *zero-calibration* floor, not a ceiling, and with calibration **EEG (0.51–0.58) becomes the
-stronger modality**, above fNIRS (~0.47, which doesn't benefit — its per-epoch baseline correction already
-removes the offset). Crucially, **fusion still doesn't beat that best single modality even after the fix**: a
-compact input-level gate (per-modality encoders + a per-trial mixing gate, nested GroupKFold) scores
-**<!--r:fusion_gate_cross_subject_kfold_shin2017_nback.gate-->0.573<!--/r-->** — tying z-scored-EEG-alone
-(<!--r:calibration_ablation_shin2017_nback_eeg.eeg_z_best-->0.581<!--/r-->), capturing none of the (now larger,
-<!--r:calibration_ablation_shin2017_nback_eeg.oracle_z-->0.766<!--/r-->) oracle headroom — the learned gate
-fails for the same reason every output-space combiner did.
+**A second, independent EEG fix — and the input-gate we tried.** Re-centering the *covariance* is one route;
+the *band-power* features have their own. Workload band-power is subject-idiosyncratic in absolute scale, so
+per-subject unsupervised calibration (z-score each subject's own features — the feature-space analog of
+re-centering) recovers it from <!--r:calibration_ablation_shin2017_nback_eeg.eeg_raw-->0.407<!--/r--> raw to
+**<!--r:calibration_ablation_shin2017_nback_eeg.eeg_zcalib-->0.511<!--/r-->** (honest held-out-calibration-half)
+/ **<!--r:calibration_ablation_shin2017_nback_eeg.eeg_ztrans-->0.581<!--/r-->** (transductive) — a second,
+independent way to reach the same ~0.58 EEG strength. We also built the **input-level gate** (path 2 above —
+per-modality encoders + a per-trial mixing gate, nested GroupKFold) on those features:
+**<!--r:fusion_gate_cross_subject_kfold_shin2017_nback.gate-->0.573<!--/r-->**, *tying* z-scored-EEG-alone
+(<!--r:calibration_ablation_shin2017_nback_eeg.eeg_z_best-->0.581<!--/r-->) — it captured none of that oracle
+headroom (<!--r:calibration_ablation_shin2017_nback_eeg.oracle_z-->0.766<!--/r-->) either. So even reading the
+raw inputs, the gate doesn't cash it *on this strong+weak pair* — reinforcing that the next real win is a
+stronger fNIRS, not a cleverer combiner.
 
 Two honesty caveats. (1) The oracle is an **upper bound** — a perfect selector is unattainable; a real gate
 captures only a fraction. It proves headroom *exists*, not that we can claim it. (2) The literature offers no
@@ -285,17 +319,19 @@ Downloads land under `<root>/raw/`; the epoch cache under `<root>/processed/` (c
 ```bash
 uv sync                                              # .venv from pyproject + uv.lock; prefix commands with `uv run`
 cp paths.example.yaml paths.yaml                     # set the one data root
+# runs are named configs in experiments.yaml, picked with --exp (argv stays sparse; --set for ad-hoc tweaks):
 # the headline contrast — the same decoder, two regimes:
-uv run python -m neuroscan.tasks.run --method csp_lda --regime within --test-session 1test
-uv run python -m neuroscan.tasks.run --method csp_lda --regime cross_subject   # the OOD gap
+uv run python -m neuroscan.tasks.run --exp mi_csp_within
+uv run python -m neuroscan.tasks.run --exp mi_csp_cross               # the OOD gap
 # the strongest classical baseline — covariances on a Riemannian manifold:
-uv run python -m neuroscan.tasks.run --method riemann --regime within
+uv run python -m neuroscan.tasks.run --exp mi_riemann_within
 # the second modality — fNIRS mental-workload (amplitude features, not covariance):
-uv run python -m neuroscan.tasks.workload.run_fnirs --method fnirs_lda --regime cross_subject
+uv run python -m neuroscan.tasks.workload.run_fnirs --exp nback_fnirs_cross
 # EEG+fNIRS fusion on the same task — complementarity + the aggregation sweep (a rigorous null):
-uv run python -m neuroscan.tasks.workload.run_fusion --regime cross_subject_kfold
-# a deep decoder, GPU:
-uv run python -m neuroscan.tasks.run --method atcnet --regime within --resample 250 --fmin 4 --fmax 40
+uv run python -m neuroscan.tasks.workload.run_fusion --exp nback_fusion
+# a deep decoder, GPU (ad-hoc override of a base config — broadband recipe the nets prefer):
+uv run python -m neuroscan.tasks.run --exp mi_csp_within \
+  --set method=atcnet --set recipe.resample=250 --set recipe.fmin=4 --set recipe.fmax=40
 # the neuroviz demo (EEG / fNIRS / Fusion complementarity view):
 uv run python -m neuroviz.export --subject 1 && uv run python -m neuroviz.export_fusion \
   && python -m http.server 8000 -d neuroviz/web

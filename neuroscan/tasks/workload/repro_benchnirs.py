@@ -13,7 +13,7 @@ pipeline dep:
     python -m neuroscan.tasks.workload.repro_benchnirs --data <dir with VP001-NIRS/…>
 
 Expected: MEAN ≈ 0.39 (we measured 0.392 on our copy — matches the paper's 0.389). Compare against our
-`fnirs_lda` under the matched regime: `run_fnirs --method fnirs_lda --regime cross_subject_kfold`.
+`fnirs_lda` under the matched regime: `run_fnirs --exp nback_fnirs_cross_kfold`.
 """
 import argparse
 

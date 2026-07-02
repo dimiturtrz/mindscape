@@ -53,10 +53,10 @@ def _frames(X, y, chan_slice, n_frames=N_FRAMES):
 
 def _lda_patterns(X, y):
     """Per-class LDA weight on the HbO MEAN feature (what the decoder reads), one value per channel."""
-    from baselines.fnirs_features import _features
+    from core.features import amplitude_features
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
-    lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto").fit(_features(X), y)
+    lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto").fit(amplitude_features(X), y)
     coef = np.atleast_2d(lda.coef_)                         # [n_class, 216] (mean|slope|peak × 72)
     classes = sorted(np.unique(y).tolist())
     if coef.shape[0] == 1 and len(classes) == 2:
@@ -89,7 +89,7 @@ def _predictions(subject: int, X, y):
     subject's cross-subject fold accuracy — so the viewer shows ground truth vs prediction, not just signal."""
     import polars as pl
 
-    from baselines import fnirs_features as ff
+    from baselines.fnirs import features as ff
     from core.data import store
     from core.data.fnirs.base import FnirsCfg
 

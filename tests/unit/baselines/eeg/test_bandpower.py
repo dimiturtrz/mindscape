@@ -7,7 +7,8 @@ scale-invariance, and that the decoder beats chance through the fit/predict_prob
 import numpy as np
 import pytest
 
-from baselines.eeg_bandpower import EegBandpower, _bandpower
+from baselines.eeg.bandpower import EegBandpower
+from core.features import band_powers as _bandpower
 
 FS = 100.0
 N_CH = 4

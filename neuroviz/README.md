@@ -29,11 +29,13 @@ to a standard-10-05 montage; same JSON schema as the motor-imagery EEG view.
 
 **Fusion view (a third toggle):** not a signal animation but the *result* — a per-block **complementarity
 map**. Every held-out n-back block (rows = subjects, subject-wise 5-fold GroupKFold) is a cell colored by
-which modality decoded it: both-right / EEG-only / fNIRS-only / both-wrong. Blue + orange scattered and
-balanced (error corr φ≈0) = the two weak modalities fail on *different* blocks, so an oracle that picked the
-right one per block hits **0.69** vs best-single **0.47** — yet naive late fusion sits at the best single,
-because confidence doesn't track correctness. The bars show EEG · fNIRS · late · oracle against chance. It
-visualizes the honest fusion finding: complementarity is real, no output-space combiner cashes it.
+which modality decoded it: both-right / EEG-only / fNIRS-only / both-wrong. EEG is the re-centered Riemann
+decoder, fNIRS the amplitude LDA. The map makes the fusion question visual: how much of the grid is
+*exactly one* modality right (the complementarity an oracle could pick up) versus how much a plain
+combiner actually recovers. The bars read the live accuracies (EEG · fNIRS · late · oracle vs chance)
+straight off the current run — the numbers live in the view, not welded into this description, so they
+stay right as the decoders improve. For the measured values + the honest-null reading, see the fusion
+section of the top-level README.
 
 ## Run
 ```bash

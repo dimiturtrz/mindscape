@@ -39,15 +39,21 @@ def main():
     classes = sorted(me["label"].unique().to_list())
     id2lab = dict(enumerate(sorted(me["label"].unique().to_list())))     # label_id -> name (matches gather order)
     n_classes = len(classes)
-    ef, es = get_method("riemann"); ff, fs = get_method("fnirs_lda")
+    from pyriemann.estimation import Covariances
+
+    from baselines.eeg import transfer
+    ff, fs = get_method("fnirs_lda")
 
     blocks = []
     for tr, te in GroupKFold(n_splits=5).split(subs, groups=subs):
-        Xe, y, _ = _gather(me, subs[tr]); Xf, yf, _ = _gather(mf, subs[tr])
+        Xe, y, ge = _gather(me, subs[tr]); Xf, yf, _ = _gather(mf, subs[tr])
         assert np.array_equal(y, yf)
         Xet, yt, gt = _gather(me, subs[te]); Xft, yft, _ = _gather(mf, subs[te])
         assert np.array_equal(yt, yft)
-        pe = es(ef(Xe, y), Xet).argmax(1)
+        # EEG = re-centered Riemann (per-subject, zero-shot) — the strong workload modality; fNIRS = amplitude LDA
+        Ce = Covariances("oas").transform(Xe.astype(np.float64))
+        Cet = Covariances("oas").transform(Xet.astype(np.float64))
+        pe = transfer.zero_shot_predict(Ce, y, ge, Cet, scale=False, target_groups=gt).argmax(1)
         pf = fs(ff(Xf, y), Xft).argmax(1)
         for i in range(len(yt)):
             blocks.append({"subject": str(gt[i]), "truth": int(yt[i]),

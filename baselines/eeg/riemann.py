@@ -19,36 +19,7 @@ from __future__ import annotations
 import numpy as np
 
 from baselines.base import Baseline
-
-
-def _augment(X: np.ndarray, order: int, lag: int) -> np.ndarray:
-    """Time-delay embedding (Augmented Covariance Method): stack `order` lagged copies of each trial so
-    the covariance becomes [ch*order, ch*order] and encodes temporal dynamics, not just spatial structure.
-    X [n, ch, t] -> [n, ch*order, t-(order-1)*lag]. This is the SOTA-flavoured Riemannian trick — it folds
-    *time* into the SPD matrix without the instability of a short sliding window (Carrara & Papadopoulo)."""
-    n, ch, t = X.shape
-    L = t - (order - 1) * lag
-    if L <= 0:
-        raise ValueError(f"order*lag too large for trial length {t} (order={order}, lag={lag})")
-    return np.concatenate([X[:, :, k * lag:k * lag + L] for k in range(order)], axis=1)
-
-
-def recenter_covariances(C: np.ndarray) -> np.ndarray:
-    """Congruence-transport one domain's covariances to the identity: C -> M^{-1/2} C M^{-1/2}, where M
-    is the domain's Riemannian (Fréchet) mean. Removes the per-domain LOCATION shift on the SPD manifold
-    (Zanini et al. 2018 recentering) while preserving the relative class geometry — the manifold version
-    of the M2 whitening (C^{-1/2}), applied per subject to kill the between-subject nuisance.
-
-    Cross-subject EEG fails because each subject's whole covariance cloud sits at a different point on the
-    manifold (head/skin/electrode/noise) — a domain shift, not a difference in the shared ERD contrast.
-    Recentering every subject (train AND the unlabeled target) to a common origin aligns the clouds so the
-    shared discriminative structure lines up. Unsupervised for the target -> deployment-friendly."""
-    from pyriemann.utils.base import invsqrtm
-    from pyriemann.utils.mean import mean_riemann
-
-    C = np.asarray(C, dtype=np.float64)
-    W = invsqrtm(mean_riemann(C))
-    return np.einsum("ij,njk,kl->nil", W, C, W)
+from core.features import time_delay_embed
 
 
 class _RiemannBaseline(Baseline):
@@ -111,7 +82,7 @@ class Acm(_RiemannBaseline):
     def _build(self):
         from sklearn.pipeline import make_pipeline
         from sklearn.preprocessing import FunctionTransformer
-        aug = FunctionTransformer(_augment, kw_args={"order": self.order, "lag": self.lag}, validate=False)
+        aug = FunctionTransformer(time_delay_embed, kw_args={"order": self.order, "lag": self.lag}, validate=False)
         return make_pipeline(aug, _cov(self.estimator), *_tangent_lr())
 
 

@@ -15,8 +15,48 @@ import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from omegaconf import OmegaConf
+from pydantic import BaseModel
 
 REPO = Path(__file__).resolve().parent.parent   # repo root — the one place that computes it
+
+
+# ─────────────────────────── experiment registry ───────────────────────────
+# Named runs live in experiments.yaml (config-as-data, like reference.yaml); entrypoints take `--exp <name>`
+# instead of a flag per parameter. See prefer-config-files-over-argv: argv sparingly.
+
+class Experiment(BaseModel):
+    """One named run from experiments.yaml. `recipe` -> EpochCfg/FnirsCfg kwargs; `params` = method knobs."""
+    task: str                                    # decode | fnirs | align | fusion
+    dataset: str | None = None
+    method: str | None = None
+    regime: str | None = None
+    test_session: str | None = None
+    recipe: dict = {}
+    params: dict = {}
+
+
+def _experiments_doc():
+    path = REPO / "experiments.yaml"
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found — the named-experiment registry (see experiments.yaml)")
+    return OmegaConf.load(path)
+
+
+def experiment_names() -> list[str]:
+    """All registered experiment names (for --exp choices / error messages)."""
+    return sorted(_experiments_doc().experiments.keys())
+
+
+def load_experiment(name: str, overrides: list[str] | None = None) -> Experiment:
+    """Resolve a named experiment, applying any `--set key=val` dotlist overrides (e.g. `recipe.fmin=4`).
+    Unknown name -> a listing SystemExit, so the CLI fails helpfully instead of KeyError-ing."""
+    doc = _experiments_doc()
+    if name not in doc.experiments:
+        raise SystemExit(f"unknown --exp {name!r}; known: {experiment_names()}")
+    node = doc.experiments[name]
+    if overrides:
+        node = OmegaConf.merge(node, OmegaConf.from_dotlist(overrides))
+    return Experiment(**OmegaConf.to_container(node, resolve=True))
 
 
 def to_native_path(path_str: str) -> str:
