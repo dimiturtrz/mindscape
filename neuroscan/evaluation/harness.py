@@ -54,9 +54,15 @@ def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str 
               models_out: list | None = None, n_jobs: int = 1) -> dict:
     """Pure: run the method over folds, compute the metrics. No MLflow, no side effects.
     If `models_out` is given, each fold's fitted clf is appended as (fold_name, clf) for the caller to
-    persist. `n_jobs`: parallelize the (independent) folds — threading backend, so numpy/BLAS releases the
-    GIL and the fit_fn closures need no pickling. Default 1 (sequential); use -1 for CPU baselines, keep 1
-    for GPU nets (one device)."""
+    persist. `n_jobs`: parallelize the (independent) folds with the **threading** backend. NOTE the tradeoff:
+    threading shares memory but can't beat the GIL, so GIL-bound classical code (FBCSP/CSP/ACM via mne/sklearn)
+    effectively serialises here (measured: a 26-fold FBCSP cell ran ~= 26× one fold). The obvious fix —
+    process parallelism (loky) — was tried and FAILS in this environment: Windows spawns (not forks) each
+    worker, which re-imports the heavy native stack (mne/scipy/mkl) and then computes but never returns /
+    respawns → 0 folds completed in 200-400 s. So threading stays; real speedups come from *less per-fold
+    compute* (downsample recipes, crop windows — mindscape-241) and *coarse* cell-level process parallelism
+    (independent `reproduce_all --only` chunks), NOT fine-grained fold loky. See mindscape-07n.
+    Default 1 (sequential); use -1 for CPU baselines, keep 1 for GPU nets (one device)."""
     if n_jobs == 1:
         done = [_fit_score_fold(f, fit_fn, score_fn) for f in folds]
     else:
