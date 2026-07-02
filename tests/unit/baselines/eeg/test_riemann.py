@@ -25,7 +25,7 @@ def _cov_dataset(n_per_class=40, n_ch=4, n_t=128, seed=0):
     return np.asarray(X, dtype=np.float64), np.asarray(y)
 
 
-@pytest.mark.parametrize("method", ["ts", "mdm", "acm"])
+@pytest.mark.parametrize("method", ["ts", "mdm", "fgmdm", "acm"])
 def test_riemann_decodes_covariance_signal(method):
     X, y = _cov_dataset(seed=1)
     clf = riemann.fit(X, y, method=method)
