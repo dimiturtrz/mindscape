@@ -83,7 +83,7 @@ def _zero_shot_fold(s, Ctr, ytr, Cte, yte, groups, scale):
     return _row(s, yte, probs)
 
 
-def _calibrated_fold(s, method, Ctr, ytr, Cte, yte, calib_frac, seed):
+def _calibrated_fold(s, method, Ctr, ytr, Cte, yte, calib_frac, seed, mdwm_lambda=0.5):
     """SUPERVISED transfer with a DISJOINT target calibration split. Carve a stratified `calib_frac` of the
     held-out subject as the *only* labelled target data; fit RPA-rotation / MDWM on source + that calib slice;
     predict — and score — the REMAINING (disjoint) target blocks. Test labels never enter the fit."""
@@ -102,7 +102,7 @@ def _calibrated_fold(s, method, Ctr, ytr, Cte, yte, calib_frac, seed):
     Xev, _ = encode_domains(Cte[ev], yte[ev].astype(str), np.array(["target"] * len(ev)))
 
     if method == "mdwm":
-        model = MDWM(domain_tradeoff=0.5, target_domain="target")
+        model = MDWM(domain_tradeoff=mdwm_lambda, target_domain="target")
     else:                                                            # full RPA + tangent-space LR
         base = make_pipeline(TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0))
         model = make_pipeline(TLCenter("target"), TLScale("target", centered_data=True),
@@ -122,7 +122,7 @@ def _row(s, yte, probs):
     return row, probs, yte
 
 
-def _run_fold(s, tr, te, method, calib_frac, seed, augment, order, lag):
+def _run_fold(s, tr, te, method, calib_frac, seed, augment, order, lag, mdwm_lambda=0.5):
     """One LOSO fold — module-level so joblib ships it to a worker (folds are independent)."""
     Xtr, ytr = store.gather(tr)
     Xte, yte = store.gather(te)
@@ -131,7 +131,7 @@ def _run_fold(s, tr, te, method, calib_frac, seed, augment, order, lag):
     if method in _ZERO_SHOT:
         return _zero_shot_fold(s, Ctr, ytr, Cte, yte, tr["subject"].to_numpy(),
                                scale=(method == "recenter_scale"))
-    return _calibrated_fold(s, method, Ctr, ytr, Cte, yte, calib_frac, seed)
+    return _calibrated_fold(s, method, Ctr, ytr, Cte, yte, calib_frac, seed, mdwm_lambda)
 
 
 def main():
@@ -143,6 +143,8 @@ def main():
                     help="calibrated methods: fraction of the target subject used as the labelled calibration "
                          "split (the rest is the disjoint test set)")
     ap.add_argument("--seed", type=int, default=0, help="calibration-split seed")
+    ap.add_argument("--mdwm-lambda", type=float, default=0.5,
+                    help="MDWM domain tradeoff (0=source-only, 1=target-only). Sweep it to see the fragility.")
     ap.add_argument("--augment", action="store_true", help="time-delay-embed covariances (ACM) first")
     ap.add_argument("--order", type=int, default=4)
     ap.add_argument("--lag", type=int, default=8)
@@ -167,7 +169,8 @@ def main():
     folds = list(splits.leave_one_subject_out(meta))
     print(f"\n=== {name} · cross_subject · {args.dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
     out_folds = Parallel(n_jobs=args.jobs)(
-        delayed(_run_fold)(s, tr, te, args.method, args.calib_frac, args.seed, args.augment, args.order, args.lag)
+        delayed(_run_fold)(s, tr, te, args.method, args.calib_frac, args.seed, args.augment, args.order,
+                            args.lag, args.mdwm_lambda)
         for s, tr, te in folds)
 
     rows, P, Y = [], [], []

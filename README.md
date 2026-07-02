@@ -83,12 +83,20 @@ closes most of the gap, **0.36 → 0.50**; adding dispersion-alignment (re-scali
 displacement *was* the gap — and it's the *location*, not the features (ACM's richer time-delay covariances
 score 0.355 alone, only 0.471 even re-centered). **Calibrated** (a short labelled calibration session): the
 supervised re-rotation aligns *class* structure and lifts further — even **10 %** of a session (≈7 trials/class)
-reaches **0.555**, scaling to **0.650** at 50 %, approaching the within-subject ceiling (0.60–0.66). MDWM
-under-performs even zero-shot re-centering here (0.412) — the honest negative of the pair.
+reaches **0.555**, scaling to **0.650** at 50 %, approaching the within-subject ceiling (0.60–0.66).
 
-**The one non-negotiable:** those calibration labels come from a **disjoint** stratified split of the held-out
-subject — the rotation is fit there and scored on the *remaining* blocks. Test labels never enter the fit;
-otherwise "calibrated transfer" is just leakage. (Same honesty as the fNIRS calibration ablation.)
+**MDWM is the honest negative — and a lesson in robustness.** At its default weighting it scores 0.412, below
+even zero-shot re-centering. Tuning its source↔target tradeoff λ *does* help — but that's the tell: acc swings
+**0.31 → 0.57** across λ (`--mdwm-lambda`), and the optimum is **λ = 1 (target-only)**, i.e. the best MDWM
+*ignores the source entirely* — its transfer mechanism adds nothing here, it's just target-calibration MDM.
+A method whose success hinges on a fragile, data-tuned knob is the *least* deployable of the three: re-centering
+needs **no** knob and **no** labels, RPA needs a few labels but a robust mechanism, MDWM needs per-setting
+tuning that may not survive real-world variation. So we report it untuned (0.412) — tuning it up would hide
+exactly the fragility worth showing.
+
+**The one non-negotiable:** the calibrated methods' labels come from a **disjoint** stratified split of the
+held-out subject — fit there, scored on the *remaining* blocks. Test labels never enter the fit; otherwise
+"calibrated transfer" is just leakage. (Same honesty as the fNIRS calibration ablation.)
 
 ### The decoders — measured (same BCI-2a task, commodity architectures)
 We reproduce *standard* architectures (the decoder is commodity); the contribution is the eval rigor and
