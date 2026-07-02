@@ -29,14 +29,13 @@ to a standard-10-05 montage; same JSON schema as the motor-imagery EEG view.
 
 **Fusion view (a third toggle):** not a signal animation but the *result* — a per-block **complementarity
 map**. Every held-out n-back block (rows = subjects, subject-wise 5-fold GroupKFold) is a cell colored by
-which modality decoded it: both-right / EEG-only / fNIRS-only / both-wrong. EEG is the **re-centered Riemann**
-decoder (<!--r:fusion_cross_subject_kfold_shin2017_nback.eeg-->0.580<!--/r-->, the strong modality) and fNIRS
-the amplitude LDA (<!--r:fusion_cross_subject_kfold_shin2017_nback.fnirs-->0.474<!--/r-->); their errors are
-near-independent, so an oracle picking the right one per block hits
-**<!--r:fusion_cross_subject_kfold_shin2017_nback.oracle_either-->0.752<!--/r-->** vs best-single
-**<!--r:fusion_cross_subject_kfold_shin2017_nback.best_single-->0.580<!--/r-->** — yet output-space fusion
-cashes only a sliver (late ≈ best single). The bars show EEG · fNIRS · late · oracle against chance. It
-visualizes the honest fusion finding: complementarity is large, output-space fusion mostly can't reach it.
+which modality decoded it: both-right / EEG-only / fNIRS-only / both-wrong. EEG is the re-centered Riemann
+decoder, fNIRS the amplitude LDA. The map makes the fusion question visual: how much of the grid is
+*exactly one* modality right (the complementarity an oracle could pick up) versus how much a plain
+combiner actually recovers. The bars read the live accuracies (EEG · fNIRS · late · oracle vs chance)
+straight off the current run — the numbers live in the view, not welded into this description, so they
+stay right as the decoders improve. For the measured values + the honest-null reading, see the fusion
+section of the top-level README.
 
 ## Run
 ```bash
