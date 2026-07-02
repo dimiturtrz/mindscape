@@ -1,8 +1,15 @@
 # Named experiment registry — the config-as-data source of truth for every canonical run.
 #
+# The idea: a run is a COMPOSITION — (dataset from core.data) × (method from baselines) × (regime + recipe
+# from neuroscan.evaluation). It spans all three layers, so it belongs to none of them; it's an orchestration
+# artifact, addressed by name at the repo root next to its siblings paths.yaml (where the data is) and
+# reference.yaml (the SOTA ceilings). That's why it is NOT split under baselines/ or neuroscan/ — neither
+# owns the whole tuple, and a decoding method shouldn't hard-code which datasets/regimes it's run under.
+#
 # Entrypoints take `--exp <name>` (+ a generic `--set key=val` for ad-hoc overrides), NOT a flag per
-# parameter — adding an experiment is an entry HERE, not a new CLI flag. Same spirit as reference.yaml
-# and paths.yaml. `reproduce_all` iterates the harness runs below (task: decode | fnirs).
+# parameter — adding an experiment is an entry HERE, not a new CLI flag. `reproduce_all` iterates the
+# harness runs below (task: decode | fnirs). The chosen `--exp` name is logged as an MLflow run param, so
+# every tracked run points back to the config entry that produced it.
 #
 # Fields:
 #   task          which runner: decode (run.py) | fnirs (run_fnirs.py) | align (align.py) | fusion (run_fusion.py)

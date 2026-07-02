@@ -57,7 +57,7 @@ def main():
     n_jobs = -1 if method in {"csp_lda", "riemann", "riemann_acm", "fnirs_lda"} else 1
     print(f"\n=== {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
     res = harness.run(method, fit_fn, score_fn, folds, n_classes, regime=regime,
-                      params={"method": method, "regime": regime,
+                      params={"exp": args.exp, "method": method, "regime": regime,
                               "dataset": dataset, "resample": cfg.resample},
                       run_dir=run_dir, n_jobs=n_jobs)
 

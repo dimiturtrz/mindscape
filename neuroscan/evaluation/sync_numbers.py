@@ -25,7 +25,7 @@ import sys
 from core.config import REPO
 
 _RESULTS = REPO / "results.json"
-_README = REPO / "README.md"
+_DOCS = [REPO / "README.md", REPO / "neuroviz" / "README.md"]   # every doc with run-derived markers
 _DP = 3          # decimals shown in the README (snapshot keeps more; see results._PRECISION)
 
 _MARKER = re.compile(r"<!--r:([^>]+?)-->(.*?)<!--/r-->")
@@ -61,18 +61,23 @@ def _markers(runs: dict, text: str) -> list[tuple[str, str, str, str]]:
 
 def sync(check: bool = False) -> int:
     runs = json.loads(_RESULTS.read_text())["runs"]
-    text = _README.read_text(encoding="utf-8")
-    marks = _markers(runs, text)
-    stale = [f"{expr}: {cur!r} -> {new!r}" for _old, expr, cur, new in marks if cur != new]
+    n_marks = n_stale = 0
+    for doc in _DOCS:
+        text = doc.read_text(encoding="utf-8")
+        marks = _markers(runs, text)
+        stale = [f"{doc.name}:{expr}: {cur!r} -> {new!r}" for _old, expr, cur, new in marks if cur != new]
+        n_marks += len(marks); n_stale += len(stale)
+        if check:
+            for s in stale:
+                print(f"  {s}")
+            continue
+        for old, expr, _cur, new in marks:
+            text = text.replace(old, f"<!--r:{expr}-->{new}<!--/r-->", 1)
+        doc.write_text(text, encoding="utf-8")
     if check:
-        for s in stale:
-            print(f"  {s}")
-        print(f"{'STALE' if stale else 'ok'} — {len(stale)}/{len(marks)} marker(s) out of sync")
-        return 1 if stale else 0
-    for old, expr, _cur, new in marks:
-        text = text.replace(old, f"<!--r:{expr}-->{new}<!--/r-->", 1)
-    _README.write_text(text, encoding="utf-8")
-    print(f"synced {len(marks)} marker(s); updated {len(stale)}")
+        print(f"{'STALE' if n_stale else 'ok'} — {n_stale}/{n_marks} marker(s) out of sync")
+        return 1 if n_stale else 0
+    print(f"synced {n_marks} marker(s) across {len(_DOCS)} doc(s); updated {n_stale}")
     return 0
 
 

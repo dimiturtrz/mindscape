@@ -91,10 +91,12 @@ reaches **0.555**, scaling to **0.650** at 50 %, approaching the within-subject 
 even zero-shot re-centering. Tuning its source↔target tradeoff λ *does* help — but that's the tell: acc swings
 **0.31 → 0.57** across λ (`--set params.mdwm_lambda=…`), and the optimum is **λ = 1 (target-only)**, i.e. the best MDWM
 *ignores the source entirely* — its transfer mechanism adds nothing here, it's just target-calibration MDM.
-A method whose success hinges on a fragile, data-tuned knob is the *least* deployable of the three: re-centering
-needs **no** knob and **no** labels, RPA needs a few labels but a robust mechanism, MDWM needs per-setting
-tuning that may not survive real-world variation. So we report it untuned (0.412) — tuning it up would hide
-exactly the fragility worth showing.
+A method whose accuracy swings that much with one knob is, all else equal, the harder one to deploy — you'd
+have to re-find λ per setting, and a value tuned here needn't transfer. We haven't *shown* that across
+datasets (that would need a robustness study we haven't run — a fair thing to note, not a proven ranking);
+it's a single-dataset observation plus the general principle that a parameterless method (re-centering: no
+knob, no labels) is preferable when it's competitive. So we report MDWM untuned (0.412) — tuning it up would
+hide exactly the fragility worth showing.
 
 **The one non-negotiable:** the calibrated methods' labels come from a **disjoint** stratified split of the
 held-out subject — fit there, scored on the *remaining* blocks. Test labels never enter the fit; otherwise

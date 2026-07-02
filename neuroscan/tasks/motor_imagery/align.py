@@ -146,8 +146,8 @@ def main():
            "acc_mean": acc, "kappa_mean": kap, "per_fold": rows}
     (out / "aggregate.json").write_text(json.dumps(res, indent=2))
     with tracking.run("mindscape", f"{name}_cross",
-                      params={"method": name, "transfer_regime": regime, "augment": augment,
-                              "calib_frac": calib_frac},
+                      params={"exp": args.exp, "method": name, "transfer_regime": regime,
+                              "augment": augment, "calib_frac": calib_frac},
                       tags={"kind": "transfer", "regime": "cross_subject"}, run_dir=out):
         tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
         tracking.per_group("acc_subject", {r["fold"]: r["acc"] for r in rows})

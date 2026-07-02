@@ -53,7 +53,7 @@ def main():
     print(f"\n=== {method} · {regime} · {dataset} ({len(folds)} folds, chance {chance:.3f}) ===")
     n_jobs = -1 if method in {"csp_lda", "riemann", "riemann_acm", "fnirs_lda"} else 1
     res = harness.run(method, fit_fn, score_fn, folds, n_classes, regime=regime,
-                      params={"method": method, "regime": regime, "dataset": dataset,
+                      params={"exp": args.exp, "method": method, "regime": regime, "dataset": dataset,
                               "modality": "fnirs"}, run_dir=run_dir, n_jobs=n_jobs)
     (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
     from neuroscan.evaluation import results
