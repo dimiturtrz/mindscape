@@ -1,0 +1,47 @@
+# Named experiment registry — the config-as-data source of truth for every canonical run.
+#
+# Entrypoints take `--exp <name>` (+ a generic `--set key=val` for ad-hoc overrides), NOT a flag per
+# parameter — adding an experiment is an entry HERE, not a new CLI flag. Same spirit as reference.yaml
+# and paths.yaml. `reproduce_all` iterates the harness runs below (task: decode | fnirs).
+#
+# Fields:
+#   task          which runner: decode (run.py) | fnirs (run_fnirs.py) | align (align.py) | fusion (run_fusion.py)
+#   dataset/method/regime/test_session   the run coordinates
+#   recipe        preprocessing kwargs -> EpochCfg (decode/align) or FnirsCfg (fnirs). {} = the cfg defaults.
+#   params        method-specific knobs (align: calib_frac/seed/mdwm_lambda/augment/order/lag · fusion: plain_eeg)
+#
+# Override at the CLI sparingly, e.g.:  run --exp mi_riemann_cross --set recipe.fmin=4 --set recipe.resample=100
+
+experiments:
+
+  # ── Task 1 · motor imagery (BCI IV-2a, 4-class) ──────────────────────────────
+  mi_csp_within:        {task: decode, dataset: bnci2014_001, method: csp_lda,     regime: within,        test_session: "1test"}
+  mi_csp_cross:         {task: decode, dataset: bnci2014_001, method: csp_lda,     regime: cross_subject}
+  mi_riemann_within:    {task: decode, dataset: bnci2014_001, method: riemann,     regime: within,        test_session: "1test"}
+  mi_riemann_cross:     {task: decode, dataset: bnci2014_001, method: riemann,     regime: cross_subject}
+  mi_riemann_acm_cross: {task: decode, dataset: bnci2014_001, method: riemann_acm, regime: cross_subject}
+
+  # ── Task 1 · cross-subject transfer ladder (align.py, Riemannian Procrustes) ─
+  # zero-shot (no target labels) · calibrated methods carve a disjoint calib split of the held-out subject
+  mi_align_recenter:       {task: align, dataset: bnci2014_001, method: recenter}
+  mi_align_recenter_scale: {task: align, dataset: bnci2014_001, method: recenter_scale}
+  mi_align_recenter_acm:   {task: align, dataset: bnci2014_001, method: recenter, params: {augment: true, order: 4, lag: 8}}
+  mi_align_rpa:            {task: align, dataset: bnci2014_001, method: rpa,  params: {calib_frac: 0.5, seed: 0}}
+  mi_align_mdwm:           {task: align, dataset: bnci2014_001, method: mdwm, params: {calib_frac: 0.5, seed: 0, mdwm_lambda: 0.5}}
+
+  # ── Task 2 · n-back workload (Shin) · fNIRS ──────────────────────────────────
+  nback_fnirs_cross:       {task: fnirs, dataset: shin2017_nback, method: fnirs_lda, regime: cross_subject}
+  nback_fnirs_cross_kfold: {task: fnirs, dataset: shin2017_nback, method: fnirs_lda, regime: cross_subject_kfold}
+  nback_fnirs_within:      {task: fnirs, dataset: shin2017_nback, method: fnirs_lda, regime: within, test_session: "2"}
+
+  # ── Task 2 · n-back workload (Shin) · EEG (the workload recipe: 4-30 Hz, 40 s block) ─
+  nback_eeg_csp_cross:           {task: decode, dataset: shin2017_nback_eeg, method: csp_lda, regime: cross_subject,       recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  nback_eeg_csp_cross_kfold:     {task: decode, dataset: shin2017_nback_eeg, method: csp_lda, regime: cross_subject_kfold, recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  nback_eeg_csp_within:          {task: decode, dataset: shin2017_nback_eeg, method: csp_lda, regime: within, test_session: "2", recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  nback_eeg_riemann_cross:       {task: decode, dataset: shin2017_nback_eeg, method: riemann, regime: cross_subject,       recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  nback_eeg_riemann_cross_kfold: {task: decode, dataset: shin2017_nback_eeg, method: riemann, regime: cross_subject_kfold, recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  nback_eeg_riemann_within:      {task: decode, dataset: shin2017_nback_eeg, method: riemann, regime: within, test_session: "2", recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+
+  # ── Task 2 · EEG+fNIRS fusion (run_fusion.py) ────────────────────────────────
+  nback_fusion:       {task: fusion, regime: cross_subject_kfold, params: {plain_eeg: false}}
+  nback_fusion_plain: {task: fusion, regime: cross_subject_kfold, params: {plain_eeg: true}}

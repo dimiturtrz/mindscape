@@ -89,7 +89,7 @@ reaches **0.555**, scaling to **0.650** at 50 %, approaching the within-subject 
 
 **MDWM is the honest negative — and a lesson in robustness.** At its default weighting it scores 0.412, below
 even zero-shot re-centering. Tuning its source↔target tradeoff λ *does* help — but that's the tell: acc swings
-**0.31 → 0.57** across λ (`--mdwm-lambda`), and the optimum is **λ = 1 (target-only)**, i.e. the best MDWM
+**0.31 → 0.57** across λ (`--set params.mdwm_lambda=…`), and the optimum is **λ = 1 (target-only)**, i.e. the best MDWM
 *ignores the source entirely* — its transfer mechanism adds nothing here, it's just target-calibration MDM.
 A method whose success hinges on a fragile, data-tuned knob is the *least* deployable of the three: re-centering
 needs **no** knob and **no** labels, RPA needs a few labels but a robust mechanism, MDWM needs per-setting
@@ -317,17 +317,18 @@ Downloads land under `<root>/raw/`; the epoch cache under `<root>/processed/` (c
 ```bash
 uv sync                                              # .venv from pyproject + uv.lock; prefix commands with `uv run`
 cp paths.example.yaml paths.yaml                     # set the one data root
+# runs are named configs in experiments.yaml, picked with --exp (argv stays sparse; --set for ad-hoc tweaks):
 # the headline contrast — the same decoder, two regimes:
-uv run python -m neuroscan.tasks.run --method csp_lda --regime within --test-session 1test
-uv run python -m neuroscan.tasks.run --method csp_lda --regime cross_subject   # the OOD gap
+uv run python -m neuroscan.tasks.run --exp mi_csp_within
+uv run python -m neuroscan.tasks.run --exp mi_csp_cross               # the OOD gap
 # the strongest classical baseline — covariances on a Riemannian manifold:
-uv run python -m neuroscan.tasks.run --method riemann --regime within
+uv run python -m neuroscan.tasks.run --exp mi_riemann_within
 # the second modality — fNIRS mental-workload (amplitude features, not covariance):
-uv run python -m neuroscan.tasks.workload.run_fnirs --method fnirs_lda --regime cross_subject
+uv run python -m neuroscan.tasks.workload.run_fnirs --exp nback_fnirs_cross
 # EEG+fNIRS fusion on the same task — complementarity + the aggregation sweep (a rigorous null):
-uv run python -m neuroscan.tasks.workload.run_fusion --regime cross_subject_kfold
-# a deep decoder, GPU:
-uv run python -m neuroscan.tasks.run --method atcnet --regime within --resample 250 --fmin 4 --fmax 40
+uv run python -m neuroscan.tasks.workload.run_fusion --exp nback_fusion
+# a deep decoder, GPU (ad-hoc override of a base config):
+uv run python -m neuroscan.tasks.run --exp mi_csp_within --set method=atcnet --set recipe.resample=250
 # the neuroviz demo (EEG / fNIRS / Fusion complementarity view):
 uv run python -m neuroviz.export --subject 1 && uv run python -m neuroviz.export_fusion \
   && python -m http.server 8000 -d neuroviz/web

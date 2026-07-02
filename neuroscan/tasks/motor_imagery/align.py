@@ -16,9 +16,12 @@ The rotation (step 3) and MDWM are SUPERVISED — they need target labels. Those
 calibration split of the held-out subject (`--calib-frac`), fit there, evaluated on the REMAINING blocks
 only. Test labels are never touched — the same honesty as the per-subject-calibration ablation.
 
-    python -m neuroscan.tasks.motor_imagery.align --method recenter          # zero-shot (the baseline fix)
-    python -m neuroscan.tasks.motor_imagery.align --method rpa --calib-frac 0.5   # calibrated full RPA
-    python -m neuroscan.tasks.motor_imagery.align --method mdwm --augment    # calibrated, on ACM covariances
+    python -m neuroscan.tasks.motor_imagery.align --exp mi_align_recenter        # zero-shot (the baseline fix)
+    python -m neuroscan.tasks.motor_imagery.align --exp mi_align_rpa             # calibrated full RPA
+    python -m neuroscan.tasks.motor_imagery.align --exp mi_align_recenter_acm    # zero-shot on ACM covariances
+
+The method + calibration/ACM knobs live in experiments.yaml (`params:`); argv keeps only --exp (+ --set for
+ad-hoc tweaks like `--set params.mdwm_lambda=1.0`) and the resource knob --jobs.
 """
 from __future__ import annotations
 
@@ -28,7 +31,7 @@ from pathlib import Path
 
 import numpy as np
 
-from core import reference
+from core import config, reference
 from core.data import splits, store
 from core.data.eeg.base import EpochCfg
 from core.features import time_delay_embed
@@ -88,21 +91,10 @@ def _run_fold(s, tr, te, method, calib_frac, seed, augment, order, lag, mdwm_lam
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--dataset", default="bnci2014_001")
-    ap.add_argument("--method", default="recenter", choices=sorted(_ZERO_SHOT | _CALIBRATED),
-                    help="recenter / recenter_scale (zero-shot) · rpa / mdwm (calibrated)")
-    ap.add_argument("--calib-frac", type=float, default=0.5,
-                    help="calibrated methods: fraction of the target subject used as the labelled calibration "
-                         "split (the rest is the disjoint test set)")
-    ap.add_argument("--seed", type=int, default=0, help="calibration-split seed")
-    ap.add_argument("--mdwm-lambda", type=float, default=0.5,
-                    help="MDWM domain tradeoff (0=source-only, 1=target-only). Sweep it to see the fragility.")
-    ap.add_argument("--augment", action="store_true", help="time-delay-embed covariances (ACM) first")
-    ap.add_argument("--order", type=int, default=4)
-    ap.add_argument("--lag", type=int, default=8)
-    ap.add_argument("--resample", type=float, default=128.0)
-    ap.add_argument("--fmin", type=float, default=8.0)
-    ap.add_argument("--fmax", type=float, default=32.0)
+    ap.add_argument("--exp", default="mi_align_recenter",
+                    help="named transfer experiment in experiments.yaml (task: align)")
+    ap.add_argument("--set", dest="overrides", action="append", default=[], metavar="key=val",
+                    help="ad-hoc override, e.g. --set method=mdwm --set params.mdwm_lambda=1.0")
     ap.add_argument("--jobs", type=int, default=-1, help="parallel LOSO folds (joblib; -1 = all cores)")
     ap.add_argument("--out", default=None)
     ap.add_argument("--no-record", action="store_true", help="skip updating the committed results.json snapshot")
@@ -110,19 +102,27 @@ def main():
 
     from joblib import Parallel, delayed
 
-    cfg = EpochCfg(resample=args.resample, fmin=args.fmin, fmax=args.fmax)
-    meta = store.load(args.dataset, cfg)
-    cov = "acm" if args.augment else "ts"
-    regime = "calibrated" if args.method in _CALIBRATED else "zero_shot"
-    name = f"riemann_{args.method}_{cov}"           # …_ts / …_acm always (keeps riemann_recenter_ts markers)
+    exp = config.load_experiment(args.exp, args.overrides)
+    dataset, method = exp.dataset, exp.method
+    p = exp.params
+    calib_frac = p.get("calib_frac", 0.5)
+    seed = p.get("seed", 0)
+    mdwm_lambda = p.get("mdwm_lambda", 0.5)
+    augment = p.get("augment", False)
+    order, lag = p.get("order", 4), p.get("lag", 8)
+
+    cfg = EpochCfg(**exp.recipe)
+    meta = store.load(dataset, cfg)
+    cov = "acm" if augment else "ts"
+    regime = "calibrated" if method in _CALIBRATED else "zero_shot"
+    name = f"riemann_{method}_{cov}"                # …_ts / …_acm always (keeps riemann_recenter_ts markers)
     print(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · recipe {cfg.key()} · "
-          f"{args.method} ({regime}, cov={cov})" + (f" · calib {args.calib_frac:.0%}" if regime == "calibrated" else ""))
+          f"{method} ({regime}, cov={cov})" + (f" · calib {calib_frac:.0%}" if regime == "calibrated" else ""))
 
     folds = list(splits.leave_one_subject_out(meta))
-    print(f"\n=== {name} · cross_subject · {args.dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
+    print(f"\n=== {name} · cross_subject · {dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
     out_folds = Parallel(n_jobs=args.jobs)(
-        delayed(_run_fold)(s, tr, te, args.method, args.calib_frac, args.seed, args.augment, args.order,
-                            args.lag, args.mdwm_lambda)
+        delayed(_run_fold)(s, tr, te, method, calib_frac, seed, augment, order, lag, mdwm_lambda)
         for s, tr, te in folds)
 
     rows, P, Y = [], [], []
@@ -136,18 +136,18 @@ def main():
     acc = float(np.mean([r["acc"] for r in rows]))
     kap = float(np.mean([r["kappa"] for r in rows]))
     print(f"  {'MEAN':>6}  acc {acc:.3f}  kappa {kap:.3f}   [{regime}]")
-    print("  vs reference: " + reference.compare(acc, args.dataset, "cross_subject", "riemann"))
+    print("  vs reference: " + reference.compare(acc, dataset, "cross_subject", "riemann"))
     print("  (un-recentered riemann LOSO ~0.36; recenter ~0.50 — read the ladder against those)")
 
-    out = Path(args.out) if args.out else Path("runs") / f"{name}_{args.dataset}"
+    out = Path(args.out) if args.out else Path("runs") / f"{name}_{dataset}"
     out.mkdir(parents=True, exist_ok=True)
     res = {"method": name, "regime": "cross_subject", "transfer_regime": regime,
-           "calib_frac": args.calib_frac if regime == "calibrated" else None,
+           "calib_frac": calib_frac if regime == "calibrated" else None,
            "acc_mean": acc, "kappa_mean": kap, "per_fold": rows}
     (out / "aggregate.json").write_text(json.dumps(res, indent=2))
     with tracking.run("mindscape", f"{name}_cross",
-                      params={"method": name, "transfer_regime": regime, "augment": args.augment,
-                              "calib_frac": args.calib_frac},
+                      params={"method": name, "transfer_regime": regime, "augment": augment,
+                              "calib_frac": calib_frac},
                       tags={"kind": "transfer", "regime": "cross_subject"}, run_dir=out):
         tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
         tracking.per_group("acc_subject", {r["fold"]: r["acc"] for r in rows})

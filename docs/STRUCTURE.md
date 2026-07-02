@@ -79,7 +79,7 @@ _Diagrams are kept coarse (layer + contract) on purpose — they map to folders 
 ### `core/` — the engine
 | module | role |
 |---|---|
-| `core/config.py` | one data root (`paths.yaml` / `MINDSCAPE_DATA`), everything derived; cross-platform path translation; points MOABB's cache at `<root>/raw` |
+| `core/config.py` | one data root (`paths.yaml` / `MINDSCAPE_DATA`), everything derived; cross-platform path translation; points MOABB's cache at `<root>/raw`. Also the **named-experiment registry** — `load_experiment(name)` over `experiments.yaml` (config-as-data; entrypoints take `--exp` not a flag per knob) |
 | `core/data/store.py` | the **epoch cloud** — consolidates a dataset into a recipe-keyed cache (`processed/<ds>/<key>/` = per-subject npz + a meta CSV + a `channels.json` when the adapter exposes `channels()`, so the cache is self-describing / one-format), `gather()` pulls a split's epochs back in row order, `channels()` returns the montage names |
 | `core/data/splits.py` | **split-as-criteria** — a split is the cloud *filtered* (`make_split(meta, test_subjects, test_sessions, …)`), not a named thing; within / cross-subject (LOSO) / cross-session are all the same function with different criteria |
 | `core/data/eeg/base.py` | the canonical schema + `DatasetAdapter` protocol + a reusable MOABB motor-imagery adapter |
@@ -104,7 +104,7 @@ _Diagrams are kept coarse (layer + contract) on purpose — they map to folders 
 | `models/transforms.py` | standardizers (z-score / EMS / identity) + sliding-window crops, independently testable |
 | `models/__init__.py` | `get_method(name)` — one registry over the `core.decoder.Decoder` contract: baselines and nets share a single `predict_proba` scorer; only the builder differs (a fresh baseline object, or `decoders.make` for a net) |
 | `tracking.py` | guarded local-sqlite MLflow (no-op if absent); `save_model` persists trained models (torch `.pt` / sklearn `.joblib`) to `runs/<name>/models/` + as an artifact |
-| `tasks/` | thin CLIs organized **by decoding task**. Root: `run` (generic EEG decode under a regime — serves both tasks via `--dataset`), `reproduce_all` (regenerate the canonical numbers). `tasks/motor_imagery/`: `align` (cross-subject Riemannian re-centering), `reproduce_atcnet` (faithful reproduction), `quantize` (optional edge deploy). `tasks/workload/`: `run_fnirs` (fNIRS decode), `run_fusion` (EEG+fNIRS fusion + complementarity/aggregation sweep), `fusion_gate` (compact learned gate — honest negative), `repro_benchnirs` (BenchNIRS anchor), `calibration_ablation` (per-subject calibration = the EEG transfer lever) |
+| `tasks/` | thin CLIs organized **by decoding task**, each driven by a named config (`--exp <name>` from `experiments.yaml`, `--set k=v` for ad-hoc tweaks). Root: `run` (generic EEG decode — serves both tasks), `reproduce_all` (regenerate the canonical numbers by iterating the registry). `tasks/motor_imagery/`: `align` (cross-subject Riemannian re-centering), `reproduce_atcnet` (faithful reproduction), `quantize` (optional edge deploy). `tasks/workload/`: `run_fnirs` (fNIRS decode), `run_fusion` (EEG+fNIRS fusion + complementarity/aggregation sweep), `fusion_gate` (compact learned gate — honest negative), `repro_benchnirs` (BenchNIRS anchor), `calibration_ablation` (per-subject calibration = the EEG transfer lever) |
 
 ### `baselines/` and the rest
 Method **objects**, not loose functions, **grouped by modality** and kept **thin** — each is a class owning

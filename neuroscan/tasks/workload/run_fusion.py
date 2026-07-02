@@ -11,7 +11,10 @@ Two fusion levels, both kept dumb (tiny data → no room for a learned fusion mo
 
 Reported under the matched 5-fold GroupKFold (benchmark-comparable), alongside the unimodal baselines.
 
-    python -m neuroscan.tasks.workload.run_fusion --regime cross_subject_kfold
+    python -m neuroscan.tasks.workload.run_fusion --exp nback_fusion         # re-centered (strong) EEG
+    python -m neuroscan.tasks.workload.run_fusion --exp nback_fusion_plain   # plain EEG (comparison)
+
+Config (regime, plain-vs-recentered EEG) lives in experiments.yaml (task: fusion).
 """
 from __future__ import annotations
 
@@ -21,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
+from core import config
 from baselines.eeg import transfer
 from baselines.fusion import combine
 from core.data import splits, store
@@ -48,20 +52,20 @@ def _gather_aligned(meta_e, meta_f, subs):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--regime", default="cross_subject_kfold",
-                    choices=["cross_subject", "cross_subject_kfold"])
-    ap.add_argument("--plain-eeg", action="store_true",
-                    help="use PLAIN Riemann for EEG instead of the default RE-CENTERED Riemann (the transfer "
-                         "fix — the strong workload EEG modality); a comparison knob")
+    ap.add_argument("--exp", default="nback_fusion", help="named fusion experiment in experiments.yaml")
+    ap.add_argument("--set", dest="overrides", action="append", default=[], metavar="key=val",
+                    help="ad-hoc override, e.g. --set regime=cross_subject --set params.plain_eeg=true")
     ap.add_argument("--out", default=None)
     ap.add_argument("--no-record", action="store_true")
     args = ap.parse_args()
 
+    exp = config.load_experiment(args.exp, args.overrides)
+    regime = exp.regime
     meta_e = store.load(_EEG, _EEG_CFG)
     meta_f = store.load(_FNIRS, _FNIRS_CFG)
     subs = sorted(set(meta_e["subject"].unique().to_list()) & set(meta_f["subject"].unique().to_list()))
     n_classes = int(meta_e["label_id"].max()) + 1
-    recenter = not args.plain_eeg
+    recenter = not exp.params.get("plain_eeg", False)
     print(f"fusion cloud: {len(subs)} paired subjects · {n_classes} classes · chance {1/n_classes:.3f} · "
           f"EEG {'re-centered' if recenter else 'plain'} Riemann")
 
@@ -86,7 +90,7 @@ def main():
         return transfer.recentered_tangent_features(_cov(X), g)
 
     # fold generator over the shared subject set (same split drives both modalities)
-    if args.regime == "cross_subject_kfold":
+    if regime == "cross_subject_kfold":
         fold_subs = [([str(x) for x in te]) for _, _, _, te in _subject_folds(subs, k=5)]
     else:
         fold_subs = [[str(s)] for s in subs]
@@ -137,7 +141,7 @@ def main():
     _acc_keys = combine.SWEEP_KEYS
     comp["best_aggregator"] = float(max(agg[k] for k in _acc_keys))
     comp["oracle_gap_captured"] = comp["best_aggregator"] - comp["best_single"]
-    print(f"\n=== fusion · {args.regime} · shin n-back ({len(rows)} folds, chance {1/n_classes:.3f}) ===")
+    print(f"\n=== fusion · {regime} · shin n-back ({len(rows)} folds, chance {1/n_classes:.3f}) ===")
     for k in ("eeg", "fnirs", "late", "feature"):
         print(f"  {k:>8}: {mean[k]:.3f}")
     best_uni = comp["best_single"]
@@ -151,9 +155,9 @@ def main():
     print(f"    conf-gap (correct-wrong max-prob): eeg {agg['eeg_conf_gap']:+.3f} | fnirs {agg['fnirs_conf_gap']:+.3f}"
           "  <- ~0 => confidence does not predict correctness => output-space fusion cannot select")
 
-    run_dir = Path(args.out) if args.out else Path("runs") / f"fusion_{args.regime}_shin2017_nback"
+    run_dir = Path(args.out) if args.out else Path("runs") / f"fusion_{regime}_shin2017_nback"
     run_dir.mkdir(parents=True, exist_ok=True)
-    res = {"method": "fusion", "regime": args.regime, "n_classes": n_classes,
+    res = {"method": "fusion", "regime": regime, "n_classes": n_classes,
            "fold_mean": {"acc": mean["late"]}, "per_role_mean": mean,
            "complementarity": comp, "aggregation": agg, "per_fold": rows}
     (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))

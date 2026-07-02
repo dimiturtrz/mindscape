@@ -33,3 +33,30 @@ def test_drive_colon_sanitizer_preserves_drive():
     from moabb.datasets import download as dl
     out = str(dl._sanitize_path("X:\\eeg\\bnci\\raw"))
     assert out.replace("/", "\\").startswith("X:\\")
+
+
+# ── experiment registry ──────────────────────────────────────────────────────
+
+def test_experiment_names_nonempty_and_sorted():
+    names = config.experiment_names()
+    assert names and names == sorted(names)
+    assert "mi_csp_within" in names
+
+
+def test_load_experiment_resolves_registry_entry():
+    exp = config.load_experiment("nback_eeg_riemann_cross")
+    assert exp.task == "decode" and exp.method == "riemann" and exp.regime == "cross_subject"
+    assert exp.recipe["fmin"] == 4 and exp.recipe["resample"] == 100.0
+
+
+def test_load_experiment_applies_dotlist_overrides():
+    # --set feeds an OmegaConf dotlist: base config merges the override, leaving the file untouched
+    exp = config.load_experiment("mi_csp_within", ["method=riemann", "recipe.resample=250"])
+    assert exp.method == "riemann" and exp.recipe["resample"] == 250
+    assert config.load_experiment("mi_csp_within").method == "csp_lda"   # base unchanged
+
+
+def test_load_experiment_unknown_name_lists_options():
+    with pytest.raises(SystemExit) as ei:
+        config.load_experiment("does_not_exist")
+    assert "does_not_exist" in str(ei.value)
