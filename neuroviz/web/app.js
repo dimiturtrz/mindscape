@@ -298,8 +298,8 @@ function showFusion(on){
 async function loadFusion(){
   const d = await (await fetch("data/fusion.json")).json();
   state.data=d; state.modality="fusion";
-  $("sub").innerHTML = `<b>Fusion · EEG + fNIRS</b> (Shin n-back, same blocks). Two weak modalities that fail `+
-    `on <b>different</b> blocks — a per-block map of the complementarity the numbers imply, and why averaging can't use it.`;
+  $("sub").innerHTML = `<b>Fusion · EEG + fNIRS</b> (Shin n-back, same blocks). A strong (re-centered EEG) + `+
+    `weak (fNIRS) pair that fail on <b>different</b> blocks — a per-block map of the complementarity, and how little averaging cashes.`;
   showFusion(true); renderFusion();
 }
 
@@ -326,9 +326,11 @@ function renderFusion(){
 
   // headline
   const best=Math.max(s.eeg,s.fnirs);
+  const dl = s.late!=null ? (100*(s.late-best)) : null;      // late fusion vs best single, in pp
   $("fresult").innerHTML = `oracle (either modality right) <b class="ok">${pct(s.oracle)}</b> `+
     `— <b>+${(100*(s.oracle-best)).toFixed(0)} pts</b> over the best single (${pct(best)}); `+
-    `late fusion <b class="no">${s.late!=null?pct(s.late):"—"}</b> captures none of it. `+
+    `late fusion <b class="${dl>0?'ok':'no'}">${s.late!=null?pct(s.late):"—"}</b> `+
+    `${dl!=null?`(${dl>=0?'+':''}${dl.toFixed(1)} pp) — a sliver of it`:''}. `+
     `<span class="rmut">error corr φ=${s.err_corr.toFixed(2)} · both wrong only ${pct(s.both_wrong)}</span>`;
 
   // legend with counts
@@ -348,11 +350,11 @@ function renderFusion(){
       `<u style="left:${100*s.chance/maxv}%"></u></span>`+
       `<span class="fbv">${pct(v)}</span></div>`).join("");
 
-  $("fhint").innerHTML = `Each cell is one held-out block (rows = subjects, 5-fold GroupKFold). Blue + orange `+
-    `are blocks only one modality gets — they're scattered and roughly balanced (φ≈0), so the modalities are `+
-    `genuinely complementary. Yet <b>late fusion ≈ the best single</b>: averaging probabilities can't tell which `+
-    `modality to trust per block (confidence doesn't track correctness), so the <b>+${(100*(s.oracle-best)).toFixed(0)}-pt</b> `+
-    `oracle headroom stays on the table. That's the honest fusion result.`;
+  $("fhint").innerHTML = `Each cell is one held-out block (rows = subjects, 5-fold GroupKFold). Blue = EEG-only-`+
+    `right, orange = fNIRS-only-right — the modalities fail on <b>different</b> blocks, so an oracle would gain `+
+    `<b>+${(100*(s.oracle-best)).toFixed(0)} pt</b> over the best single. Re-centering made EEG the strong, `+
+    `well-calibrated modality, so averaging now <b>marginally helps</b> (it *hurt* when both were weak) — but most `+
+    `of that headroom stays on the table. The next real win is a stronger fNIRS, not a cleverer combiner.`;
 }
 
 async function init(){
