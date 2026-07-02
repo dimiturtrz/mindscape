@@ -13,7 +13,7 @@ on the deployability axis:
     mdwm            Minimum Distance to Weighted Mean — source↔target class-mean interpolation.
 
 The rotation (step 3) and MDWM are SUPERVISED — they need target labels. Those labels come from a DISJOINT
-calibration split of the held-out subject (`--calib-frac`), fit there, evaluated on the REMAINING blocks
+calibration split of the held-out subject (the `calib_frac` param), fit there, evaluated on the REMAINING blocks
 only. Test labels are never touched — the same honesty as the per-subject-calibration ablation.
 
     python -m neuroscan.tasks.motor_imagery.align --exp mi_align_recenter        # zero-shot (the baseline fix)

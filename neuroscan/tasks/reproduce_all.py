@@ -5,7 +5,8 @@ is refreshed consistently, instead of firing off N cold `uv run` processes.
     python -m neuroscan.tasks.reproduce_all              # all canonical runs
     python -m neuroscan.tasks.reproduce_all --cross-only # just the cross-subject set
 
-Recentering (the transfer fix) has its own parallel entrypoint — run `align` / `align --augment` after.
+Recentering (the transfer fix) has its own parallel entrypoint — run `align --exp mi_align_recenter`
+(and `--exp mi_align_recenter_acm` for the ACM variant) after.
 """
 from __future__ import annotations
 
@@ -58,8 +59,8 @@ def main():
                           run_dir=run_dir, n_jobs=n_jobs)
         (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
         results.record(run_dir)
-    print("\nreproduce_all done — regenerated results.json. Run `align` + `align --augment` for recentering,"
-          " then `sync_numbers` to update the README.")
+    print("\nreproduce_all done — regenerated results.json. Run `align --exp mi_align_recenter` (+ "
+          "`--exp mi_align_recenter_acm`) for recentering, then `sync_numbers` to update the README.")
 
 
 if __name__ == "__main__":

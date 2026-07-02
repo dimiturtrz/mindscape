@@ -327,8 +327,9 @@ uv run python -m neuroscan.tasks.run --exp mi_riemann_within
 uv run python -m neuroscan.tasks.workload.run_fnirs --exp nback_fnirs_cross
 # EEG+fNIRS fusion on the same task — complementarity + the aggregation sweep (a rigorous null):
 uv run python -m neuroscan.tasks.workload.run_fusion --exp nback_fusion
-# a deep decoder, GPU (ad-hoc override of a base config):
-uv run python -m neuroscan.tasks.run --exp mi_csp_within --set method=atcnet --set recipe.resample=250
+# a deep decoder, GPU (ad-hoc override of a base config — broadband recipe the nets prefer):
+uv run python -m neuroscan.tasks.run --exp mi_csp_within \
+  --set method=atcnet --set recipe.resample=250 --set recipe.fmin=4 --set recipe.fmax=40
 # the neuroviz demo (EEG / fNIRS / Fusion complementarity view):
 uv run python -m neuroviz.export --subject 1 && uv run python -m neuroviz.export_fusion \
   && python -m http.server 8000 -d neuroviz/web

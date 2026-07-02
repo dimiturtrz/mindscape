@@ -79,7 +79,7 @@ def main():
     def eeg_probs(Xtr, ytr, gtr, Xte, gte):
         """EEG decoder as a probability fn. Default = zero-shot RE-CENTERED Riemann (recenter each subject —
         train AND test — to the identity, unsupervised); needs the subject groups, so it can't be a plain
-        get_method decoder. `--plain-eeg` falls back to plain Riemann."""
+        get_method decoder. The `nback_fusion_plain` config (params.plain_eeg) falls back to plain Riemann."""
         if not recenter:
             return eeg_score(eeg_fit(Xtr, ytr), Xte)
         return transfer.zero_shot_predict(_cov(Xtr), ytr, gtr, _cov(Xte), scale=False, target_groups=gte)
