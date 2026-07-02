@@ -28,7 +28,7 @@ N_CLASSES = 4                 # left/right hand, feet, tongue
 # --- view parameters ---
 N_FRAMES = 50                 # ERD animation frames per trial
 BASELINE_S = 0.5              # s — pre-imagery window for ERD baseline-normalization
-N_CSP = 6                     # CSP spatial patterns to export (matches baselines/csp_lda.py n_components)
+N_CSP = 6                     # CSP spatial patterns to export (matches baselines/eeg/csp_lda.py n_components)
 N_WAVE_T = 300                # downsampled time points for waveform display
 PER_CLASS = 1                 # example trials per class in the waveform panel
 
@@ -94,12 +94,12 @@ def _csp_patterns(ep, labels, n=N_CSP):
 def _riemann_patterns(ep, labels):
     """Per-class Riemannian discriminant channel weights — what the tangent-space classifier learned.
 
-    Fits the tangent-space + logistic-regression baseline (baselines/riemann.py), then reads each class's
+    Fits the tangent-space + logistic-regression baseline (baselines/eeg/riemann.py), then reads each class's
     weight vector over the (whitened-log) covariance entries and keeps its DIAGONAL: per-channel weight =
     how much that channel's own power drives the logit for the class. Parallel to CSP patterns, but here
     the feature is the covariance itself (no spatial filters). Returns {class: [w per channel]}, normalized.
     """
-    from baselines.riemann import TangentSpace
+    from baselines.eeg.riemann import TangentSpace
     X = ep.get_data() * 1e6
     clf = TangentSpace().fit(X.astype(np.float64), np.asarray(labels))
     lr = clf.pipe_.named_steps["logisticregression"]
@@ -138,7 +138,7 @@ def _predictions(subject: int):
     Returns ({class: {truth, pred, probs, correct}} for a shown example trial) + the subject's fold accuracy."""
     import polars as pl
 
-    from baselines import csp_lda
+    from baselines.eeg import csp_lda
     from core.data import store
     from core.data.eeg.base import CANONICAL_MI_NAMES, EpochCfg
 

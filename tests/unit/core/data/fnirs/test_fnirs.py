@@ -2,7 +2,7 @@
 Pure/synthetic — no dataset download needed."""
 import numpy as np
 
-from baselines import fnirs_features
+from baselines.fnirs import features as fnirs_features
 from core.features import amplitude_features
 from core.data.fnirs.base import FnirsCfg, bandpass, epoch_blocks
 

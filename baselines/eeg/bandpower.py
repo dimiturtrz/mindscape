@@ -5,7 +5,7 @@ EEG-native tool for **motor imagery** (lateralized mu/beta ERD is a covariance-s
 **workload** is a different signal: its signature is the *magnitude* of specific rhythms — frontal-midline
 **theta rises** and parietal **alpha suppresses** as load grows (Klimesch 1999; Gevins & Smith 2003). That is
 absolute band-power, which covariance normalizes away — the same mismatch that makes covariance fail on the
-fNIRS amplitude signal (see baselines/fnirs_features.py). A single *broadband* log-variance (4–30 Hz) also
+fNIRS amplitude signal (see baselines/fnirs/features.py). A single *broadband* log-variance (4–30 Hz) also
 misses it: theta↑ and alpha↓ partly cancel inside one band. So the right EEG-workload feature is band-power
 split into theta / alpha / beta per channel, then shrinkage-LDA — mirroring the fNIRS workhorse on the EEG side.
 

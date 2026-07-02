@@ -20,10 +20,10 @@ def _proba(clf, X):
 
 def _baseline_classes() -> dict:
     """name -> Baseline class (lazy import so pyriemann/mne load only when a baseline is actually used)."""
-    from baselines.csp_lda import CspLda
-    from baselines.eeg_bandpower import EegBandpower
-    from baselines.fnirs_features import FnirsLda
-    from baselines.riemann import Acm, TangentSpace
+    from baselines.eeg.csp_lda import CspLda
+    from baselines.eeg.bandpower import EegBandpower
+    from baselines.fnirs.features import FnirsLda
+    from baselines.eeg.riemann import Acm, TangentSpace
     return {"csp_lda": CspLda, "riemann": TangentSpace, "riemann_acm": Acm, "fnirs_lda": FnirsLda,
             "eeg_bandpower": EegBandpower}
 

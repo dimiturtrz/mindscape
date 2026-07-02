@@ -7,7 +7,7 @@ beat chance through the `fit/score` harness contract.
 import numpy as np
 import pytest
 
-from baselines import riemann
+from baselines.eeg import riemann
 from core.features import recenter_covariances
 
 
