@@ -3,6 +3,7 @@ Pure/synthetic — no dataset download needed."""
 import numpy as np
 
 from baselines import fnirs_features
+from core.features import amplitude_features
 from core.data.fnirs.base import FnirsCfg, bandpass, epoch_blocks
 
 
@@ -59,7 +60,7 @@ def test_fnirs_features_shape_and_decodes_amplitude_signal():
     y = np.tile([0, 1, 2], n // 3)
     # class encoded in per-channel MEAN LEVEL (what covariance discards, features must catch)
     X = rng.normal(scale=0.1, size=(n, ch, t)) + (y[:, None, None] * 1.0)
-    feats = fnirs_features._features(X)
+    feats = amplitude_features(X)
     assert feats.shape == (n, 3 * ch)                       # mean + slope + peak
     clf = fnirs_features.fit(X, y)
     acc = (fnirs_features.score(clf, X).argmax(1) == y).mean()

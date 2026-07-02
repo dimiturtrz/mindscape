@@ -31,7 +31,7 @@ import numpy as np
 from core import reference
 from core.data import splits, store
 from core.data.eeg.base import EpochCfg
-from baselines import riemann
+from core.features import recenter_covariances, scale_to_identity, time_delay_embed
 from neuroscan import tracking
 from neuroscan.evaluation import metrics
 
@@ -42,20 +42,8 @@ _CALIBRATED = {"rpa", "mdwm"}
 def _covariances(X, augment, order, lag, estimator="oas"):
     from pyriemann.estimation import Covariances
     if augment:
-        X = riemann._augment(X.astype(np.float64), order, lag)
+        X = time_delay_embed(X.astype(np.float64), order, lag)
     return Covariances(estimator=estimator).transform(X.astype(np.float64))
-
-
-def _scale_to_identity(C, target_disp=1.0):
-    """Normalize dispersion: after re-centering to the identity, stretch each covariance so the mean squared
-    Riemannian distance to I equals `target_disp` (RPA step 2 — matches the domains' spread, not just their
-    location). `C -> C**p` with p = sqrt(target_disp / current_dispersion)."""
-    from pyriemann.utils.base import powm
-    from pyriemann.utils.distance import distance_riemann
-    eye = np.eye(C.shape[-1])
-    disp = float(np.mean([distance_riemann(c, eye) ** 2 for c in C])) + 1e-12
-    p = np.sqrt(target_disp / disp)
-    return np.stack([powm(c, p) for c in C])
 
 
 def _align_by_group(C, groups, scale):
@@ -64,8 +52,8 @@ def _align_by_group(C, groups, scale):
     out = np.empty_like(C)
     for g in np.unique(groups):
         m = groups == g
-        rc = riemann.recenter_covariances(C[m])
-        out[m] = _scale_to_identity(rc) if scale else rc
+        rc = recenter_covariances(C[m])
+        out[m] = scale_to_identity(rc) if scale else rc
     return out
 
 
@@ -76,7 +64,7 @@ def _zero_shot_fold(s, Ctr, ytr, Cte, yte, groups, scale):
     from sklearn.pipeline import make_pipeline
 
     Ctr = _align_by_group(Ctr, groups, scale)
-    Cte = _scale_to_identity(riemann.recenter_covariances(Cte)) if scale else riemann.recenter_covariances(Cte)
+    Cte = scale_to_identity(recenter_covariances(Cte)) if scale else recenter_covariances(Cte)
     clf = make_pipeline(TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0))
     clf.fit(Ctr, ytr)
     probs = np.asarray(clf.predict_proba(Cte), dtype=float)

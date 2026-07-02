@@ -215,9 +215,9 @@ def _feature_fusion(Xe_tr, Xf_tr, y_tr, Xe_te, Xf_te):
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
 
-    from baselines.fnirs_features import _features
-    ftr = np.concatenate([_log_bandpower(Xe_tr), _features(Xf_tr)], axis=1)
-    fte = np.concatenate([_log_bandpower(Xe_te), _features(Xf_te)], axis=1)
+    from core.features import amplitude_features
+    ftr = np.concatenate([_log_bandpower(Xe_tr), amplitude_features(Xf_tr)], axis=1)
+    fte = np.concatenate([_log_bandpower(Xe_te), amplitude_features(Xf_te)], axis=1)
     clf = make_pipeline(StandardScaler(),
                         LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")).fit(ftr, y_tr)
     return clf.predict_proba(fte)

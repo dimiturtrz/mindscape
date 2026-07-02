@@ -28,8 +28,7 @@ from pathlib import Path
 
 import numpy as np
 
-from baselines.eeg_bandpower import _bandpower
-from baselines.fnirs_features import _features
+from core.features import amplitude_features, band_powers
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
@@ -53,8 +52,8 @@ def _load_features():
     Xf, yf = store.gather(qf)
     assert np.array_equal(ye, yf), "EEG/fNIRS blocks misaligned — fusion invalid"
     g = qe["subject"].to_numpy()
-    Fe = _bandpower(Xe, _EEG_CFG.resample).astype(np.float32)          # [n, 28*3]
-    Ff = _features(Xf).astype(np.float32)                              # [n, ch*3]
+    Fe = band_powers(Xe, _EEG_CFG.resample).astype(np.float32)         # [n, 28*3]
+    Ff = amplitude_features(Xf).astype(np.float32)                     # [n, ch*3]
     return Fe, Ff, ye.astype(np.int64), g
 
 

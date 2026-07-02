@@ -3,6 +3,7 @@ and the covariance step grows correctly under time-delay augmentation. Synthetic
 import numpy as np
 
 from neuroscan.tasks.motor_imagery import align
+from core.features import scale_to_identity
 
 
 def _domain(n, d, t, shift, rng):
@@ -32,7 +33,7 @@ def test_scale_to_identity_normalizes_dispersion():
     from pyriemann.utils.distance import distance_riemann
     rng = np.random.default_rng(2)
     d = 4
-    C = align._scale_to_identity(_domain(30, d, 15, 3 * np.eye(d), rng), target_disp=1.0)
+    C = scale_to_identity(_domain(30, d, 15, 3 * np.eye(d), rng), target_disp=1.0)
     disp = np.mean([distance_riemann(c, np.eye(d)) ** 2 for c in C])
     assert abs(disp - 1.0) < 1e-6
 

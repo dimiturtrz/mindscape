@@ -28,8 +28,7 @@ from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from neuroscan.evaluation import metrics, results
-from baselines.eeg_bandpower import _bandpower
-from baselines.fnirs_features import _features
+from core.features import amplitude_features, band_powers
 
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _K = 5
@@ -91,7 +90,7 @@ def main():
     Xe, y = store.gather(qe); Xf, yf = store.gather(qf)
     assert np.array_equal(y, yf), "EEG/fNIRS blocks misaligned"
     ge = qe["subject"].to_numpy()
-    Fe, Ff = _bandpower(Xe, _EEG_CFG.resample), _features(Xf)
+    Fe, Ff = band_powers(Xe, _EEG_CFG.resample), amplitude_features(Xf)
 
     out = {
         "eeg_raw": _cv_raw_or_transductive(Fe, y, ge, subs, zt=False),

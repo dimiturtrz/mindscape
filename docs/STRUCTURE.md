@@ -88,6 +88,7 @@ _Diagrams are kept coarse (layer + contract) on purpose — they map to folders 
 | `core/data/registry.py` | unified name → adapter registry across modalities (EEG + fNIRS) — add a dataset = one factory + one line |
 | `core/data/fnirs/` | the hemodynamic modality: `base.py` (FnirsCfg + bandpass/epoch), `shin2017.py` (Shin n-back adapter, parses HbO/HbR from the raw `.mat`) — same [n,ch,t]+meta schema, so the same store/harness ride on it |
 | `core/decoder.py` | the **`Decoder` contract** — a structural `Protocol` (`fit(X,y)->self`, `predict_proba(X)->probs`) every model satisfies (classical baselines + braindecode nets); lives in `core` as the neutral vocabulary both implementer trees sit above (same layer as `export_onnx`, which also consumes a trained decoder) |
+| `core/features.py` | **feature extraction** — the signal→feature substance the decoders sit on: covariances (`time_delay_embed`), manifold transfer transforms (`recenter_covariances`, `scale_to_identity`), EEG `band_powers` (θ/α/β), fNIRS `amplitude_features` (mean/slope/peak). Methods in `baselines/` are thin: they *call* these + bolt on a classifier (one extractor implementation, reused across methods/modalities/transfer/viz) |
 | `core/export_onnx.py` | ONNX export + INT8 quant + a **parity gate** (optional edge-deploy tail, first-class not bolted on) |
 | `core/reference.py` + `reference.yaml` | published SOTA ceilings as cited config, surfaced next to every result |
 
