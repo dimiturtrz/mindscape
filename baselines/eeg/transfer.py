@@ -25,24 +25,31 @@ def _tangent_lr():
     return make_pipeline(TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0))
 
 
-def align_domains(Csrc, groups, Cte, scale: bool):
+def align_domains(Csrc, groups, Cte, scale: bool, target_groups=None):
     """Re-center each source subject and the target to the identity independently (± dispersion re-scale) —
-    the unsupervised, per-domain transforms. Returns (source-aligned, target-aligned)."""
+    the unsupervised, per-domain transforms. Re-centering is PER DOMAIN, so if the target holds more than one
+    subject (e.g. a k-fold test fold) pass `target_groups` to re-center each on its OWN mean — pooling them
+    would align to a shared blob and undo the fix. `target_groups=None` treats the target as one domain (the
+    LOSO case: a single held-out subject). Returns (source-aligned, target-aligned)."""
     def _align(C):
         rc = recenter_covariances(C)
         return scale_to_identity(rc) if scale else rc
 
-    Cs = np.empty_like(Csrc)
-    for g in np.unique(groups):
-        m = groups == g
-        Cs[m] = _align(Csrc[m])
-    return Cs, _align(Cte)
+    def _by_group(C, g):
+        out = np.empty_like(C)
+        for k in np.unique(g):
+            out[g == k] = _align(C[g == k])
+        return out
+
+    Cs = _by_group(Csrc, groups)
+    Ct = _align(Cte) if target_groups is None else _by_group(Cte, target_groups)
+    return Cs, Ct
 
 
-def zero_shot_predict(Csrc, ysrc, groups, Cte, scale: bool) -> np.ndarray:
-    """Zero-shot transfer: align source (per subject) + target (unsupervised), tangent-space + LR, return
-    class probabilities `[n, C]` for ALL target trials (no target labels used)."""
-    Cs, Ct = align_domains(Csrc, groups, Cte, scale)
+def zero_shot_predict(Csrc, ysrc, groups, Cte, scale: bool, target_groups=None) -> np.ndarray:
+    """Zero-shot transfer: align source (per subject) + target (per subject if `target_groups` given, else as
+    one domain), tangent-space + LR, return class probabilities `[n, C]` for ALL target trials (no labels)."""
+    Cs, Ct = align_domains(Csrc, groups, Cte, scale, target_groups)
     clf = _tangent_lr().fit(Cs, ysrc)
     return np.asarray(clf.predict_proba(Ct), dtype=float)
 

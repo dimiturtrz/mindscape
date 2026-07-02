@@ -27,12 +27,13 @@ def feature_fusion(Xe_tr, Xf_tr, y_tr, Xe_te, Xf_te) -> np.ndarray:
     return clf.predict_proba(fte)
 
 
-def smart_aggregators(eeg_fit, eeg_score, fn_fit, fn_score, Xe_tr, Xf_tr, y_tr, g_tr, pe, pf):
+def smart_aggregators(eeg_probs, fn_fit, fn_score, Xe_tr, Xf_tr, y_tr, g_tr, pe, pf):
     """The learned/calibrated output-space combiners, fit WITHOUT touching test data: an inner GroupKFold(3)
     over the train subjects yields out-of-fold base probs, on which we fit (a) a stacking meta-LDA over the
-    concatenated [eeg, fnirs] probs and (b) a per-modality temperature. Returns their test-set outputs
-    (stacking probs, calibrated eeg probs, calibrated fnirs probs); falls back to the raw probs if a train
-    subject group is too small to inner-split."""
+    concatenated [eeg, fnirs] probs and (b) a per-modality temperature. `eeg_probs(Xtr, ytr, gtr, Xte, gte)`
+    is the EEG decoder as a probability function (so re-centering — which needs the subject groups — flows
+    into the OOF too). Returns (stacking probs, calibrated eeg probs, calibrated fnirs probs); falls back to
+    the raw probs if a train subject group is too small to inner-split."""
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
     from sklearn.model_selection import GroupKFold
 
@@ -42,7 +43,7 @@ def smart_aggregators(eeg_fit, eeg_score, fn_fit, fn_score, Xe_tr, Xf_tr, y_tr, 
     oof_e, oof_f = np.zeros((n, C)), np.zeros((n, C))
     try:
         for itr, iva in GroupKFold(n_splits=3).split(np.arange(n), groups=g_tr):
-            oof_e[iva] = eeg_score(eeg_fit(Xe_tr[itr], y_tr[itr]), Xe_tr[iva])
+            oof_e[iva] = eeg_probs(Xe_tr[itr], y_tr[itr], g_tr[itr], Xe_tr[iva], g_tr[iva])
             oof_f[iva] = fn_score(fn_fit(Xf_tr[itr], y_tr[itr]), Xf_tr[iva])
     except ValueError:                                       # too few groups for an inner split
         return (pe + pf) / 2.0, pe, pf
