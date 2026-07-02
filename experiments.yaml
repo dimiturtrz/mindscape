@@ -35,6 +35,11 @@ experiments:
   mi_fgmdm_cross:       {task: decode, dataset: bnci2014_001, method: riemann_fgmdm, regime: cross_subject}
   mi_fbcsp_within:      {task: decode, dataset: bnci2014_001, method: fbcsp, regime: within, test_session: "1test", recipe: {fmin: 4, fmax: 40, resample: 128.0}}
   mi_fbcsp_cross:       {task: decode, dataset: bnci2014_001, method: fbcsp, regime: cross_subject,             recipe: {fmin: 4, fmax: 40, resample: 128.0}}
+  # ACM (time-delay covariance) + band-power, for a complete method grid. Band-power wants a broadband recipe
+  # (its θ/α/β split needs theta, which the default 8-32 band would filter out) — expected weak on MI regardless.
+  mi_acm_within:        {task: decode, dataset: bnci2014_001, method: riemann_acm,  regime: within, test_session: "1test"}
+  mi_bandpower_within:  {task: decode, dataset: bnci2014_001, method: eeg_bandpower, regime: within, test_session: "1test", recipe: {fmin: 4, fmax: 40, resample: 128.0}}
+  mi_bandpower_cross:   {task: decode, dataset: bnci2014_001, method: eeg_bandpower, regime: cross_subject,                  recipe: {fmin: 4, fmax: 40, resample: 128.0}}
 
   # ── Task 1 · cross-subject transfer ladder (align.py, Riemannian Procrustes) ─
   # zero-shot (no target labels) · calibrated methods carve a disjoint calib split of the held-out subject
@@ -63,6 +68,17 @@ experiments:
   nback_eeg_fgmdm_cross_kfold:   {task: decode, dataset: shin2017_nback_eeg, method: riemann_fgmdm, regime: cross_subject_kfold, recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
   nback_eeg_fbcsp_cross:         {task: decode, dataset: shin2017_nback_eeg, method: fbcsp,         regime: cross_subject,       recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
   nback_eeg_fbcsp_cross_kfold:   {task: decode, dataset: shin2017_nback_eeg, method: fbcsp,         regime: cross_subject_kfold, recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  # within-subject cells for the three new methods (complete the grid)
+  nback_eeg_mdm_within:          {task: decode, dataset: shin2017_nback_eeg, method: riemann_mdm,   regime: within, test_session: "2", recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  nback_eeg_fgmdm_within:        {task: decode, dataset: shin2017_nback_eeg, method: riemann_fgmdm, regime: within, test_session: "2", recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  nback_eeg_fbcsp_within:        {task: decode, dataset: shin2017_nback_eeg, method: fbcsp,         regime: within, test_session: "2", recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  # ACM + band-power (band-power = the workload-native method; expect it to lead this task) across all regimes
+  nback_eeg_acm_cross:           {task: decode, dataset: shin2017_nback_eeg, method: riemann_acm,   regime: cross_subject,       recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  nback_eeg_acm_cross_kfold:     {task: decode, dataset: shin2017_nback_eeg, method: riemann_acm,   regime: cross_subject_kfold, recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  nback_eeg_acm_within:          {task: decode, dataset: shin2017_nback_eeg, method: riemann_acm,   regime: within, test_session: "2", recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  nback_eeg_bandpower_cross:       {task: decode, dataset: shin2017_nback_eeg, method: eeg_bandpower, regime: cross_subject,       recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  nback_eeg_bandpower_cross_kfold: {task: decode, dataset: shin2017_nback_eeg, method: eeg_bandpower, regime: cross_subject_kfold, recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
+  nback_eeg_bandpower_within:      {task: decode, dataset: shin2017_nback_eeg, method: eeg_bandpower, regime: within, test_session: "2", recipe: {fmin: 4, fmax: 30, tmin: 0.0, tmax: 40.0, resample: 100.0}}
 
   # ── Task 2 · EEG+fNIRS fusion (run_fusion.py) ────────────────────────────────
   nback_fusion:       {task: fusion, regime: cross_subject_kfold, params: {plain_eeg: false}}
