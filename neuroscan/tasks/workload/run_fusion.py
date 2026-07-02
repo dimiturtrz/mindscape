@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
+from baselines.fusion import combine
 from core.data import splits, store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
@@ -31,11 +32,6 @@ _EEG, _FNIRS = "shin2017_nback_eeg", "shin2017_nback"
 # the recipes each modality decodes best at (from the unimodal runs)
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _FNIRS_CFG = FnirsCfg()
-
-
-def _log_bandpower(X: np.ndarray) -> np.ndarray:
-    """Per-channel log variance = band-power feature [n, ch] — the standard cheap EEG workload feature."""
-    return np.log(X.var(axis=2) + 1e-12)
 
 
 def _gather_aligned(meta_e, meta_f, subs):
@@ -88,11 +84,11 @@ def main():
         # late fusion: average the two probability vectors
         p_late = (pe + pf) / 2.0
         # feature fusion: concat EEG log-bandpower + fNIRS features -> shrinkage-LDA
-        p_feat = _feature_fusion(Xe_tr, Xf_tr, y_tr, Xe_te, Xf_te)
+        p_feat = combine.feature_fusion(Xe_tr, Xf_tr, y_tr, Xe_te, Xf_te)
         # smarter output-space aggregators (stacking meta-LDA + per-modality temperature), fit on inner
         # OOF probs from a GroupKFold over the TRAIN subjects so the meta/temperature never see test data
-        stk, pec, pfc = _smart_aggregators(eeg_fit, eeg_score, fn_fit, fn_score,
-                                           Xe_tr, Xf_tr, y_tr, g_tr, pe, pf)
+        stk, pec, pfc = combine.smart_aggregators(eeg_fit, eeg_score, fn_fit, fn_score,
+                                                  Xe_tr, Xf_tr, y_tr, g_tr, pe, pf)
 
         CE.append(pe.argmax(1) == y_te); CF.append(pf.argmax(1) == y_te); Y.append(y_te)
         PE.append(pe); PF.append(pf); STK.append(stk); PEc.append(pec); PFc.append(pfc)
@@ -111,34 +107,11 @@ def main():
     # modality correct) is the upper bound ANY fusion could reach; near-zero error correlation means the
     # two modalities fail on independent blocks, so a per-trial selector has headroom the mean can't touch.
     ce, cf = np.concatenate(CE), np.concatenate(CF)
-    comp = {
-        "best_single": max(mean["eeg"], mean["fnirs"]),
-        "oracle_either": float((ce | cf).mean()),           # upper bound of a perfect per-block selector
-        "both_correct": float((ce & cf).mean()),
-        "eeg_only": float((ce & ~cf).mean()), "fnirs_only": float((~ce & cf).mean()),
-        "both_wrong": float((~ce & ~cf).mean()),
-        "err_corr": float(np.corrcoef(ce.astype(float), cf.astype(float))[0, 1]),
-    }
-    # aggregation sweep: can any OUTPUT-space combiner cash in the oracle headroom? Pool the probs and try
-    # every cheap-to-learned aggregator. They all fail here because confidence does not track correctness
-    # (see conf_gap) — so the reliability signal a selector needs is not in the probabilities at all.
+    comp = combine.complementarity(mean, ce, cf)             # oracle headroom + error-independence
     y, Pe, Pf = np.concatenate(Y), np.concatenate(PE), np.concatenate(PF)
     Stk, Pce, Pcf = np.concatenate(STK), np.concatenate(PEc), np.concatenate(PFc)
-    _acc = lambda P: float((P.argmax(1) == y).mean())
-    we, wf = Pe.max(1, keepdims=True), Pf.max(1, keepdims=True)
-    agg = {
-        "mean": _acc((Pe + Pf) / 2), "product": _acc(Pe * Pf),
-        "conf_weight": _acc(we * Pe + wf * Pf),
-        "maxconf_pick": float((np.where(we >= wf, Pe.argmax(1, keepdims=True),
-                                        Pf.argmax(1, keepdims=True)).ravel() == y).mean()),
-        "stacking": _acc(Stk),
-        "cal_mean": _acc((Pce + Pcf) / 2),
-        "cal_conf_weight": _acc(Pce.max(1, keepdims=True) * Pce + Pcf.max(1, keepdims=True) * Pcf),
-        # does confidence predict correctness? gap = mean max-prob(correct) - max-prob(wrong), per modality
-        "eeg_conf_gap": float(Pe.max(1)[ce].mean() - Pe.max(1)[~ce].mean()),
-        "fnirs_conf_gap": float(Pf.max(1)[cf].mean() - Pf.max(1)[~cf].mean()),
-    }
-    _acc_keys = ("mean", "product", "conf_weight", "maxconf_pick", "stacking", "cal_mean", "cal_conf_weight")
+    agg = combine.aggregation_sweep(Pe, Pf, Stk, Pce, Pcf, y, ce, cf)   # every output-space combiner
+    _acc_keys = combine.SWEEP_KEYS
     comp["best_aggregator"] = float(max(agg[k] for k in _acc_keys))
     comp["oracle_gap_captured"] = comp["best_aggregator"] - comp["best_single"]
     print(f"\n=== fusion · {args.regime} · shin n-back ({len(rows)} folds, chance {1/n_classes:.3f}) ===")
@@ -171,56 +144,6 @@ def _subject_folds(subs, k):
     gkf = GroupKFold(n_splits=k)
     for i, (tr, te) in enumerate(gkf.split(list(range(len(subs))), groups=subs)):
         yield f"fold{i}", [subs[j] for j in tr], None, [subs[j] for j in te]
-
-
-def _smart_aggregators(eeg_fit, eeg_score, fn_fit, fn_score, Xe_tr, Xf_tr, y_tr, g_tr, pe, pf):
-    """The learned/calibrated output-space combiners, fit WITHOUT touching test data: an inner GroupKFold(3)
-    over the train subjects yields out-of-fold base probs, on which we fit (a) a stacking meta-LDA over the
-    concatenated [eeg, fnirs] probs and (b) a per-modality temperature. Returns their test-set outputs
-    (stacking probs, calibrated eeg probs, calibrated fnirs probs). Falls back to the raw probs if a train
-    subject group is too small to inner-split."""
-    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-    from sklearn.model_selection import GroupKFold
-
-    from neuroscan.evaluation.calibrate import TemperatureScaler
-
-    n, C = pe.shape
-    oof_e, oof_f = np.zeros((n, C)), np.zeros((n, C))
-    try:
-        for itr, iva in GroupKFold(n_splits=3).split(np.arange(n), groups=g_tr):
-            oof_e[iva] = eeg_score(eeg_fit(Xe_tr[itr], y_tr[itr]), Xe_tr[iva])
-            oof_f[iva] = fn_score(fn_fit(Xf_tr[itr], y_tr[itr]), Xf_tr[iva])
-    except ValueError:                                       # too few groups for an inner split
-        return (pe + pf) / 2.0, pe, pf
-
-    def _logit(p):
-        return np.log(p + 1e-12)
-
-    def _softmax(z):
-        z = z - z.max(1, keepdims=True)
-        e = np.exp(z)
-        return e / e.sum(1, keepdims=True)
-
-    meta = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto").fit(
-        np.concatenate([oof_e, oof_f], axis=1), y_tr)
-    stk = meta.predict_proba(np.concatenate([pe, pf], axis=1))
-    Te = TemperatureScaler().fit(_logit(oof_e), y_tr).T
-    Tf = TemperatureScaler().fit(_logit(oof_f), y_tr).T
-    return stk, _softmax(_logit(pe) / Te), _softmax(_logit(pf) / Tf)
-
-
-def _feature_fusion(Xe_tr, Xf_tr, y_tr, Xe_te, Xf_te):
-    """Concat EEG log-bandpower + fNIRS mean/slope/peak -> shrinkage-LDA. Returns test probs."""
-    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-    from sklearn.pipeline import make_pipeline
-    from sklearn.preprocessing import StandardScaler
-
-    from core.features import amplitude_features
-    ftr = np.concatenate([_log_bandpower(Xe_tr), amplitude_features(Xf_tr)], axis=1)
-    fte = np.concatenate([_log_bandpower(Xe_te), amplitude_features(Xf_te)], axis=1)
-    clf = make_pipeline(StandardScaler(),
-                        LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")).fit(ftr, y_tr)
-    return clf.predict_proba(fte)
 
 
 if __name__ == "__main__":
