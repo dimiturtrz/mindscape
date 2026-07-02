@@ -60,24 +60,35 @@ before/after on the *cross-session* test (ATCNet): test ECE **0.113 → 0.084**.
 whether an in-session calibration fix survives the session shift — not a single in-distribution ECE.
 ([`neuroscan/evaluation/calibrate.py`](neuroscan/evaluation/calibrate.py))
 
-**Closing the cross-subject gap — measured, identified, fixed.** The collapse is a *domain shift*: each
-subject's covariance cloud sits at a different location on the SPD manifold, so a classifier trained on
-others misses them — not because the ERD contrast differs, but because the cloud is *displaced*. The
-field's fix is **Riemannian re-centering** (Zanini et al. 2018): congruence-transport every subject's
-covariances to the identity by their own Riemannian mean (`C → M⁻¹ᐟ² C M⁻¹ᐟ²` — the manifold version of
-whitening), target included and **unsupervised**. We implemented it ([`neuroscan/tasks/motor_imagery/align.py`](neuroscan/tasks/motor_imagery/align.py)):
+**Closing the cross-subject gap — the RPA ladder, reported by regime.** The collapse is a *domain shift*:
+each subject's covariance cloud sits at a different location on the SPD manifold, so a classifier trained on
+others misses them — not because the ERD contrast differs, but because the cloud is *displaced*. **Riemannian
+Procrustes Analysis** (Rodrigues 2019) aligns the domains in three steps; we report where each sits on the
+**deployability axis** — how many *target* labels it needs ([`align.py`](neuroscan/tasks/motor_imagery/align.py)):
 
-| method (leave-one-subject-out) | cross-subject acc |
-|---|---|
-| CSP+LDA | <!--r:csp_lda_cross_subject_bnci2014_001.acc-->0.391<!--/r--> |
-| Riemann (tangent space) | <!--r:riemann_cross_subject_bnci2014_001.acc-->0.360<!--/r--> |
-| Riemann ACM (time-delay cov) | <!--r:riemann_acm_cross_subject_bnci2014_001.acc-->0.355<!--/r--> |
-| **Riemann + re-centering** | **<!--r:riemann_recenter_ts_bnci2014_001.acc-->0.501<!--/r-->** |
+| method (leave-one-subject-out) | target labels | cross-subject acc |
+|---|---|---|
+| CSP+LDA | — | <!--r:csp_lda_cross_subject_bnci2014_001.acc-->0.391<!--/r--> |
+| Riemann (tangent space) | — | <!--r:riemann_cross_subject_bnci2014_001.acc-->0.360<!--/r--> |
+| **+ re-centering** (RPA step 1, Zanini 2018) | **zero-shot** | **<!--r:riemann_recenter_ts_bnci2014_001.acc-->0.501<!--/r-->** |
+| **+ re-scaling** (RPA step 2) | **zero-shot** | **<!--r:riemann_recenter_scale_ts_bnci2014_001.acc-->0.519<!--/r-->** |
+| **full RPA** (+ re-rotate, step 3) | calib 10 % | <!--r:riemann_rpa_c10_bnci2014_001.acc-->0.555<!--/r--> |
+| **full RPA** | calib 20 % | <!--r:riemann_rpa_c20_bnci2014_001.acc-->0.595<!--/r--> |
+| **full RPA** | calib 50 % | **<!--r:riemann_rpa_ts_bnci2014_001.acc-->0.650<!--/r-->** |
+| MDWM | calib 50 % | <!--r:riemann_mdwm_ts_bnci2014_001.acc-->0.412<!--/r--> |
 
-**+0.141** over plain tangent space — the displacement *was* the gap. And it's the *location*, not the
-features: ACM (richer time-delay covariances) scores 0.355 alone and **0.471 even with re-centering** —
-below plain re-centered tangent space (0.501). Removing the per-subject location shift is what transfers;
-adding features on top doesn't. (Re-centering is unsupervised on the target → deployment-real.)
+Two regimes, read them separately. **Zero-shot** (no target labels — deployment-real): re-centering to the
+identity by each subject's own Riemannian mean (`C → M⁻¹ᐟ² C M⁻¹ᐟ²`, the manifold version of whitening)
+closes most of the gap, **0.36 → 0.50**; adding dispersion-alignment (re-scaling) nudges it to **0.52**. The
+displacement *was* the gap — and it's the *location*, not the features (ACM's richer time-delay covariances
+score 0.355 alone, only 0.471 even re-centered). **Calibrated** (a short labelled calibration session): the
+supervised re-rotation aligns *class* structure and lifts further — even **10 %** of a session (≈7 trials/class)
+reaches **0.555**, scaling to **0.650** at 50 %, approaching the within-subject ceiling (0.60–0.66). MDWM
+under-performs even zero-shot re-centering here (0.412) — the honest negative of the pair.
+
+**The one non-negotiable:** those calibration labels come from a **disjoint** stratified split of the held-out
+subject — the rotation is fit there and scored on the *remaining* blocks. Test labels never enter the fit;
+otherwise "calibrated transfer" is just leakage. (Same honesty as the fNIRS calibration ablation.)
 
 ### The decoders — measured (same BCI-2a task, commodity architectures)
 We reproduce *standard* architectures (the decoder is commodity); the contribution is the eval rigor and

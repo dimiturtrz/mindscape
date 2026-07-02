@@ -196,6 +196,15 @@
       "kappa": 0.1774,
       "ece": 0.3719
     },
+    "riemann_mdwm_ts_bnci2014_001": {
+      "method": "riemann_mdwm_ts",
+      "regime": "cross_subject",
+      "dataset": "bnci2014_001",
+      "n_classes": null,
+      "acc": 0.4124,
+      "kappa": 0.2166,
+      "ece": null
+    },
     "riemann_recenter_acm_bnci2014_001": {
       "method": "riemann_recenter_acm",
       "regime": "cross_subject",
@@ -205,6 +214,15 @@
       "kappa": 0.295,
       "ece": null
     },
+    "riemann_recenter_scale_ts_bnci2014_001": {
+      "method": "riemann_recenter_scale_ts",
+      "regime": "cross_subject",
+      "dataset": "bnci2014_001",
+      "n_classes": null,
+      "acc": 0.5193,
+      "kappa": 0.3591,
+      "ece": null
+    },
     "riemann_recenter_ts_bnci2014_001": {
       "method": "riemann_recenter_ts",
       "regime": "cross_subject",
@@ -212,6 +230,33 @@
       "n_classes": null,
       "acc": 0.5008,
       "kappa": 0.3344,
+      "ece": null
+    },
+    "riemann_rpa_c10_bnci2014_001": {
+      "method": "riemann_rpa_ts",
+      "regime": "cross_subject",
+      "dataset": "bnci2014_001",
+      "n_classes": null,
+      "acc": 0.5551,
+      "kappa": 0.4067,
+      "ece": null
+    },
+    "riemann_rpa_c20_bnci2014_001": {
+      "method": "riemann_rpa_ts",
+      "regime": "cross_subject",
+      "dataset": "bnci2014_001",
+      "n_classes": null,
+      "acc": 0.5948,
+      "kappa": 0.4597,
+      "ece": null
+    },
+    "riemann_rpa_ts_bnci2014_001": {
+      "method": "riemann_rpa_ts",
+      "regime": "cross_subject",
+      "dataset": "bnci2014_001",
+      "n_classes": null,
+      "acc": 0.6505,
+      "kappa": 0.534,
       "ece": null
     },
     "riemann_within_bnci2014_001": {
