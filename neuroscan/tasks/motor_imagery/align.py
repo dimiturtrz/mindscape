@@ -31,7 +31,8 @@ import numpy as np
 from core import reference
 from core.data import splits, store
 from core.data.eeg.base import EpochCfg
-from core.features import recenter_covariances, scale_to_identity, time_delay_embed
+from core.features import time_delay_embed
+from baselines.eeg import transfer
 from neuroscan import tracking
 from neuroscan.evaluation import metrics
 
@@ -46,57 +47,20 @@ def _covariances(X, augment, order, lag, estimator="oas"):
     return Covariances(estimator=estimator).transform(X.astype(np.float64))
 
 
-def _align_by_group(C, groups, scale):
-    """Re-center (and optionally re-scale) each domain (subject) independently — the unsupervised, per-domain
-    transforms, safe to apply to a labelled or unlabelled domain alike."""
-    out = np.empty_like(C)
-    for g in np.unique(groups):
-        m = groups == g
-        rc = recenter_covariances(C[m])
-        out[m] = scale_to_identity(rc) if scale else rc
-    return out
-
-
 def _zero_shot_fold(s, Ctr, ytr, Cte, yte, groups, scale):
-    """Re-center (± scale) train per-subject + target unsupervised, tangent-space + LR, score ALL target."""
-    from pyriemann.tangentspace import TangentSpace
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.pipeline import make_pipeline
-
-    Ctr = _align_by_group(Ctr, groups, scale)
-    Cte = scale_to_identity(recenter_covariances(Cte)) if scale else recenter_covariances(Cte)
-    clf = make_pipeline(TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0))
-    clf.fit(Ctr, ytr)
-    probs = np.asarray(clf.predict_proba(Cte), dtype=float)
+    """Zero-shot: delegate the alignment + classifier to the transfer method, score ALL target."""
+    probs = transfer.zero_shot_predict(Ctr, ytr, groups, Cte, scale)
     return _row(s, yte, probs)
 
 
 def _calibrated_fold(s, method, Ctr, ytr, Cte, yte, calib_frac, seed, mdwm_lambda=0.5):
-    """SUPERVISED transfer with a DISJOINT target calibration split. Carve a stratified `calib_frac` of the
-    held-out subject as the *only* labelled target data; fit RPA-rotation / MDWM on source + that calib slice;
-    predict — and score — the REMAINING (disjoint) target blocks. Test labels never enter the fit."""
+    """Calibrated: carve a stratified `calib_frac` of the held-out subject as the *only* labelled target data
+    (the rest is the disjoint test set), hand it to the transfer method, score the disjoint remainder. Test
+    labels never enter the fit — the split is the runner's honesty guarantee, the method just consumes it."""
     from sklearn.model_selection import StratifiedShuffleSplit
 
-    from pyriemann.tangentspace import TangentSpace
-    from pyriemann.transfer import MDWM, TLCenter, TLClassifier, TLRotate, TLScale, encode_domains
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.pipeline import make_pipeline
-
     cal, ev = next(StratifiedShuffleSplit(1, train_size=calib_frac, random_state=seed).split(Cte, yte))
-    Xf = np.concatenate([Ctr, Cte[cal]])
-    yf = np.concatenate([ytr, yte[cal]]).astype(str)
-    dom = np.array(["source"] * len(ytr) + ["target"] * len(cal))
-    Xenc, yenc = encode_domains(Xf, yf, dom)
-    Xev, _ = encode_domains(Cte[ev], yte[ev].astype(str), np.array(["target"] * len(ev)))
-
-    if method == "mdwm":
-        model = MDWM(domain_tradeoff=mdwm_lambda, target_domain="target")
-    else:                                                            # full RPA + tangent-space LR
-        base = make_pipeline(TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0))
-        model = make_pipeline(TLCenter("target"), TLScale("target", centered_data=True),
-                              TLRotate("target"), TLClassifier("target", base))
-    model.fit(Xenc, yenc)
-    pred = model.predict(Xev).astype(int)
+    pred = transfer.calibrated_predict(method, Ctr, ytr, Cte[cal], yte[cal], Cte[ev], mdwm_lambda)
     yev = yte[ev]
     row = {"fold": str(s), "n": int(len(ev)), "n_calib": int(len(cal)),
            "acc": metrics.accuracy(yev, pred), "kappa": metrics.kappa(yev, pred), "ece": 0.0}

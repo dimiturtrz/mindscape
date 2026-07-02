@@ -1,0 +1,70 @@
+"""Cross-subject Riemannian transfer — the Riemannian Procrustes Analysis ladder as reusable functions.
+
+Plain tangent-space + LR transfers badly across subjects: each subject's covariance cloud sits at a
+different LOCATION on the SPD manifold (a domain shift, not a difference in the shared contrast). RPA
+(Rodrigues 2019) aligns the domains in up to three steps; these functions are the *method* — the alignment +
+classifier — with no experiment scaffolding. The runner (`tasks/motor_imagery/align.py`) owns the folds, the
+covariance estimation, the calibration split, and the metrics; it just calls these.
+
+  zero-shot  (no target labels — deployment-real): `zero_shot_predict(..., scale=)`
+             re-center each domain to the identity (± re-scale dispersion), then tangent-space + LR.
+  calibrated (a few labelled target trials, DISJOINT from test): `calibrated_predict(kind=)`
+             full RPA (center+scale+rotate) or MDWM — the rotation/MDWM are supervised on the calib slice.
+"""
+from __future__ import annotations
+
+import numpy as np
+
+from core.features import recenter_covariances, scale_to_identity
+
+
+def _tangent_lr():
+    from pyriemann.tangentspace import TangentSpace
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import make_pipeline
+    return make_pipeline(TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0))
+
+
+def align_domains(Csrc, groups, Cte, scale: bool):
+    """Re-center each source subject and the target to the identity independently (± dispersion re-scale) —
+    the unsupervised, per-domain transforms. Returns (source-aligned, target-aligned)."""
+    def _align(C):
+        rc = recenter_covariances(C)
+        return scale_to_identity(rc) if scale else rc
+
+    Cs = np.empty_like(Csrc)
+    for g in np.unique(groups):
+        m = groups == g
+        Cs[m] = _align(Csrc[m])
+    return Cs, _align(Cte)
+
+
+def zero_shot_predict(Csrc, ysrc, groups, Cte, scale: bool) -> np.ndarray:
+    """Zero-shot transfer: align source (per subject) + target (unsupervised), tangent-space + LR, return
+    class probabilities `[n, C]` for ALL target trials (no target labels used)."""
+    Cs, Ct = align_domains(Csrc, groups, Cte, scale)
+    clf = _tangent_lr().fit(Cs, ysrc)
+    return np.asarray(clf.predict_proba(Ct), dtype=float)
+
+
+def calibrated_predict(kind: str, Csrc, ysrc, Ccal, ycal, Cev, mdwm_lambda: float = 0.5) -> np.ndarray:
+    """Calibrated transfer: fit on source + a labelled target CALIBRATION slice, predict the disjoint target
+    eval set. `kind='rpa'` = full RPA (center+scale+rotate) then tangent-space LR; `kind='mdwm'` = Minimum
+    Distance to Weighted Mean (source↔target class-mean blend, weight `mdwm_lambda`). Returns int labels for
+    `Cev`. The caller guarantees Ccal and Cev are disjoint — no test labels enter here."""
+    from pyriemann.transfer import MDWM, TLCenter, TLClassifier, TLRotate, TLScale, encode_domains
+
+    Xf = np.concatenate([Csrc, Ccal])
+    yf = np.concatenate([ysrc, ycal]).astype(str)
+    dom = np.array(["source"] * len(ysrc) + ["target"] * len(ycal))
+    Xenc, yenc = encode_domains(Xf, yf, dom)
+    Xev, _ = encode_domains(Cev, np.zeros(len(Cev), int).astype(str), np.array(["target"] * len(Cev)))
+
+    if kind == "mdwm":
+        model = MDWM(domain_tradeoff=mdwm_lambda, target_domain="target")
+    else:                                                            # full RPA + tangent-space LR
+        from sklearn.pipeline import make_pipeline
+        model = make_pipeline(TLCenter("target"), TLScale("target", centered_data=True),
+                              TLRotate("target"), TLClassifier("target", _tangent_lr()))
+    model.fit(Xenc, yenc)
+    return model.predict(Xev).astype(int)
