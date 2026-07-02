@@ -8,20 +8,17 @@ from __future__ import annotations
 import numpy as np
 
 
-def _log_bandpower(X: np.ndarray) -> np.ndarray:
-    """Per-channel log variance = the cheap broadband EEG feature used on the fusion feature side."""
-    return np.log(X.var(axis=2) + 1e-12)
-
-
-def feature_fusion(Xe_tr, Xf_tr, y_tr, Xe_te, Xf_te) -> np.ndarray:
-    """Feature-level fusion: concat EEG log-bandpower + fNIRS mean/slope/peak -> shrinkage-LDA. Test probs."""
+def feature_fusion(Fe_tr, Xf_tr, y_tr, Fe_te, Xf_te) -> np.ndarray:
+    """Feature-level fusion: concat the EEG feature `Fe` (the re-centered tangent-space vector — the strong
+    EEG representation, so this is a fair test) + fNIRS mean/slope/peak -> shrinkage-LDA. Test probs. The
+    caller supplies `Fe` (via `transfer.recentered_tangent_features`) so the EEG side matches the probs side."""
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
 
     from core.features import amplitude_features
-    ftr = np.concatenate([_log_bandpower(Xe_tr), amplitude_features(Xf_tr)], axis=1)
-    fte = np.concatenate([_log_bandpower(Xe_te), amplitude_features(Xf_te)], axis=1)
+    ftr = np.concatenate([Fe_tr, amplitude_features(Xf_tr)], axis=1)
+    fte = np.concatenate([Fe_te, amplitude_features(Xf_te)], axis=1)
     clf = make_pipeline(StandardScaler(),
                         LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")).fit(ftr, y_tr)
     return clf.predict_proba(fte)

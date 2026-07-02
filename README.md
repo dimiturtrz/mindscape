@@ -214,13 +214,15 @@ per-subject) + fNIRS mean/slope/peak — under one **5-fold GroupKFold** so ever
 | fNIRS (mean/slope/peak → LDA) | <!--r:fusion_cross_subject_kfold_shin2017_nback.fnirs-->0.474<!--/r--> | −0.106 |
 | **EEG (re-centered Riemann)** | **<!--r:fusion_cross_subject_kfold_shin2017_nback.eeg-->0.580<!--/r-->** | best |
 | Late fusion (avg probabilities) | <!--r:fusion_cross_subject_kfold_shin2017_nback.late-->0.587<!--/r--> | **+0.007** |
-| Feature fusion (concat → LDA) | <!--r:fusion_cross_subject_kfold_shin2017_nback.feature-->0.434<!--/r--> | −0.146 |
+| Feature fusion (concat → LDA) | <!--r:fusion_cross_subject_kfold_shin2017_nback.feature-->0.564<!--/r--> | −0.016 |
 
-Re-centering flips the workload EEG from near-floor to the **strong** modality (0.58 vs fNIRS 0.47), so this is
-a **strong + weak** pair. Late fusion (0.587) now **edges** the best single (+0.7 pp) rather than *losing* to
+Re-centering flips the workload EEG from near-floor to the **strong** modality (0.58 vs fNIRS 0.47 — this is
+the 5-fold number; the LOSO number in Table B is 0.60, a touch higher from more training data per fold), so
+this is a **strong + weak** pair. Late fusion (0.587) now **edges** the best single (+0.7 pp) rather than *losing* to
 it — but that margin is within fold noise, so read it as a **wash-to-slight-edge, not a clean win**. Feature
-fusion still drops (its concat is dominated by the crude log-variance EEG feature). The interesting question is
-the **complementarity** — the two modalities still **fail on different blocks**:
+fusion (0.564, concatenating the re-centered EEG tangent-space feature + fNIRS amplitude) lands just under the
+best single — a fair feature-level result, not a broken one. The interesting question is the **complementarity**
+— the two modalities still **fail on different blocks**:
 
 | complementarity (same 5-fold) | value |
 |---|---|

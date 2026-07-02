@@ -46,6 +46,19 @@ def align_domains(Csrc, groups, Cte, scale: bool, target_groups=None):
     return Cs, Ct
 
 
+def recentered_tangent_features(C, groups) -> np.ndarray:
+    """Re-center each subject's covariances to the identity (per-domain), then map to the tangent space at
+    the identity -> a Euclidean feature vector `[n, d(d+1)/2]`. The feature-space view of the strong EEG
+    decoder — for feature-level fusion, so its EEG side matches the re-centered covariance the probs side
+    uses (not a crude log-variance). `groups` = subject per row (re-centering is per-domain)."""
+    from pyriemann.tangentspace import tangent_space
+
+    rc = np.empty_like(C)
+    for g in np.unique(groups):
+        rc[groups == g] = recenter_covariances(C[groups == g])
+    return tangent_space(rc, np.eye(C.shape[-1]))           # tangent at I: the covariances are centred there
+
+
 def zero_shot_predict(Csrc, ysrc, groups, Cte, scale: bool, target_groups=None) -> np.ndarray:
     """Zero-shot transfer: align source (per subject) + target (per subject if `target_groups` given, else as
     one domain), tangent-space + LR, return class probabilities `[n, C]` for ALL target trials (no labels)."""

@@ -121,7 +121,7 @@
       "eeg": 0.58,
       "fnirs": 0.4743,
       "late": 0.5872,
-      "feature": 0.4341,
+      "feature": 0.5644,
       "mean": 0.5869,
       "product": 0.5954,
       "conf_weight": 0.5798,

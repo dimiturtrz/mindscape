@@ -50,10 +50,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--regime", default="cross_subject_kfold",
                     choices=["cross_subject", "cross_subject_kfold"])
-    ap.add_argument("--eeg-method", default="riemann", choices=models.method_names())
     ap.add_argument("--plain-eeg", action="store_true",
-                    help="use the raw EEG decoder instead of the default RE-CENTERED Riemann (the transfer "
-                         "fix — the strong workload EEG modality)")
+                    help="use PLAIN Riemann for EEG instead of the default RE-CENTERED Riemann (the transfer "
+                         "fix — the strong workload EEG modality); a comparison knob")
     ap.add_argument("--out", default=None)
     ap.add_argument("--no-record", action="store_true")
     args = ap.parse_args()
@@ -64,21 +63,27 @@ def main():
     n_classes = int(meta_e["label_id"].max()) + 1
     recenter = not args.plain_eeg
     print(f"fusion cloud: {len(subs)} paired subjects · {n_classes} classes · chance {1/n_classes:.3f} · "
-          f"EEG {'re-centered Riemann' if recenter else args.eeg_method}")
+          f"EEG {'re-centered' if recenter else 'plain'} Riemann")
 
-    eeg_fit, eeg_score = models.get_method(args.eeg_method)
+    eeg_fit, eeg_score = models.get_method("riemann")        # the plain-EEG fallback (fusion EEG is Riemann)
     fn_fit, fn_score = models.get_method("fnirs_lda")
+
+    def _cov(X):
+        from pyriemann.estimation import Covariances
+        return Covariances("oas").transform(X.astype(np.float64))
 
     def eeg_probs(Xtr, ytr, gtr, Xte, gte):
         """EEG decoder as a probability fn. Default = zero-shot RE-CENTERED Riemann (recenter each subject —
         train AND test — to the identity, unsupervised); needs the subject groups, so it can't be a plain
-        get_method decoder. `--plain-eeg` falls back to the raw method."""
+        get_method decoder. `--plain-eeg` falls back to plain Riemann."""
         if not recenter:
             return eeg_score(eeg_fit(Xtr, ytr), Xte)
-        from pyriemann.estimation import Covariances
-        Ctr = Covariances("oas").transform(Xtr.astype(np.float64))
-        Cte = Covariances("oas").transform(Xte.astype(np.float64))
-        return transfer.zero_shot_predict(Ctr, ytr, gtr, Cte, scale=False, target_groups=gte)
+        return transfer.zero_shot_predict(_cov(Xtr), ytr, gtr, _cov(Xte), scale=False, target_groups=gte)
+
+    def eeg_feats(X, g):
+        """EEG feature vector for feature-level fusion — the re-centered tangent-space rep, so its EEG side
+        matches the strong probs-side EEG (not a crude log-variance)."""
+        return transfer.recentered_tangent_features(_cov(X), g)
 
     # fold generator over the shared subject set (same split drives both modalities)
     if args.regime == "cross_subject_kfold":
@@ -101,8 +106,8 @@ def main():
         pf = fn_score(fn_fit(Xf_tr, y_tr), Xf_te)
         # late fusion: average the two probability vectors
         p_late = (pe + pf) / 2.0
-        # feature fusion: concat EEG log-bandpower + fNIRS features -> shrinkage-LDA
-        p_feat = combine.feature_fusion(Xe_tr, Xf_tr, y_tr, Xe_te, Xf_te)
+        # feature fusion: concat the re-centered tangent-space EEG feature + fNIRS features -> shrinkage-LDA
+        p_feat = combine.feature_fusion(eeg_feats(Xe_tr, g_tr), Xf_tr, y_tr, eeg_feats(Xe_te, g_te), Xf_te)
         # smarter output-space aggregators (stacking meta-LDA + per-modality temperature), fit on inner
         # OOF probs from a GroupKFold over the TRAIN subjects so the meta/temperature never see test data
         stk, pec, pfc = combine.smart_aggregators(eeg_probs, fn_fit, fn_score,
