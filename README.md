@@ -201,6 +201,37 @@ Two findings from the same-task design:
   exactly what BenchNIRS found). So the workload task is a **strong (re-centered EEG) + weak (fNIRS)** pair —
   whether the weak modality *adds* is the **fusion question**, answered below: a marginal edge, large
   uncaptured complementarity, and the honest next win is a stronger fNIRS, not a cleverer combiner.
+
+### What actually carries the fNIRS signal — a feature-importance search
+The baseline uses **mean + slope + peak**, the field-standard triple. But *which* of those (and which of a
+wider bank) actually matters? Rather than guess, we let a search tell us — **Optuna as a wrapper
+feature-selector**: 15 per-channel temporal descriptors (mean, slope, peak, variance, skew, kurtosis, AUC,
+time-to-peak, min/max/range, early/late slope, zero-crossings), **one weight ∈ [0,1] per family** applied
+*after* standardisation, scored by mean accuracy over repeated-seeded subject-grouped 5-fold CV.
+[`optuna_fnirs`](neuroscan/tasks/workload/optuna_fnirs.py) · config [`optuna_fnirs.yaml`](optuna_fnirs.yaml).
+
+**The honest framing is built in.** A search *maximises* over trials, so its peak accuracy is optimistic —
+it's reported as such (~0.50, **not** a generalisation number; that would need a sealed outer fold). The
+robust deliverable is the **importance** (fANOVA + how much the best trials up-weight each family), and its
+**stability** across three independent study re-runs: unstable at 30 trials (top-5 Jaccard **0.20** — search
+noise) → **stable at 200 trials (Jaccard 0.67)**, so the ranking below is trustworthy, not a lucky draw.
+
+**Finding — dynamics ≫ amplitude** (200 trials × 3 seeds):
+
+| family | importance | best-trial weight | reading |
+|---|---|---|---|
+| **slope** | **0.35** | **0.91** | the workhorse — kept on, dominates |
+| time-to-peak | 0.25 | 0.22 | influential but best trials **suppress** it (hurts if included) |
+| range | 0.13 | 0.41 | moderate |
+| late-slope | 0.09 | 0.76 | mild help (response *shape*, not size) |
+| **mean** | 0.03 | **0.15** | near-dead — the search **drops** it |
+| peak | 0.02 | 0.58 | minor |
+
+The workload signal is in the **rate and shape of the hemodynamic rise (`slope`)**, *not* its magnitude —
+`mean` and `peak`, two-thirds of the standard triple, carry almost nothing here (the search actively
+down-weights `mean`). Mechanistically clean: `mean` over the −2→20 s window blends baseline + rise + plateau
+and dilutes the contrast, while `slope` reads the rise directly — matching the fNIRS literature's emphasis on
+regression/slope features. A feature-importance result, not a new accuracy claim.
 - **The field's transfer trick didn't help here.** Per-subject z-scoring (the standard fNIRS cross-subject
   fix) gave no gain — a slight drop on this single run — most likely because our per-epoch baseline-correction
   already removes the offset it targets. (One run, not a claim that z-scoring is useless.)
