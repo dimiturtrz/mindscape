@@ -211,8 +211,11 @@ time-to-peak, min/max/range, early/late slope, zero-crossings), **one weight ∈
 [`optuna_fnirs`](neuroscan/tasks/workload/optuna_fnirs.py) · config [`optuna_fnirs.yaml`](optuna_fnirs.yaml).
 
 **The honest framing is built in.** A search *maximises* over trials, so its peak accuracy is optimistic —
-it's reported as such (~0.50, **not** a generalisation number; that would need a sealed outer fold). The
-robust deliverable is the **importance** (fANOVA + how much the best trials up-weight each family), and its
+it's reported as such (~0.50, **not** a generalisation number; that would need a sealed outer fold). It also
+runs a fixed `shrinkage=0.4` LDA (constant across trials, so it can't confound the weight comparison) — a
+*different* classifier from the `shrinkage="auto"` LDA in the fixed-recipe CV below, so the ~0.50 here and the
+~0.46 there aren't on one scale (search optimism **plus** a classifier difference); only the recipe table is a
+fair within-method comparison. The robust deliverable is the **importance** (fANOVA + how much the best trials up-weight each family), and its
 **stability** across three independent study re-runs: unstable at 30 trials (top-5 Jaccard **0.20** — search
 noise) → **stable at 200 trials (Jaccard 0.67)**, so the ranking below is trustworthy, not a lucky draw.
 
