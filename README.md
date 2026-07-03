@@ -1,8 +1,28 @@
-# mindscape — honest, efficient non-invasive neural decoding (EEG + fNIRS)
+# mindscape — robust, efficient non-invasive neural decoding (EEG + fNIRS)
+
+**What is the format of our thoughts?** Ripples on the mind — a projection of the brain, the most precious
+organ we have. What happens in there when we read a word, see a face, decide to move a hand? The field that
+reads (and sometimes writes) those signals is **BCI — brain–computer interface** — in two flavors, invasive
+and non-invasive.
+
+**Invasive** BCI implants electrodes in the brain: far better resolution, but you can't take it back out, it
+reads *and* writes, and the dystopian failure mode writes itself (the *1984* kind). **Non-invasive** BCI reads
+from outside — a cap or a scanner — trading resolution for the fact that you can take it off. The two wearable,
+affordable options are **EEG** and **fNIRS**:
+
+- **EEG** reads the *cumulative electrical activity* at the scalp — summed action potentials of large neuron
+  populations. Fast, spatially blurry.
+- **fNIRS** reads *blood*: it shines two infrared wavelengths into cortex and measures the scatter, tracking
+  oxygenated vs deoxygenated hemoglobin. A firing region burns ATP, blood rushes in with fresh oxygen — so
+  fNIRS sees the *hemodynamic echo* of activity. Slower, spatially sharper.
+
+Complementary — opposite trades on the same question. **mindscape** explores both: the data, its generation,
+and the feature-extraction methods to decode real tasks — and measures, *robustly*, how far that decoding
+travels to a person it never saw.
 
 **What this is.** mindscape decodes non-invasive neural signals — **EEG and fNIRS** — and asks the question
 most demos skip: *a decoder that scores ~60% on a subject's own recordings — how far does it fall on a
-person it never saw?* The contribution is the **honest cross-subject evaluation** (and what it reveals), not
+person it never saw?* The contribution is the **robust cross-subject evaluation** (and what it reveals), not
 a leaderboard number — across two tasks:
 
 - **Motor imagery** (EEG, BCI-2a). CSP+LDA hits **0.598 within-subject** but drops to **0.391**
@@ -14,7 +34,7 @@ a leaderboard number — across two tasks:
   workload gain and now the strongest single-modality decoder. That makes fusion a **strong + weak** pair: the
   two still fail on *different* blocks (oracle **0.75** vs best-single **0.58**), and once EEG is well-aligned
   its confidence turns informative, so output-space fusion goes from *hurting* to a marginal edge (product
-  **+1.5 pp**) — a wash, not yet a win. The oracle headroom stays mostly uncaptured; the honest next win is
+  **+1.5 pp**) — a wash, not yet a win. The oracle headroom stays mostly uncaptured; the real next win is
   lifting the weak modality (fNIRS domain adaptation), not a cleverer combiner.
 
 Two through-lines under both tasks: the **evaluation regime is the product** — a split is a *criteria filter*
@@ -35,7 +55,7 @@ n-back task: **EEG** (frontal-theta / parietal-alpha band-power topomaps), **fNI
 response building over the trial), and **Fusion** — a per-block **complementarity map** colouring every
 held-out block by which modality got it right, so you see re-centered EEG (0.58) and fNIRS (0.47) failing on
 *different* blocks (oracle **0.75** vs best-single 0.58) while output-space fusion cashes only a sliver. Each
-view shows the signal a decoder consumes *and whether it got it right* — with the honest cross-subject score.
+view shows the signal a decoder consumes *and whether it got it right* — with the robust cross-subject score.
 → **[neuroviz/](neuroviz/)**
 
 ## Task · Motor imagery (BCI-2a, EEG) — the generalization gap, measured
@@ -45,7 +65,7 @@ within-subject, cross-subject (leave-one-subject-out), cross-session — is a **
 data cloud**, so each run self-documents exactly what it held out. That's what separates a real
 generalization number from an inflated one.
 
-**The headline** (CSP+LDA, honest train-session → eval-session protocol):
+**The headline** (CSP+LDA, robust train-session → eval-session protocol):
 
 | regime | accuracy | kappa | ECE |
 |---|---|---|---|
@@ -87,7 +107,7 @@ score 0.355 alone, only 0.471 even re-centered). **Calibrated** (a short labelle
 supervised re-rotation aligns *class* structure and lifts further — even **10 %** of a session (≈7 trials/class)
 reaches **0.555**, scaling to **0.650** at 50 %, approaching the within-subject ceiling (0.60–0.66).
 
-**MDWM is the honest negative — and a lesson in robustness.** At its default weighting it scores 0.412, below
+**MDWM is the negative we report — and a lesson in robustness.** At its default weighting it scores 0.412, below
 even zero-shot re-centering. Tuning its source↔target tradeoff λ *does* help — but that's the tell: acc swings
 **0.31 → 0.57** across λ (`--set params.mdwm_lambda=…`), and the optimum is **λ = 1 (target-only)**, i.e. the best MDWM
 *ignores the source entirely* — its transfer mechanism adds nothing here, it's just target-calibration MDM.
@@ -100,12 +120,12 @@ hide exactly the fragility worth showing.
 
 **The one non-negotiable:** the calibrated methods' labels come from a **disjoint** stratified split of the
 held-out subject — fit there, scored on the *remaining* blocks. Test labels never enter the fit; otherwise
-"calibrated transfer" is just leakage. (Same honesty as the fNIRS calibration ablation.)
+"calibrated transfer" is just leakage. (Same discipline as the fNIRS calibration ablation.)
 
 ### The decoders — measured (same BCI-2a task, commodity architectures)
 We reproduce *standard* architectures (the decoder is commodity); the contribution is the eval rigor and
 the efficient deployable, not a leaderboard number. **All our numbers sit below the published ceilings —
-deliberately**: the honest train→eval-session protocol is harder than the pooled within-session CV many
+deliberately**: the robust train→eval-session protocol is harder than the pooled within-session CV many
 papers report, and we don't do full per-model tuning or run-averaging. The gap analysis, grounded in
 primary sources, is in [`research/`](research/deep_dives/2026-06-30_2a_sota_recipe.md).
 
@@ -120,7 +140,7 @@ single-thread — `python -m neuroscan.models.profile`):
 | **ATCNet** | attention + TCN | 114K | **2.8M** | 4.2 ms | 0.619 | 0.492 |
 | EEGConformer | transformer | 871K | 72M | 4.2 ms | — | — |
 
-Three honest findings fall out:
+Three findings fall out:
 - **Classical geometry leads within-subject on this protocol — read it as strong-and-cheap, not a settled verdict.**
   Riemannian tangent-space + LR ([`baselines/riemann.py`](baselines/riemann.py)) hits **0.655**, above both deep
   nets *as run here* — but this is a single seed, no per-model tuning, and the nets aren't optimized, over ~24h of
@@ -172,7 +192,7 @@ actually *exceeds* the within-subject Riemann (0.54): not a paradox — cross-su
 subjects** (~675 blocks) while "within" trains on ~18 blocks of one subject, so alignment + volume beats a
 data-starved personal model.
 
-**Anchored to the field's honest benchmark — the numbers are modest by design.** [BenchNIRS](https://doi.org/10.3389/fnrgo.2023.994969)
+**Anchored to the field's robust benchmark — the numbers are modest by design.** [BenchNIRS](https://doi.org/10.3389/fnrgo.2023.994969)
 (Benerradi 2023) is the rigorous fNIRS-ML benchmark whose whole point is that *proper* cross-subject
 evaluation gives near-chance results — exposing that many published fNIRS accuracies are inflated by
 improper (within-session / personalised) validation. On this exact Shin n-back it reports LDA **0.389**
@@ -185,7 +205,7 @@ the val-carve fix: the folds now train on the full non-test set instead of silen
 which a shrinkage-LDA on ~13-dim features converts into a few points. Read it conservatively: the lift over
 plain LDA comes from **full spatial resolution + shrinkage** and **more training data**, not a new method — and
 even at 0.474 we sit only **~14 pp above the 0.333 floor**, still an order of magnitude short of the 70–90 %
-that improper (within-session / personalised) validation produces. Honest, reproducible, above the rigorous
+that improper (within-session / personalised) validation produces. Robust, reproducible, above the rigorous
 benchmark for explainable reasons — *not* a leap.
 
 Two findings from the same-task design:
@@ -200,7 +220,7 @@ Two findings from the same-task design:
   within-subject (25 aligned subjects beat a data-starved personal model). fNIRS stays ~0.47 (barely transfers,
   exactly what BenchNIRS found). So the workload task is a **strong (re-centered EEG) + weak (fNIRS)** pair —
   whether the weak modality *adds* is the **fusion question**, answered below: a marginal edge, large
-  uncaptured complementarity, and the honest next win is a stronger fNIRS, not a cleverer combiner.
+  uncaptured complementarity, and the real next win is a stronger fNIRS, not a cleverer combiner.
 
 ### What actually carries the fNIRS signal — a feature-importance search
 The baseline uses **mean + slope + peak**, the field-standard triple. But *which* of those (and which of a
@@ -213,7 +233,7 @@ time-to-peak, min/max/range, early/late slope, zero-crossings), **one weight ∈
 JournalStorage DB (trials persisted + queryable), and the table below is regenerated from the study's
 `importance.json` artifact — reproducible from the stored trials, not hand-typed.
 
-**The honest framing is built in.** A search *maximises* over trials, so its peak accuracy is optimistic —
+**Conservative by construction.** A search *maximises* over trials, so its peak accuracy is optimistic —
 it's reported as such (~0.50, **not** a generalisation number; that would need a sealed outer fold). It also
 runs a fixed `shrinkage=0.4` LDA (constant across trials, so it can't confound the weight comparison) — a
 *different* classifier from the `shrinkage="auto"` LDA in the fixed-recipe CV below, so the ~0.50 here and the
@@ -242,9 +262,9 @@ regression/slope features. A feature-importance result, not a new accuracy claim
 **Two follow-ups confirmed it — and corrected it.** (a) A **differentiable** version
 ([`differentiable`](neuroscan/tasks/workload/feature_importance/differentiable.py), torch/CUDA): softmax feature
 weights + a linear head trained jointly, with `entropy(w)` as a differentiable sparsity penalty — sweep it
-and `slope` is the last family standing. It also exposes an honest limit: **per-channel** weights (1080) are
+and `slope` is the last family standing. It also exposes a real limit: **per-channel** weights (1080) are
 computationally trivial for gradient descent but **statistically unidentifiable** on 702 blocks (they stay
-uniform), so the per-family view is the right resolution. (b) An **honest fixed-recipe CV** — no search, so
+uniform), so the per-family view is the right resolution. (b) A **robust fixed-recipe CV** — no search, so
 no selection optimism ([`recipes`](neuroscan/tasks/workload/feature_importance/recipes.py), 3×5-fold GroupKFold):
 
 | recipe | acc | κ |
@@ -258,14 +278,14 @@ no selection optimism ([`recipes`](neuroscan/tasks/workload/feature_importance/r
 
 The **slope *trajectory*** (rise rate + early/late shape, 3 features) **ties the full 15-family bank and edges
 the standard triple** — while `mean` and `peak` alone barely clear chance (0.333). So two-thirds of the
-field-standard triple is dead weight; the honest recipe is *shape, not magnitude*. The correction over the
+field-standard triple is dead weight; the real recipe is *shape, not magnitude*. The correction over the
 search: slope-*alone* (0.446) sits a hair *under* the triple — it's the slope trajectory that carries it, not
 a single number. (Assume-wrong in action: the search *suggested* slope; the no-search CV *tempered* the claim.)
 
 **Does keeping the time axis help? — a windowed decoder + aggregation sweep.** The baseline collapses the 22 s
 response to one scalar/channel. [`WindowedFnirs`](baselines/fnirs/windowed.py) instead sub-windows the
 response and combines the windows four ways ([`fnirs_windowed_eval`](neuroscan/tasks/workload/fnirs_windowed_eval.py),
-within *and* cross-subject). The honest result — the aggregation is the design axis, not an afterthought:
+within *and* cross-subject). The result — the aggregation is the design axis, not an afterthought:
 
 - **Ordered concatenation carries real extra signal — within-subject.** Coarse 3-window concat → LDA lifts
   within-subject **0.448 → ~0.473** (+2.5 pp), consistent across every granularity (so a real effect, not
@@ -340,10 +360,10 @@ confidence-based combiners (product, max-pick) can *partially* tell which modali
 **output-space fusion works to the extent the modalities are well-calibrated**, and it fails when confidence
 is noise (the weak-modality regime).
 
-But the gains are within noise and a long way under the oracle (0.752). Two honest paths to actually cash the
+But the gains are within noise and a long way under the oracle (0.752). Two real paths to actually cash the
 headroom: **(1) lift the weak modality** — fNIRS cross-subject domain adaptation, so it's a *strong + strong*
 pair where complementarity pays (filed follow-up); **(2)** an input-level gate that reads reliability from the
-raw signals, not just the (still-imperfect) probabilities. The current honest result: *re-centering makes
+raw signals, not just the (still-imperfect) probabilities. The current result: *re-centering makes
 fusion stop hurting and marginally help, complementarity is large but mostly uncaptured, and the next win is a
 stronger fNIRS.*
 
@@ -351,7 +371,7 @@ stronger fNIRS.*
 the *band-power* features have their own. Workload band-power is subject-idiosyncratic in absolute scale, so
 per-subject unsupervised calibration (z-score each subject's own features — the feature-space analog of
 re-centering) recovers it from <!--r:calibration_ablation_shin2017_nback_eeg.eeg_raw-->0.407<!--/r--> raw to
-**<!--r:calibration_ablation_shin2017_nback_eeg.eeg_zcalib-->0.511<!--/r-->** (honest held-out-calibration-half)
+**<!--r:calibration_ablation_shin2017_nback_eeg.eeg_zcalib-->0.511<!--/r-->** (held-out calibration-half — no leakage)
 / **<!--r:calibration_ablation_shin2017_nback_eeg.eeg_ztrans-->0.581<!--/r-->** (transductive) — a second,
 independent way to reach the same ~0.58 EEG strength. We also built the **input-level gate** (path 2 above —
 per-modality encoders + a per-trial mixing gate, nested GroupKFold) on those features:
@@ -361,10 +381,10 @@ headroom (<!--r:calibration_ablation_shin2017_nback_eeg.oracle_z-->0.766<!--/r--
 raw inputs, the gate doesn't cash it *on this strong+weak pair* — reinforcing that the next real win is a
 stronger fNIRS, not a cleverer combiner.
 
-Two honesty caveats. (1) The oracle is an **upper bound** — a perfect selector is unattainable; a real gate
+Two caveats. (1) The oracle is an **upper bound** — a perfect selector is unattainable; a real gate
 captures only a fraction. It proves headroom *exists*, not that we can claim it. (2) The literature offers no
 free lunch: every published Shin n-back fusion number (96–98 %) is **within-subject** (inflated exactly as
-BenchNIRS predicts), the one honest EEG-fNIRS fusion LOSO figure *drops* 34 pts (DC-AGIN 96.98 %→62.56 %), and
+BenchNIRS predicts), the one leakage-free EEG-fNIRS fusion LOSO figure *drops* 34 pts (DC-AGIN 96.98 %→62.56 %), and
 on the hardest real contrast (2- vs 3-back) fusion *loses* to fNIRS — so a learned model must be small
 (compact cross-attention, the only thing that fits n=26) and gated on **strict nested GroupKFold**, or it will
 reproduce that collapse.
@@ -373,7 +393,7 @@ Full audit + citations: [`research/`](research/deep_dives/2026-07-01_eeg_fnirs_f
 ablation in [`tasks/workload/calibration_ablation.py`](neuroscan/tasks/workload/calibration_ablation.py), the
 gate in [`tasks/workload/fusion_gate.py`](neuroscan/tasks/workload/fusion_gate.py).
 
-## Honest limits (measured, not assumed)
+## Limits (measured, not assumed)
 Competent on a public benchmark, **not** a finished system:
 - **Reproduction is partial.** Best within-subject ~0.62 vs published 0.81; clean subjects reproduce
   (A03 ~0.79 vs published peak ~0.85), hard subjects lag ~0.15 — documented in [`research/`](research/),
