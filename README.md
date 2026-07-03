@@ -17,13 +17,10 @@ affordable options are **EEG** and **fNIRS**:
   fNIRS sees the *hemodynamic echo* of activity. Slower, spatially sharper.
 
 Complementary — opposite trades on the same question. **mindscape** explores both: the data, its generation,
-and the feature-extraction methods to decode real tasks — and measures, *robustly*, how far that decoding
-travels to a person it never saw.
-
-**What this is.** mindscape decodes non-invasive neural signals — **EEG and fNIRS** — and asks the question
-most demos skip: *a decoder that scores ~60% on a subject's own recordings — how far does it fall on a
-person it never saw?* The contribution is the **robust cross-subject evaluation** (and what it reveals), not
-a leaderboard number — across two tasks:
+and the feature-extraction and decoding methods for real tasks — and asks what most demos skip: *a decoder
+that scores ~60% on a subject's own recordings — how far does it fall on a person it never saw?* The
+contribution is the **robust cross-subject evaluation** (and what it reveals), not a leaderboard number —
+across two tasks:
 
 - **Motor imagery** (EEG, BCI-2a). CSP+LDA hits **0.598 within-subject** but drops to **0.391**
   leave-one-subject-out — a **21-point generalization gap** (chance 25%) — which Riemannian **re-centering**
