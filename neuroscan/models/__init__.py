@@ -11,10 +11,12 @@ from __future__ import annotations
 def method_names() -> list[str]:
     from neuroscan.models.decoders import MODELS
     return ["csp_lda", "riemann", "riemann_acm", "riemann_mdm", "riemann_fgmdm", "fbcsp",
-            "fnirs_lda", "eeg_bandpower", *sorted(MODELS)]
+            "fnirs_lda", "fnirs_windowed", "eeg_bandpower", *sorted(MODELS)]
 
 
-_FS_METHODS = {"eeg_bandpower", "fbcsp"}   # baselines that need the epoch sample rate to build their filters
+# baselines that need the epoch sample rate: filter-designers (band-power, FBCSP) to build their filters,
+# and the windowed fNIRS decoder to convert its sub-window length/hop (seconds) to samples.
+_FS_METHODS = {"eeg_bandpower", "fbcsp", "fnirs_windowed"}
 
 
 def _proba(clf, X):
@@ -28,9 +30,11 @@ def _baseline_classes() -> dict:
     from baselines.eeg.bandpower import EegBandpower
     from baselines.eeg.fbcsp import Fbcsp
     from baselines.fnirs.features import FnirsLda
+    from baselines.fnirs.windowed import WindowedFnirs
     from baselines.eeg.riemann import Acm, Fgmdm, Mdm, TangentSpace
     return {"csp_lda": CspLda, "riemann": TangentSpace, "riemann_acm": Acm, "riemann_mdm": Mdm,
-            "riemann_fgmdm": Fgmdm, "fbcsp": Fbcsp, "fnirs_lda": FnirsLda, "eeg_bandpower": EegBandpower}
+            "riemann_fgmdm": Fgmdm, "fbcsp": Fbcsp, "fnirs_lda": FnirsLda, "fnirs_windowed": WindowedFnirs,
+            "eeg_bandpower": EegBandpower}
 
 
 def get_method(name: str, fs: float | None = None):

@@ -261,6 +261,26 @@ the standard triple** — while `mean` and `peak` alone barely clear chance (0.3
 field-standard triple is dead weight; the honest recipe is *shape, not magnitude*. The correction over the
 search: slope-*alone* (0.446) sits a hair *under* the triple — it's the slope trajectory that carries it, not
 a single number. (Assume-wrong in action: the search *suggested* slope; the no-search CV *tempered* the claim.)
+
+**Does keeping the time axis help? — a windowed decoder + aggregation sweep.** The baseline collapses the 22 s
+response to one scalar/channel. [`WindowedFnirs`](baselines/fnirs/windowed.py) instead sub-windows the
+response and combines the windows four ways ([`fnirs_windowed_eval`](neuroscan/tasks/workload/fnirs_windowed_eval.py),
+within *and* cross-subject). The honest result — the aggregation is the design axis, not an afterthought:
+
+- **Ordered concatenation carries real extra signal — within-subject.** Coarse 3-window concat → LDA lifts
+  within-subject **0.448 → ~0.473** (+2.5 pp), consistent across every granularity (so a real effect, not
+  fold scatter). Keeping time is *not* wasted; the collapse *is* lossy — within a subject.
+- **But the gain is subject-idiosyncratic — it doesn't transfer.** Cross-subject, coarse windowing only *ties*
+  the collapse (~0.458 vs 0.460); finer windows overfit and drop (down to 0.415). The extra temporal detail is
+  per-subject, so it evaporates across subjects.
+- **MIL pooling (mean / max / log-sum-exp) is a dead end here** — all ~0.39, *below* collapse even within-subject:
+  a smooth hemodynamic response has no localized cue for a "strongest-window" pool to exploit, so a shared
+  per-window feature is just weaker than the global triple. Ruled out by measurement.
+
+So the collapse isn't lazy — it's matched to a smooth signal, and the temporal signal that *does* exist is
+trapped within-subject. That reframes the next step precisely: the cross-subject wall is **distribution shift,
+not representation** — and the within-subject signal windowing unlocks is exactly what **domain adaptation**
+exists to make transfer. The two compose (richer rep + alignment); DA is the next chapter.
 - **The field's transfer trick didn't help here.** Per-subject z-scoring (the standard fNIRS cross-subject
   fix) gave no gain — a slight drop on this single run — most likely because our per-epoch baseline-correction
   already removes the offset it targets. (One run, not a claim that z-scoring is useless.)
