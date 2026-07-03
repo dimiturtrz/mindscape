@@ -232,6 +232,29 @@ The workload signal is in the **rate and shape of the hemodynamic rise (`slope`)
 down-weights `mean`). Mechanistically clean: `mean` over the −2→20 s window blends baseline + rise + plateau
 and dilutes the contrast, while `slope` reads the rise directly — matching the fNIRS literature's emphasis on
 regression/slope features. A feature-importance result, not a new accuracy claim.
+
+**Two follow-ups confirmed it — and corrected it.** (a) A **differentiable** version
+([`fnirs_subset_select`](neuroscan/tasks/workload/fnirs_subset_select.py), torch/CUDA): softmax feature
+weights + a linear head trained jointly, with `entropy(w)` as a differentiable sparsity penalty — sweep it
+and `slope` is the last family standing. It also exposes an honest limit: **per-channel** weights (1080) are
+computationally trivial for gradient descent but **statistically unidentifiable** on 702 blocks (they stay
+uniform), so the per-family view is the right resolution. (b) An **honest fixed-recipe CV** — no search, so
+no selection optimism ([`fnirs_recipes`](neuroscan/tasks/workload/fnirs_recipes.py), 3×5-fold GroupKFold):
+
+| recipe | acc | κ |
+|---|---|---|
+| **dynamics** (slope + early/late-slope) | **0.466** | 0.199 |
+| full (15 families) | 0.464 | 0.196 |
+| amplitude — mean+slope+peak (baseline) | 0.460 | 0.190 |
+| slope only | 0.446 | 0.169 |
+| mean only | 0.392 | 0.088 |
+| peak only | 0.376 | 0.064 |
+
+The **slope *trajectory*** (rise rate + early/late shape, 3 features) **ties the full 15-family bank and edges
+the standard triple** — while `mean` and `peak` alone barely clear chance (0.333). So two-thirds of the
+field-standard triple is dead weight; the honest recipe is *shape, not magnitude*. The correction over the
+search: slope-*alone* (0.446) sits a hair *under* the triple — it's the slope trajectory that carries it, not
+a single number. (Assume-wrong in action: the search *suggested* slope; the no-search CV *tempered* the claim.)
 - **The field's transfer trick didn't help here.** Per-subject z-scoring (the standard fNIRS cross-subject
   fix) gave no gain — a slight drop on this single run — most likely because our per-epoch baseline-correction
   already removes the offset it targets. (One run, not a claim that z-scoring is useless.)
