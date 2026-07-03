@@ -71,6 +71,17 @@ class Mdm(_RiemannBaseline):
         return make_pipeline(_cov(self.estimator), MDM(metric="riemann"))
 
 
+class Fgmdm(_RiemannBaseline):
+    """Fisher-geodesic MDM — MDM preceded by a supervised geodesic filter (Fisher LDA in the tangent space,
+    used to *filter* the covariances rather than classify). The strongest of the MDM family; MOABB puts it
+    ≈ tangent-space+LR, above FBCSP. Same primitives as our TS+LR + MDM, recombined."""
+
+    def _build(self):
+        from pyriemann.classification import FgMDM
+        from sklearn.pipeline import make_pipeline
+        return make_pipeline(_cov(self.estimator), FgMDM(metric="riemann"))
+
+
 class Acm(_RiemannBaseline):
     """Augmented Covariance Method: time-delay-embed (`order` lagged copies at stride `lag`) before the
     covariance, folding temporal dynamics into the SPD matrix, then tangent space + LR."""
@@ -86,7 +97,7 @@ class Acm(_RiemannBaseline):
         return make_pipeline(aug, _cov(self.estimator), *_tangent_lr())
 
 
-_METHODS = {"ts": TangentSpace, "mdm": Mdm, "acm": Acm}
+_METHODS = {"ts": TangentSpace, "mdm": Mdm, "fgmdm": Fgmdm, "acm": Acm}
 
 
 def fit(X: np.ndarray, y: np.ndarray, method: str = "ts", estimator: str = "oas",

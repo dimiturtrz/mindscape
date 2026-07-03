@@ -10,7 +10,11 @@ from __future__ import annotations
 
 def method_names() -> list[str]:
     from neuroscan.models.decoders import MODELS
-    return ["csp_lda", "riemann", "riemann_acm", "fnirs_lda", "eeg_bandpower", *sorted(MODELS)]
+    return ["csp_lda", "riemann", "riemann_acm", "riemann_mdm", "riemann_fgmdm", "fbcsp",
+            "fnirs_lda", "eeg_bandpower", *sorted(MODELS)]
+
+
+_FS_METHODS = {"eeg_bandpower", "fbcsp"}   # baselines that need the epoch sample rate to build their filters
 
 
 def _proba(clf, X):
@@ -22,20 +26,23 @@ def _baseline_classes() -> dict:
     """name -> Baseline class (lazy import so pyriemann/mne load only when a baseline is actually used)."""
     from baselines.eeg.csp_lda import CspLda
     from baselines.eeg.bandpower import EegBandpower
+    from baselines.eeg.fbcsp import Fbcsp
     from baselines.fnirs.features import FnirsLda
-    from baselines.eeg.riemann import Acm, TangentSpace
-    return {"csp_lda": CspLda, "riemann": TangentSpace, "riemann_acm": Acm, "fnirs_lda": FnirsLda,
-            "eeg_bandpower": EegBandpower}
+    from baselines.eeg.riemann import Acm, Fgmdm, Mdm, TangentSpace
+    return {"csp_lda": CspLda, "riemann": TangentSpace, "riemann_acm": Acm, "riemann_mdm": Mdm,
+            "riemann_fgmdm": Fgmdm, "fbcsp": Fbcsp, "fnirs_lda": FnirsLda, "eeg_bandpower": EegBandpower}
 
 
-def get_method(name: str):
+def get_method(name: str, fs: float | None = None):
     """Return (fit_fn, score_fn) for a method name. Every method is a Decoder (fit -> self, predict_proba),
     so the scorer is always `_proba`; only the builder differs — a fresh baseline object per fold, or a
-    braindecode net built with its per-model cfg (decoders.make)."""
+    braindecode net built with its per-model cfg (decoders.make). `fs` (the epoch sample rate) is passed to
+    the filter-designing baselines (band-power, FBCSP); ignored by the rest."""
     classes = _baseline_classes()
     if name in classes:
         cls = classes[name]
-        return (lambda X, y: cls().fit(X, y), _proba)
+        kw = {"fs": fs} if (name in _FS_METHODS and fs is not None) else {}
+        return (lambda X, y: cls(**kw).fit(X, y), _proba)
     from neuroscan.models.decoders import make
     fit, _ = make(name)                      # net builds its own cfg; its scorer is predict_proba too
     return (fit, _proba)

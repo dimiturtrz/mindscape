@@ -48,7 +48,7 @@ def main():
 
     test_sessions = [exp.test_session] if (regime == "within" and exp.test_session) else ()
     folds = harness.folds_for(meta, regime, test_sessions=test_sessions)
-    fit_fn, score_fn = models.get_method(method)
+    fit_fn, score_fn = models.get_method(method, fs=cfg.resample)
 
     run_dir = Path(args.out) if args.out else Path("runs") / f"{method}_{regime}_{dataset}"
     run_dir.mkdir(parents=True, exist_ok=True)
