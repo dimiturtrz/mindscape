@@ -9,8 +9,12 @@ deliverable is the feature IMPORTANCE, read two ways and checked for stability a
 The per-study peak accuracy is optimistic (max over a search) and is reported as such, NOT as a
 generalisation estimate — that would need a sealed outer fold (nested CV). See mindscape-b9g.
 
-    python -m neuroscan.tasks.workload.optuna_fnirs                 # uses optuna_fnirs.yaml
-    python -m neuroscan.tasks.workload.optuna_fnirs --trials 400    # sparse override
+Every study is persisted to an Optuna **JournalStorage** DB under `runs/optuna_fnirs/` (one study per TPE
+seed), so the trials are reproducible and queryable after the fact — and the written `importance.json` is the
+artifact the README importance table is regenerated from (reproducible from the stored trials, not hand-typed).
+
+    python -m neuroscan.tasks.workload.feature_importance.optuna_search              # uses optuna.yaml (local)
+    python -m neuroscan.tasks.workload.feature_importance.optuna_search --trials 400 # sparse override
 """
 from __future__ import annotations
 
@@ -24,27 +28,40 @@ from core.config import REPO
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
 from core.features import extract_bank, family_names, WeightedFamilyScaler
+from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
+
+_CFG = Path(__file__).with_name("optuna.yaml")            # study config lives beside the code (config-as-data)
 
 
 def _cv_score(F, fam, y, groups, weights, fold_seeds, k) -> float:
     """Mean accuracy of standardise→per-family-weight→shrinkage-LDA over StratifiedGroupKFold repeated for
     each seed in `fold_seeds`. Grouped by subject (whole subjects per fold); the scaler fits on train only."""
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-    from sklearn.model_selection import StratifiedGroupKFold
 
     accs = []
-    for seed in fold_seeds:
-        sgkf = StratifiedGroupKFold(n_splits=k, shuffle=True, random_state=seed)
-        for tr, te in sgkf.split(F, y, groups):
-            sc = WeightedFamilyScaler(fam, weights).fit(F[tr])
-            # fixed shrinkage (not "auto"/Ledoit-Wolf): ~10x cheaper on 1080 features and constant across
-            # trials, so it doesn't confound the relative feature-weight comparison the search is after.
-            lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage=0.4).fit(sc.transform(F[tr]), y[tr])
-            accs.append(float((lda.predict(sc.transform(F[te])) == y[te]).mean()))
+    for tr, te in grouped_folds(F, y, groups, fold_seeds, k):
+        sc = WeightedFamilyScaler(fam, weights).fit(F[tr])
+        # fixed shrinkage (not "auto"/Ledoit-Wolf): ~10x cheaper on 1080 features and constant across trials,
+        # so it doesn't confound the relative feature-weight comparison the search is after.
+        lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage=0.4).fit(sc.transform(F[tr]), y[tr])
+        accs.append(float((lda.predict(sc.transform(F[te])) == y[te]).mean()))
     return float(np.mean(accs))
 
 
-def _run_one_study(F, fam, y, groups, families, cfg, tpe_seed):
+def _storage(out: Path):
+    """Optuna JournalStorage (file-backed) under the run dir — persists all trials for later querying. Uses
+    the open()-based file lock, not the default symlink lock, so it works on Windows (symlink creation needs
+    a privilege the client doesn't hold there)."""
+    import optuna
+
+    out.mkdir(parents=True, exist_ok=True)
+    path = str(out / "journal.log")
+    backend = optuna.storages.journal.JournalFileBackend(path,
+                                                         lock_obj=optuna.storages.journal.JournalFileOpenLock(path))
+    return optuna.storages.JournalStorage(backend)
+
+
+def _run_one_study(F, fam, y, groups, families, cfg, tpe_seed, storage):
     """One Optuna study (one TPE seed): returns (importances, top_weight_means, best_value, best_params)."""
     import optuna
 
@@ -52,8 +69,11 @@ def _run_one_study(F, fam, y, groups, families, cfg, tpe_seed):
         weights = {f: trial.suggest_float(f, cfg.weight_low, cfg.weight_high) for f in families}
         return _cv_score(F, fam, y, groups, weights, list(cfg.fold_seeds), cfg.k)
 
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=tpe_seed))
-    study.optimize(objective, n_trials=cfg.n_trials, show_progress_bar=False)
+    study = optuna.create_study(direction="maximize", storage=storage, load_if_exists=True,
+                                study_name=f"fnirs_importance_seed{tpe_seed}",
+                                sampler=optuna.samplers.TPESampler(seed=tpe_seed))
+    if len(study.trials) < cfg.n_trials:                                  # resume: only run the missing trials
+        study.optimize(objective, n_trials=cfg.n_trials - len(study.trials), show_progress_bar=False)
 
     try:
         importances = optuna.importance.get_param_importances(study)      # family -> fANOVA importance
@@ -80,14 +100,14 @@ def main():
     from omegaconf import OmegaConf
 
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--config", default="optuna_fnirs.yaml", help="study config (config-as-data)")
+    ap.add_argument("--config", default=None, help="study config (default: optuna.yaml beside this module)")
     ap.add_argument("--trials", type=int, default=None, help="override n_trials (the one common knob)")
     args = ap.parse_args()
 
     import optuna
     optuna.logging.set_verbosity(optuna.logging.WARNING)                  # no per-trial spam
 
-    cfg = OmegaConf.load(REPO / args.config)
+    cfg = OmegaConf.load(args.config or _CFG)
     if args.trials:
         cfg.n_trials = args.trials
 
@@ -96,13 +116,15 @@ def main():
     groups = meta["subject"].to_numpy()
     F, fam = extract_bank(X)
     families = family_names()
+    out = REPO / cfg.out
+    storage = _storage(out)
     print(f"fNIRS bank: {F.shape[0]} blocks · {meta['subject'].n_unique()} subjects · {len(families)} families "
           f"· {F.shape[1]} cols · {cfg.n_trials} trials × {len(cfg.tpe_seeds)} seeds "
-          f"(chance {1/len(set(y.tolist())):.3f})")
+          f"(chance {1/len(set(y.tolist())):.3f}) · journal {out}/journal.log")
 
     per_seed_imp, per_seed_topw, peaks, bests = [], [], [], []
     for s in cfg.tpe_seeds:
-        imp, topw, best, bparams = _run_one_study(F, fam, y, groups, families, cfg, int(s))
+        imp, topw, best, bparams = _run_one_study(F, fam, y, groups, families, cfg, int(s), storage)
         per_seed_imp.append(imp); per_seed_topw.append(topw); peaks.append(best); bests.append(bparams)
         top3 = sorted(imp, key=imp.get, reverse=True)[:3]
         print(f"  seed {s}: peak-acc {best:.3f} (optimistic) · top-3 by importance {top3}")
@@ -110,21 +132,22 @@ def main():
     stab = _stability(per_seed_imp, families)
     cons_imp = {f: float(np.mean([imp.get(f, 0.0) for imp in per_seed_imp])) for f in families}
     cons_topw = {f: float(np.mean([tw[f] for tw in per_seed_topw])) for f in families}
+    topw_sd = {f: float(np.std([tw[f] for tw in per_seed_topw])) for f in families}   # cross-seed spread
 
     print(f"\n=== importance (consensus over {len(cfg.tpe_seeds)} seeds) ===")
     for f in sorted(families, key=lambda f: cons_imp[f], reverse=True):
-        print(f"  {f:<14} importance {cons_imp[f]:.3f}  ·  mean top-trial weight {cons_topw[f]:.2f}")
+        print(f"  {f:<14} importance {cons_imp[f]:.3f}  ·  mean top-trial weight {cons_topw[f]:.2f} "
+              f"(±{topw_sd[f]:.2f})")
     print(f"\nstability: top-{stab['topn']} families agree across seeds at Jaccard {stab['mean_jaccard']:.2f} "
           f"({'STABLE — trust the ranking' if stab['mean_jaccard'] >= 0.6 else 'UNSTABLE — importance is search noise'})")
     print(f"peak-acc range {min(peaks):.3f}-{max(peaks):.3f} (optimistic; not a generalisation estimate)")
 
-    out = Path(cfg.out); out.mkdir(parents=True, exist_ok=True)
     (out / "importance.json").write_text(json.dumps({
         "dataset": str(cfg.dataset), "n_trials": int(cfg.n_trials), "tpe_seeds": list(cfg.tpe_seeds),
-        "consensus_importance": cons_imp, "consensus_top_weight": cons_topw,
+        "consensus_importance": cons_imp, "consensus_top_weight": cons_topw, "top_weight_sd": topw_sd,
         "stability": stab, "peak_acc_per_seed": peaks, "best_params_per_seed": bests,
     }, indent=2))
-    print(f"-> {out}/importance.json")
+    print(f"-> {out}/importance.json (reproducible artifact — the README importance table is generated from this)")
 
 
 if __name__ == "__main__":

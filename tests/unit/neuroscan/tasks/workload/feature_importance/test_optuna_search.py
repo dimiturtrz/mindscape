@@ -3,7 +3,7 @@ metric reads top-family agreement across seeds correctly (the deliverable's vali
 import numpy as np
 
 from core.features import extract_bank, family_names
-from neuroscan.tasks.workload.optuna_fnirs import _cv_score, _stability
+from neuroscan.tasks.workload.feature_importance.optuna_search import _cv_score, _stability
 
 
 def test_cv_score_returns_accuracy_in_range():

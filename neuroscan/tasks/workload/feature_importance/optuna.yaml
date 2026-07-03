@@ -1,11 +1,13 @@
-# Config for the fNIRS weighted-feature importance study (neuroscan.tuning.optuna_fnirs).
-# Config-as-data, like experiments.yaml — argv stays sparse (--trials is the only common override).
+# Config for the fNIRS weighted-feature importance study
+# (neuroscan.tasks.workload.feature_importance.optuna_search). Config-as-data, like experiments.yaml —
+# argv stays sparse (--trials is the only common override).
 #
 # Optuna searches one weight in [weight_low, weight_high] per descriptor family (post-standardisation),
 # scoring each trial by mean accuracy over `k`-fold StratifiedGroupKFold repeated across `fold_seeds`
 # (grouped by subject = no leakage; repeated+averaged = low-variance objective). The whole study is rerun
 # under each `tpe_seed` so the feature IMPORTANCE can be checked for stability (the real deliverable — the
-# per-study peak accuracy is optimistic and is NOT reported as a generalisation number).
+# per-study peak accuracy is optimistic and is NOT reported as a generalisation number). All studies persist
+# to an Optuna JournalStorage DB under `out/`.
 
 dataset: shin2017_nback
 n_trials: 200
@@ -15,4 +17,4 @@ tpe_seeds: [0, 1, 2]      # rerun the study under each -> importance stability c
 weight_low: 0.0
 weight_high: 1.0          # per-family weight range (0 = family off)
 top_frac: 0.1             # top fraction of trials for the weight-distribution readout
-out: runs/optuna_fnirs
+out: runs/optuna_fnirs    # journal.log (trial DB) + importance.json (committed artifact) land here

@@ -208,7 +208,10 @@ wider bank) actually matters? Rather than guess, we let a search tell us — **O
 feature-selector**: 15 per-channel temporal descriptors (mean, slope, peak, variance, skew, kurtosis, AUC,
 time-to-peak, min/max/range, early/late slope, zero-crossings), **one weight ∈ [0,1] per family** applied
 *after* standardisation, scored by mean accuracy over repeated-seeded subject-grouped 5-fold CV.
-[`optuna_fnirs`](neuroscan/tasks/workload/optuna_fnirs.py) · config [`optuna_fnirs.yaml`](optuna_fnirs.yaml).
+[`optuna_search`](neuroscan/tasks/workload/feature_importance/optuna_search.py) · config
+[`optuna.yaml`](neuroscan/tasks/workload/feature_importance/optuna.yaml). The study persists to an Optuna
+JournalStorage DB (trials persisted + queryable), and the table below is regenerated from the study's
+`importance.json` artifact — reproducible from the stored trials, not hand-typed.
 
 **The honest framing is built in.** A search *maximises* over trials, so its peak accuracy is optimistic —
 it's reported as such (~0.50, **not** a generalisation number; that would need a sealed outer fold). It also
@@ -237,21 +240,21 @@ and dilutes the contrast, while `slope` reads the rise directly — matching the
 regression/slope features. A feature-importance result, not a new accuracy claim.
 
 **Two follow-ups confirmed it — and corrected it.** (a) A **differentiable** version
-([`fnirs_subset_select`](neuroscan/tasks/workload/fnirs_subset_select.py), torch/CUDA): softmax feature
+([`differentiable`](neuroscan/tasks/workload/feature_importance/differentiable.py), torch/CUDA): softmax feature
 weights + a linear head trained jointly, with `entropy(w)` as a differentiable sparsity penalty — sweep it
 and `slope` is the last family standing. It also exposes an honest limit: **per-channel** weights (1080) are
 computationally trivial for gradient descent but **statistically unidentifiable** on 702 blocks (they stay
 uniform), so the per-family view is the right resolution. (b) An **honest fixed-recipe CV** — no search, so
-no selection optimism ([`fnirs_recipes`](neuroscan/tasks/workload/fnirs_recipes.py), 3×5-fold GroupKFold):
+no selection optimism ([`recipes`](neuroscan/tasks/workload/feature_importance/recipes.py), 3×5-fold GroupKFold):
 
 | recipe | acc | κ |
 |---|---|---|
-| **dynamics** (slope + early/late-slope) | **0.466** | 0.199 |
-| full (15 families) | 0.464 | 0.196 |
-| amplitude — mean+slope+peak (baseline) | 0.460 | 0.190 |
-| slope only | 0.446 | 0.169 |
-| mean only | 0.392 | 0.088 |
-| peak only | 0.376 | 0.064 |
+| **dynamics** (slope + early/late-slope) | **<!--r:fnirs_recipe_dynamics_shin2017_nback.acc-->0.466<!--/r-->** | <!--r:fnirs_recipe_dynamics_shin2017_nback.kappa-->0.199<!--/r--> |
+| full (15 families) | <!--r:fnirs_recipe_full_shin2017_nback.acc-->0.464<!--/r--> | <!--r:fnirs_recipe_full_shin2017_nback.kappa-->0.196<!--/r--> |
+| amplitude — mean+slope+peak (baseline) | <!--r:fnirs_recipe_amplitude_shin2017_nback.acc-->0.460<!--/r--> | <!--r:fnirs_recipe_amplitude_shin2017_nback.kappa-->0.190<!--/r--> |
+| slope only | <!--r:fnirs_recipe_slope_only_shin2017_nback.acc-->0.446<!--/r--> | <!--r:fnirs_recipe_slope_only_shin2017_nback.kappa-->0.169<!--/r--> |
+| mean only | <!--r:fnirs_recipe_mean_only_shin2017_nback.acc-->0.392<!--/r--> | <!--r:fnirs_recipe_mean_only_shin2017_nback.kappa-->0.088<!--/r--> |
+| peak only | <!--r:fnirs_recipe_peak_only_shin2017_nback.acc-->0.376<!--/r--> | <!--r:fnirs_recipe_peak_only_shin2017_nback.kappa-->0.064<!--/r--> |
 
 The **slope *trajectory*** (rise rate + early/late shape, 3 features) **ties the full 15-family bank and edges
 the standard triple** — while `mean` and `peak` alone barely clear chance (0.333). So two-thirds of the

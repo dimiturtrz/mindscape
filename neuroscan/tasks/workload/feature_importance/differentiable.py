@@ -15,8 +15,8 @@ subject holdout** the sweep never touches.
 `grain='family'` learns one weight per descriptor family (15); `grain='channel'` learns one per column
 (72×15=1080) — infeasible for black-box search, trivial here (the reason for torch). Runs on CUDA if present.
 
-    python -m neuroscan.tasks.workload.fnirs_subset_select              # uses fnirs_subset.yaml
-    python -m neuroscan.tasks.workload.fnirs_subset_select --grain channel
+    python -m neuroscan.tasks.workload.feature_importance.differentiable              # uses subset.yaml (local)
+    python -m neuroscan.tasks.workload.feature_importance.differentiable --grain channel
 """
 from __future__ import annotations
 
@@ -32,8 +32,10 @@ from core.config import REPO
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
 from core.features import extract_bank, family_names
+from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
 
 _DEV = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_CFG = Path(__file__).with_name("subset.yaml")            # study config lives beside the code (config-as-data)
 
 
 class WeightedLinear(torch.nn.Module):
@@ -89,13 +91,11 @@ def _standardise(Xtr, Xte):
 
 def _cv_acc(F_, group_idx, y, groups, n_groups, n_classes, lam, hp):
     """Mean CV accuracy at this lambda, over repeated seeded StratifiedGroupKFold (subject-grouped)."""
-    from sklearn.model_selection import StratifiedGroupKFold
     accs = []
-    for seed in hp["fold_seeds"]:
-        for tr, te in StratifiedGroupKFold(hp["k"], shuffle=True, random_state=seed).split(F_, y, groups):
-            Xtr, Xte = _standardise(F_[tr], F_[te])
-            m = _fit(Xtr, y[tr], group_idx, n_groups, n_classes, lam, hp)
-            accs.append(float((_predict(m, Xte) == y[te]).mean()))
+    for tr, te in grouped_folds(F_, y, groups, hp["fold_seeds"], hp["k"]):
+        Xtr, Xte = _standardise(F_[tr], F_[te])
+        m = _fit(Xtr, y[tr], group_idx, n_groups, n_classes, lam, hp)
+        accs.append(float((_predict(m, Xte) == y[te]).mean()))
     return float(np.mean(accs))
 
 
@@ -125,11 +125,11 @@ def main():
     from sklearn.model_selection import GroupShuffleSplit
 
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--config", default="fnirs_subset.yaml")
+    ap.add_argument("--config", default=None, help="study config (default: subset.yaml beside this module)")
     ap.add_argument("--grain", default=None, choices=["family", "channel"])
     args = ap.parse_args()
 
-    cfg = OmegaConf.load(REPO / args.config)
+    cfg = OmegaConf.load(args.config or _CFG)
     grain = args.grain or cfg.grain
     hp = {"lr": cfg.lr, "weight_decay": cfg.weight_decay, "epochs": cfg.epochs,
           "k": cfg.k, "fold_seeds": list(cfg.fold_seeds)}
@@ -176,7 +176,7 @@ def main():
           f"· SEALED-acc {sealed:.3f} (honest)")
     print(f"knee subset (family weight>0.05): {kept}")
 
-    out = Path(cfg.out); out.mkdir(parents=True, exist_ok=True)
+    out = REPO / cfg.out; out.mkdir(parents=True, exist_ok=True)
     (out / f"subset_{grain}.json").write_text(json.dumps(
         {"dataset": str(cfg.dataset), "grain": grain, "sweep": sweep,
          "knee": knee, "sealed_acc": sealed, "kept": kept}, indent=2))

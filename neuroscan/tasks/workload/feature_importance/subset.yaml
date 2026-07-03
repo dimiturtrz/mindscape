@@ -1,4 +1,5 @@
-# Config for the differentiable fNIRS subset+aggregation study (neuroscan.tasks.workload.fnirs_subset_select).
+# Config for the differentiable fNIRS subset+aggregation study
+# (neuroscan.tasks.workload.feature_importance.differentiable).
 #
 # Softmax feature weights + a linear head, learned jointly by gradient descent (torch, CUDA). The entropy
 # of the weights is a differentiable sparsity penalty: loss = cross-entropy + lambda * entropy(w). Sweep

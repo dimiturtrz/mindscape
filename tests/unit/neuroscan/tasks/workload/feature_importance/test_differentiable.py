@@ -2,7 +2,7 @@
 that the differentiable weighted head actually learns to up-weight the informative family."""
 import numpy as np
 
-from neuroscan.tasks.workload.fnirs_subset_select import _effective_n, _fit, _knee
+from neuroscan.tasks.workload.feature_importance.differentiable import _effective_n, _fit, _knee
 
 
 def test_effective_n_bounds():
