@@ -1,0 +1,22 @@
+# Config for the differentiable fNIRS subset+aggregation study
+# (neuroscan.tasks.workload.feature_importance.differentiable).
+#
+# Softmax feature weights + a linear head, learned jointly by gradient descent (torch, CUDA). The entropy
+# of the weights is a differentiable sparsity penalty: loss = cross-entropy + lambda * entropy(w). Sweep
+# lambda -> the accuracy vs effective-#-features tradeoff curve (the Pareto analog, without black-box search).
+# The knee subset is validated honestly on a sealed subject holdout the search never sees.
+#
+# grain: 'family' = one weight per descriptor family (15). 'channel' = one weight per column (72*15=1080) —
+#        infeasible for black-box search, trivial for gradient descent (the reason we went torch).
+
+dataset: shin2017_nback
+grain: family
+lambdas: [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.5]   # entropy-sparsity (normalised by log K -> grain-invariant)
+k: 5                      # folds per StratifiedGroupKFold
+fold_seeds: [0, 1]        # repeated seeded folds for the CV accuracy estimate
+epochs: 300
+lr: 0.05
+weight_decay: 0.001       # L2 on the head — the shrinkage analog
+holdout_frac: 0.2         # sealed subject fraction for honest knee validation
+holdout_seed: 0
+out: runs/fnirs_subset

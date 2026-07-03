@@ -201,6 +201,66 @@ Two findings from the same-task design:
   exactly what BenchNIRS found). So the workload task is a **strong (re-centered EEG) + weak (fNIRS)** pair —
   whether the weak modality *adds* is the **fusion question**, answered below: a marginal edge, large
   uncaptured complementarity, and the honest next win is a stronger fNIRS, not a cleverer combiner.
+
+### What actually carries the fNIRS signal — a feature-importance search
+The baseline uses **mean + slope + peak**, the field-standard triple. But *which* of those (and which of a
+wider bank) actually matters? Rather than guess, we let a search tell us — **Optuna as a wrapper
+feature-selector**: 15 per-channel temporal descriptors (mean, slope, peak, variance, skew, kurtosis, AUC,
+time-to-peak, min/max/range, early/late slope, zero-crossings), **one weight ∈ [0,1] per family** applied
+*after* standardisation, scored by mean accuracy over repeated-seeded subject-grouped 5-fold CV.
+[`optuna_search`](neuroscan/tasks/workload/feature_importance/optuna_search.py) · config
+[`optuna.yaml`](neuroscan/tasks/workload/feature_importance/optuna.yaml). The study persists to an Optuna
+JournalStorage DB (trials persisted + queryable), and the table below is regenerated from the study's
+`importance.json` artifact — reproducible from the stored trials, not hand-typed.
+
+**The honest framing is built in.** A search *maximises* over trials, so its peak accuracy is optimistic —
+it's reported as such (~0.50, **not** a generalisation number; that would need a sealed outer fold). It also
+runs a fixed `shrinkage=0.4` LDA (constant across trials, so it can't confound the weight comparison) — a
+*different* classifier from the `shrinkage="auto"` LDA in the fixed-recipe CV below, so the ~0.50 here and the
+~0.46 there aren't on one scale (search optimism **plus** a classifier difference); only the recipe table is a
+fair within-method comparison. The robust deliverable is the **importance** (fANOVA + how much the best trials up-weight each family), and its
+**stability** across three independent study re-runs: unstable at 30 trials (top-5 Jaccard **0.20** — search
+noise) → **stable at 200 trials (Jaccard 0.67)**, so the ranking below is trustworthy, not a lucky draw.
+
+**Finding — dynamics ≫ amplitude** (200 trials × 3 seeds):
+
+| family | importance | best-trial weight | reading |
+|---|---|---|---|
+| **slope** | **0.35** | **0.91** | the workhorse — kept on, dominates |
+| time-to-peak | 0.25 | 0.22 | influential but best trials **suppress** it (hurts if included) |
+| range | 0.13 | 0.41 | moderate |
+| late-slope | 0.09 | 0.76 | mild help (response *shape*, not size) |
+| **mean** | 0.03 | **0.15** | near-dead — the search **drops** it |
+| peak | 0.02 | 0.58 | minor |
+
+The workload signal is in the **rate and shape of the hemodynamic rise (`slope`)**, *not* its magnitude —
+`mean` and `peak`, two-thirds of the standard triple, carry almost nothing here (the search actively
+down-weights `mean`). Mechanistically clean: `mean` over the −2→20 s window blends baseline + rise + plateau
+and dilutes the contrast, while `slope` reads the rise directly — matching the fNIRS literature's emphasis on
+regression/slope features. A feature-importance result, not a new accuracy claim.
+
+**Two follow-ups confirmed it — and corrected it.** (a) A **differentiable** version
+([`differentiable`](neuroscan/tasks/workload/feature_importance/differentiable.py), torch/CUDA): softmax feature
+weights + a linear head trained jointly, with `entropy(w)` as a differentiable sparsity penalty — sweep it
+and `slope` is the last family standing. It also exposes an honest limit: **per-channel** weights (1080) are
+computationally trivial for gradient descent but **statistically unidentifiable** on 702 blocks (they stay
+uniform), so the per-family view is the right resolution. (b) An **honest fixed-recipe CV** — no search, so
+no selection optimism ([`recipes`](neuroscan/tasks/workload/feature_importance/recipes.py), 3×5-fold GroupKFold):
+
+| recipe | acc | κ |
+|---|---|---|
+| **dynamics** (slope + early/late-slope) | **<!--r:fnirs_recipe_dynamics_shin2017_nback.acc-->0.466<!--/r-->** | <!--r:fnirs_recipe_dynamics_shin2017_nback.kappa-->0.199<!--/r--> |
+| full (15 families) | <!--r:fnirs_recipe_full_shin2017_nback.acc-->0.464<!--/r--> | <!--r:fnirs_recipe_full_shin2017_nback.kappa-->0.196<!--/r--> |
+| amplitude — mean+slope+peak (baseline) | <!--r:fnirs_recipe_amplitude_shin2017_nback.acc-->0.460<!--/r--> | <!--r:fnirs_recipe_amplitude_shin2017_nback.kappa-->0.190<!--/r--> |
+| slope only | <!--r:fnirs_recipe_slope_only_shin2017_nback.acc-->0.446<!--/r--> | <!--r:fnirs_recipe_slope_only_shin2017_nback.kappa-->0.169<!--/r--> |
+| mean only | <!--r:fnirs_recipe_mean_only_shin2017_nback.acc-->0.392<!--/r--> | <!--r:fnirs_recipe_mean_only_shin2017_nback.kappa-->0.088<!--/r--> |
+| peak only | <!--r:fnirs_recipe_peak_only_shin2017_nback.acc-->0.376<!--/r--> | <!--r:fnirs_recipe_peak_only_shin2017_nback.kappa-->0.064<!--/r--> |
+
+The **slope *trajectory*** (rise rate + early/late shape, 3 features) **ties the full 15-family bank and edges
+the standard triple** — while `mean` and `peak` alone barely clear chance (0.333). So two-thirds of the
+field-standard triple is dead weight; the honest recipe is *shape, not magnitude*. The correction over the
+search: slope-*alone* (0.446) sits a hair *under* the triple — it's the slope trajectory that carries it, not
+a single number. (Assume-wrong in action: the search *suggested* slope; the no-search CV *tempered* the claim.)
 - **The field's transfer trick didn't help here.** Per-subject z-scoring (the standard fNIRS cross-subject
   fix) gave no gain — a slight drop on this single run — most likely because our per-epoch baseline-correction
   already removes the offset it targets. (One run, not a claim that z-scoring is useless.)

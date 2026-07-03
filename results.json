@@ -191,6 +191,69 @@
       "kappa": 0.1816,
       "ece": 0.2736
     },
+    "fnirs_recipe_all_but_slope_shin2017_nback": {
+      "method": "fnirs_recipe_all_but_slope",
+      "regime": "cross_subject",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.4411,
+      "kappa": 0.1616,
+      "ece": null
+    },
+    "fnirs_recipe_amplitude_shin2017_nback": {
+      "method": "fnirs_recipe_amplitude",
+      "regime": "cross_subject",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.4601,
+      "kappa": 0.1901,
+      "ece": null
+    },
+    "fnirs_recipe_dynamics_shin2017_nback": {
+      "method": "fnirs_recipe_dynamics",
+      "regime": "cross_subject",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.4662,
+      "kappa": 0.1993,
+      "ece": null
+    },
+    "fnirs_recipe_full_shin2017_nback": {
+      "method": "fnirs_recipe_full",
+      "regime": "cross_subject",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.464,
+      "kappa": 0.196,
+      "ece": null
+    },
+    "fnirs_recipe_mean_only_shin2017_nback": {
+      "method": "fnirs_recipe_mean_only",
+      "regime": "cross_subject",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.392,
+      "kappa": 0.088,
+      "ece": null
+    },
+    "fnirs_recipe_peak_only_shin2017_nback": {
+      "method": "fnirs_recipe_peak_only",
+      "regime": "cross_subject",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.3761,
+      "kappa": 0.0642,
+      "ece": null
+    },
+    "fnirs_recipe_slope_only_shin2017_nback": {
+      "method": "fnirs_recipe_slope_only",
+      "regime": "cross_subject",
+      "dataset": "shin2017_nback",
+      "n_classes": 3,
+      "acc": 0.4459,
+      "kappa": 0.1689,
+      "ece": null
+    },
     "fusion_cross_subject_kfold_shin2017_nback": {
       "method": "fusion",
       "regime": "cross_subject_kfold",

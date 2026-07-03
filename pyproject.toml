@@ -18,6 +18,7 @@ dependencies = [
     "torch>=2.7",
     "braindecode>=0.8",      # PyTorch EEG decoders (EEGNet, ShallowFBCSPNet, Deep4Net)
     "pyriemann>=0.5",        # Riemannian baseline — covariance manifold, tangent space + MDM (baselines/riemann.py)
+    "optuna>=4.9.0",
 ]
 
 [project.optional-dependencies]
