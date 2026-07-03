@@ -1,3 +1,0 @@
-Thought has a physical footprint, and reading it without surgery could give a voice back to people who've lost speech, drive assistive robotics and rehabilitation, or become a direct channel between people and machines. mindscape decodes intent from wearable brain signal — EEG and fNIRS — built on good data, robust pipelines, and evaluation that owns where it fails (including whether a decoder holds on a person it's never seen). Multimodal, edge-deployable, and growing across tasks.
-
-https://github.com/dimiturtrz/mindscape

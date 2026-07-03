@@ -103,6 +103,11 @@ class WindowedFnirs(Baseline):
             yw = np.repeat(y, W)                                          # each sub-window inherits its block label
             self.pipe_ = self._lda().fit(Fw.reshape(n * W, D), yw)       # ONE shared stage-1 over all windows
             self.classes_ = self.pipe_.classes_
+            if self.aggregate in ("max", "lse") and len(self.classes_) < 3:
+                # binary LDA.decision_function is 1-D (one margin, not per-class) — the score-pool has no
+                # per-class axis to reduce over. concat/mean stay valid; MIL pooling needs >=3 classes.
+                raise ValueError(f"aggregate={self.aggregate!r} needs >=3 classes (got {len(self.classes_)}); "
+                                 "use 'concat' or 'mean' for binary")
         return self
 
     @staticmethod

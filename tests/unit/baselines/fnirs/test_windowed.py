@@ -56,3 +56,11 @@ def test_short_block_yields_one_window():
 def test_bad_aggregate_rejected():
     with pytest.raises(ValueError):
         WindowedFnirs(aggregate="nope")
+
+
+@pytest.mark.parametrize("agg", ["max", "lse"])
+def test_mil_pooling_rejects_binary(agg):
+    X, y = _ordered_shape_data()
+    Xb, yb = X[y != 1], y[y != 1]                                        # drop the middle class -> binary
+    with pytest.raises(ValueError):                                      # MIL score-pool needs a per-class axis
+        WindowedFnirs(win_s=2.0, hop_s=0.5, fs=10.0, aggregate=agg).fit(Xb, yb)
