@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from core.config import REPO
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
 from core.features import extract_bank, family_names
@@ -53,7 +54,7 @@ def _record(key, acc, kappa, n_classes):
     import json
 
     run = f"fnirs_recipe_{key}_{_DATASET}"
-    run_dir = results._RUNS / run
+    run_dir = REPO / "runs" / run
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "aggregate.json").write_text(json.dumps({
         "method": f"fnirs_recipe_{key}", "regime": "cross_subject", "n_classes": n_classes,

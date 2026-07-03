@@ -72,7 +72,9 @@ def _run_one_study(F, fam, y, groups, families, cfg, tpe_seed, storage):
     study = optuna.create_study(direction="maximize", storage=storage, load_if_exists=True,
                                 study_name=f"fnirs_importance_seed{tpe_seed}",
                                 sampler=optuna.samplers.TPESampler(seed=tpe_seed))
-    if len(study.trials) < cfg.n_trials:                                  # resume: only run the missing trials
+    # resume: only run the missing trials. The importance/stability deliverable reads the whole trial cloud,
+    # so resuming (vs one shot) doesn't change the conclusion; delete runs/optuna_fnirs to force a clean study.
+    if len(study.trials) < cfg.n_trials:
         study.optimize(objective, n_trials=cfg.n_trials - len(study.trials), show_progress_bar=False)
 
     try:
