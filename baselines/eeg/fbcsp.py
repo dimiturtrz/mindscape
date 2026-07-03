@@ -34,7 +34,11 @@ class Fbcsp(Baseline):
         self.k_features = k_features
 
     def _bands(self) -> list[tuple[float, float]]:
-        """Non-overlapping sub-bands tiling [fmin, fmax] at band_width (4–8, 8–12, … — the Ang 2012 bank)."""
+        """Non-overlapping fixed-width sub-bands tiling [fmin, fmax] at band_width (4–8, 8–12, … — the Ang
+        2012 bank). Pick fmax **on-grid** (fmin + k·band_width): fixed-width tiling leaves any final remainder
+        uncovered — e.g. 4–30 Hz at width 4 tiles up to 24–28 and drops 28–30. That drop is deliberate here:
+        it's a 2 Hz high-beta sliver, irrelevant to the theta/alpha workload signal, and covering it would add
+        a ragged narrow band + force a re-eval of a baseline that already trails. 2a (4–40) is on-grid."""
         edges = np.arange(self.fmin, self.fmax + 1e-6, self.band_width)
         return [(float(lo), float(hi)) for lo, hi in zip(edges[:-1], edges[1:])]
 

@@ -37,7 +37,7 @@ experiments:
   mi_fbcsp_cross:       {task: decode, dataset: bnci2014_001, method: fbcsp, regime: cross_subject,             recipe: {fmin: 4, fmax: 40, resample: 128.0}}
   # ACM (time-delay covariance) + band-power, for a complete method grid. Band-power wants a broadband recipe
   # (its θ/α/β split needs theta, which the default 8-32 band would filter out) — expected weak on MI regardless.
-  mi_acm_within:        {task: decode, dataset: bnci2014_001, method: riemann_acm,  regime: within, test_session: "1test"}
+  mi_riemann_acm_within: {task: decode, dataset: bnci2014_001, method: riemann_acm,  regime: within, test_session: "1test"}
   mi_bandpower_within:  {task: decode, dataset: bnci2014_001, method: eeg_bandpower, regime: within, test_session: "1test", recipe: {fmin: 4, fmax: 40, resample: 128.0}}
   mi_bandpower_cross:   {task: decode, dataset: bnci2014_001, method: eeg_bandpower, regime: cross_subject,                  recipe: {fmin: 4, fmax: 40, resample: 128.0}}
 
