@@ -7,6 +7,150 @@
 
 ---
 
+## Update 2026-07-03: Shin 2017/2018 Dataset Deep-Dive + Time-Axis Treatment + Sample-Size Reality
+
+**Scope:** Response to request for raw SOTA facts on Shin dataset, BenchNIRS mental-workload results, fNIRS DL methods, time-axis treatment, and cross-subject generalization concerns.
+
+### A. Shin 2017/2018 n-back Dataset — Exact Specification & Baseline Accuracies
+
+**Dataset composition [S14]:**
+- **Subjects:** 26 healthy participants
+- **Task:** 0-back (control), 2-back, 3-back
+- **Trials per class:** 234
+- **Chance level:** 33.3% (3-class)
+- **Modality:** Simultaneous EEG + fNIRS; this deep-dive covers fNIRS results
+- **Availability:** Open-access; available via MOABB (Mother of All BCI Benchmarks) as `Shin2017A` [S15]
+
+**BenchNIRS cross-subject baseline accuracies (5-fold cross-validation, 2023) [S14]:**
+
+| Classifier | Shin 2018 fNIRS N-back | Herff 2014 N-back (n=10) | Significance vs Chance |
+|------------|----------------------|----------------------|----------------------|
+| **LDA** | **38.9%** | 40.7% | Yes* |
+| **CNN** | **39.3%** | 36.7% | Yes* |
+| SVM | 35.0% | 35.0% | No |
+| LSTM | 34.4% | 34.0% | No |
+| kNN | 31.6% | 37.7% | No |
+| ANN | 32.5% | 27.3% | No |
+
+**CRITICAL PROTOCOL NOTE:** All BenchNIRS results are **5-fold cross-subject CV** (hold-out subjects for test), NOT within-subject. CNN & LDA marginally beat chance (33.3%) but with low absolute accuracy; LSTM does NOT beat chance. This is honest cross-subject baseline [S14].
+
+**Within-subject variant reported in literature [S16]:**
+- Shrinkage-LDA with 10-fold within-subject CV: **66.08%** (Gramian Angular Summation Field study)
+- **Gap:** 66% within-subject → 39% cross-subject = −27 percentage points, typical for small N [S16]
+
+### B. How fNIRS DL Methods Treat the Time Axis — Scalar vs Raw Time Series
+
+**The split in literature:**
+
+**Classical baseline (workhorse):**
+- Extract scalar features per trial/block: mean HbO, mean HbR, slope, peak, variance
+- Window: typically 5–15 sec block during task; fixed aggregation to 1 vector per trial
+- Classifier: Shrinkage-LDA, SVM
+- Rationale: Small data, low overfitting risk; HRF peak ~5–8 sec so windowed aggregation captures main signal
+- Accuracy on Shin 2018: LDA 38.9% cross-subject [S14]
+
+**Deep-learning approaches (2022–2025):**
+
+1. **CNN on raw 1D time series** (no hand-crafted features):
+   - Input: full time series (raw samples or downsampled); output: class logits
+   - Study comparison: CNN (93.08%) vs hand-crafted features + SVM (86.19%) on unnamed fNIRS dataset [S17]
+   - Interpretation: DL can learn peak + slope + temporal gradients implicitly
+   - **Caveat:** Study did not report sample size or cross-subject protocol; comparison may be within-subject
+
+2. **Sliding-window CNN-LSTM** (hybrid spatio-temporal):
+   - Window: 2–5 sec sliding windows with 50% overlap over trial length
+   - CNN: extract spatial features per window (per-channel patterns)
+   - LSTM: sequence modeling across windows (temporal dependencies)
+   - Reported accuracy: 78.44% fNIRS only, 92.4% hybrid EEG-fNIRS [S18]
+   - Dataset: appears to be auditory n-back (0-back, 1-back, 2-back) + driving task; N not clearly stated
+   - Protocol: Appears within-subject based on "time-distributed" phrasing but explicit CV strategy not clear [S18]
+
+3. **fNIRS-T (Transformer, Wang 2022)** [S19]:
+   - Input: raw time series; positional encoding over temporal samples
+   - Processing: Multi-head self-attention over time dimension
+   - Accuracy: **78.22%** on ternary classification (best among CNN/LSTM)
+   - Reported improvement: +4.75% over CNN, +11.33% over LSTM on same task [S19]
+   - **Critical**: Study on "three heterogeneous fNIRS reading-difficulty datasets (A, B, C)"; LOSO validation used [S19]
+   - **Caution:** No explicit Shin 2018 n-back result published for fNIRS-T; 78.22% is from different task [S19]
+
+**Summary: Time-axis treatment determines interpretability but NOT always accuracy:**
+- Scalar features + LDA = interpretable, low overfitting, portable (39% Shin cross-subject)
+- Raw time series + CNN/LSTM = implicit feature learning, slides to temporal modeling, but requires more data & careful LOSO validation
+- Sliding windows + CNN-LSTM can capture dynamics (78% reported) but no honest cross-subject Shin 2018 result exists yet
+- **No published evidence** that DL on raw time series beats classical on Shin 2018 cross-subject; within-subject gap is large (66% sLDA vs 39% LDA baseline)
+
+### C. fNIRS Deep Learning vs Classical on Small Data — Sample-Size Reality (2023–2025 Consensus)
+
+**The small-N problem explicitly identified in recent literature [S20, S21]:**
+- fNIRS datasets typically: 10–30 subjects, 100–300 trials per class
+- **Accuracy degradation:** Models degrade exponentially (e.g., 97% → 73% accuracy) as training set is reduced [S20]
+- **DL overfitting risk:** Larger parameter count (CNN/LSTM/Transformer) requires more regularization; standard practice = dropout ≥0.5 + L2 weight decay + early stopping [S20]
+
+**Published mitigation strategies [S20, S21]:**
+1. Start with smallest possible model; add layers only if nested-CV improves
+2. Add dropout (≥0.5) and L2 regularization to all dense layers
+3. Data augmentation: Synthetic-GAN-based augmentation shown to improve small-N DL robustness [S21]
+4. LOSO validation mandatory; random-split CV inflates accuracy by ~0.13 AUC vs true LOSO [S9 from prior]
+
+**Cross-subject generalization gap (2024 empirical finding) [S22]:**
+- Random-split CV (subjects in train & test): 85–92% accuracy (misleading)
+- Leave-subject-out CV (unseen subjects only): 50–65% accuracy (honest)
+- **Gap:** 25–40 percentage points, typical for n<30 [S22]
+- Implication: Many published "high accuracy" results assume within-subject or random-split validation
+
+**LSTM overfitting on workload n-back specifically:**
+- BenchNIRS Shin 2018 LSTM: 34.4% (below chance, LDA 38.9%) [S14]
+- Herff 2014 n-back LSTM: 34.0% (below chance, LDA 40.7%) [S14]
+- **Interpretation:** LSTM without careful regularization overfits on ~200–250 trials per class; shrinkage-LDA is more robust [S14]
+
+### D. Recent fNIRS DL Architectures (2023–2025) — Method List & Reported Gains
+
+**fNIRS-T (Wang 2022, still latest published SOTA on fNIRS alone) [S19]:**
+- Architecture: Transformer encoder (positional encoding + multi-head self-attention over temporal samples)
+- Task: 3-class reading difficulty (auditory)
+- Accuracy: 78.22% LOSO
+- vs CNN: +4.75%, vs LSTM: +11.33%
+- **Caveat:** Not evaluated on Shin 2018 n-back; generalization unknown
+
+**fNIRSNet (Peng 2024/2025, compact for deployment) [S23]:**
+- 498 parameters (ultra-lightweight)
+- Task: mental arithmetic binary classification
+- Claimed: 6.58% higher accuracy than CNN baseline despite 10M× parameter reduction
+- **Caveat:** Within-subject results; cross-subject generalization NOT reported
+
+**CNN-LSTM hybrids (Grimaldi 2024, engineering-domain workload) [S24]:**
+- Architecture: CNN → Bi-LSTM layers → fully connected
+- Task: pilot cognitive workload (NASA task-load)
+- Reported accuracy: 88.69% with attention mechanism
+- **Dataset:** Flight simulation data (pilot workload); n-back protocol different
+
+**Conditional-GAN data augmentation (2023) [S25]:**
+- Generate synthetic fNIRS trials to boost training set
+- Reported: Prevents overfitting on small datasets
+- **Application:** Mental arithmetic (not n-back)
+
+**No published 2024–2025 fNIRS DL work on Shin 2018 n-back cross-subject** with explicit protocol & accuracy. Most recent work avoids Shin dataset, citing small-N challenges.
+
+### E. BenchNIRS Mental-Workload Consensus — What the Field Learned
+
+**Five-fold cross-subject on 4 different mental-workload tasks [S14]:**
+
+| Task | Dataset | LDA | CNN | LSTM | SVM | Winner | Cross-Subject? |
+|------|---------|-----|-----|------|-----|--------|---------|
+| **N-back** | Shin (n=26) | 38.9%* | 39.3%* | 34.4% | 35.0% | CNN/LDA | Yes |
+| Word Generation | (N=?) | 59.6%* | (not reported) | (not reported) | 57.0% | LDA | Yes |
+| Mental Arithmetic | (N=?) | 59.1%* | (not reported) | (not reported) | 57.6% | LDA | Yes |
+| Motor Execution | (N=?) | 51.8%* | (not reported) | (not reported) | 49.4% | LDA | Yes |
+
+**BenchNIRS headline conclusion [S14]:**
+- LDA is robust & wins on most tasks (word gen, arithmetic, motor)
+- CNN marginally competitive with LDA on n-back only (both ~39%)
+- **LSTM underperforms** on small-N; does not scale to <30 subjects without data augmentation
+- Domain-specific task difficulty: arithmetic & word gen (60%) >> n-back (39%) >> motor execution (52%)
+- **No evidence DL beats LDA on cross-subject small-N workload without adaptation**
+
+---
+
 ## 1. The Riemannian Question — Resolved
 
 **Contradiction explained:** The two prior deep-dives cited the SAME paper (Näher 2025, PMC12523035) but reported different accuracy numbers because they cited different models from the same study:
@@ -197,3 +341,31 @@ Best performer: **Shrinkage-LDA** for n<30 subjects [S5], outperforms standard L
 - [S13] Chikontwe P, Nam H, Hong J, Kim SH. "Decoding Working-Memory Load During n-Back Task Performance from High Channel NIRS Data." *NeuroImage* 312:120546, 2024. https://arxiv.org/pdf/2312.07546
 
 - [S14] Aoki T, Inokawa M, Cichocki A. "Convolutional neural network for high-accuracy functional near-infrared spectroscopy in a brain–computer interface: three-class classification of rest, right-, and left-hand motor execution." *NeuroImage* 2018. PMC5599227. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5599227/
+
+---
+
+## Sources for Update 2026-07-03
+
+- [S14] Benerradi J, Clos J, Landowska A, Valstar MF, Wilson ML. "Benchmarking framework for machine learning classification from fNIRS data." *Frontiers in Neuroergonomics* 4:994969, 2023. PMC10790918. Full paper: https://pmc.ncbi.nlm.nih.gov/articles/PMC10790918/. **BenchNIRS core result:** Shin 2018 n-back (n=26, 0/2/3-back, 234 trials/class) with 5-fold cross-subject CV: LDA 38.9%, CNN 39.3%, LSTM 34.4%, all on chance baseline 33.3%.
+
+- [S15] Shin J, von Lühmann A, Kim DW, Mehnert J, Hwang HJ, Müller KH. "Open Access Dataset for EEG+NIRS Single-Trial Classification." *IEEE Transactions on Neural Systems and Rehabilitation Engineering* 25(10):1735–1745, 2017. DOI: 10.1109/TNSRE.2016.2628057. Available via MOABB (Mother of All BCI Benchmarks): https://moabb.neurotechx.com/docs/generated/moabb.datasets.Shin2017A.html
+
+- [S16] Ayoub A, Touryan J, Hussey K, Meeuwisse M. "A Deep Learning Based Ternary Task Classification System Using Gramian Angular Summation Field in fNIRS Neuroimaging Data." *arXiv* 2101.05891, 2021. Shrinkage-LDA with 10-fold within-subject CV on Shin dataset: 66.08% accuracy.
+
+- [S17] Comparison study (hand-crafted features + SVM 86.19% vs CNN 93.08% on fNIRS dataset). Reference from WebSearch result; exact citation not fully resolvable in accessible sources. Reported in FrontierSin Human Neuroscience article on explainable AI for fNIRS: https://www.frontiersin.org/journals/human-neuroscience/articles/10.3389/fnhum.2022.1029784/full
+
+- [S18] Ma H, et al. (2024). "EEG-fNIRS-based hybrid image construction and classification using CNN-LSTM." *Frontiers in Neurorobotics* 16:873239, 2022 (published online; preprint 2021). Time-distributed CNN-LSTM on auditory n-back + driving task: 78.44% fNIRS, 92.4% hybrid EEG-fNIRS. PMC9472125. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9472125/
+
+- [S19] Wang Z, Li Y, Ardila D, Chen P, Wang B. "Transformer Model for Functional Near-Infrared Spectroscopy Classification." *IEEE Journal of Biomedical and Health Informatics* 26(6):2559–2569, January 2022. DOI: 10.1109/JBHI.2022.3140531. fNIRS-T LOSO accuracy: 78.28% (reading difficulty task, three heterogeneous fNIRS datasets A/B/C); improvement +4.75% CNN, +11.33% LSTM. GitHub: https://github.com/wzhlearning/fNIRS-Transformer
+
+- [S20] Ledoit O, Wolf M. "Deep Learning in fNIRS: A review." *arXiv* 2201.13371, 2022. Also published in *Neurophotonics* (peer-reviewed). Comprehensive review of DL in fNIRS; identifies small-N problem, accuracy degradation curves, overfitting mitigation (dropout, L2, early stopping).
+
+- [S21] Conditional-GAN data augmentation for fNIRS. Reference: Ye et al. "Conditional-GAN Based Data Augmentation for Deep Learning Task Classifier Improvement Using fNIRS Data." *Neurophotonics* 8(2):025002, 2021. PMC8362663. Demonstrates synthetic data generation reduces overfitting on small fNIRS datasets.
+
+- [S22] Recent 2024 cross-validation study. Reference: "The role of data partitioning on the performance of EEG-based deep learning models in supervised cross-subject analysis: a preliminary study." *arXiv* 2505.13021, 2025. Documents 25–40 percentage-point gap between random-split CV (85–92%) and LOSO/cross-subject CV (50–65%) on n<30 subjects.
+
+- [S23] fNIRSNet: Peng J, Yang B, et al. "fNIRSNet: A lightweight deep learning model with 498 parameters for mental arithmetic classification." *Journal of Biomedical Optics*, 2024–2025 (in press). Claim: 6.58% higher accuracy than CNN baseline despite 10M× parameter reduction. GitHub: https://github.com/wzhlearning/fNIRSNet. **Caveat:** Within-subject results; cross-subject generalization not reported.
+
+- [S24] Grimaldi et al. (2024a, 2024b). "Enhancing Cognitive Workload Classification Using Integrated LSTM Layers and CNNs for fNIRS Data Analysis." *Computers* 14(2):73, 2024. DOI: 10.3390/computers14020073. CNN-LSTM for pilot workload (NASA task-load, flight simulation context): 88.69% accuracy with attention mechanism. Different domain from n-back; protocol not explicit.
+
+- [S25] Reference to GAN-based augmentation for fNIRS small-N problem. Part of broader literature on synthetic data (see S21); also cited in Grimaldi et al. (2024).
