@@ -59,14 +59,16 @@ class WeightedLinear(torch.nn.Module):
 
 
 def _fit(Xtr, ytr, group_idx, n_groups, n_classes, lam, hp) -> WeightedLinear:
+    import math
     model = WeightedLinear(group_idx, n_groups, Xtr.shape[1], n_classes).to(_DEV)
     opt = torch.optim.Adam(model.parameters(), lr=hp["lr"], weight_decay=hp["weight_decay"])
     Xt = torch.as_tensor(Xtr, dtype=torch.float32, device=_DEV)
     yt = torch.as_tensor(ytr, dtype=torch.long, device=_DEV)
-    model.train()
+    norm = math.log(max(n_groups, 2))                            # normalise entropy by log K so lambda is
+    model.train()                                               # grain-invariant (same meaning at 15 or 1080 weights)
     for _ in range(hp["epochs"]):
         opt.zero_grad()
-        loss = F.cross_entropy(model(Xt), yt) + lam * model.entropy()
+        loss = F.cross_entropy(model(Xt), yt) + lam * model.entropy() / norm
         loss.backward()
         opt.step()
     return model

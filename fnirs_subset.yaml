@@ -10,7 +10,7 @@
 
 dataset: shin2017_nback
 grain: family
-lambdas: [0.0, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0]   # entropy-sparsity strengths to sweep
+lambdas: [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.5]   # entropy-sparsity (normalised by log K -> grain-invariant)
 k: 5                      # folds per StratifiedGroupKFold
 fold_seeds: [0, 1]        # repeated seeded folds for the CV accuracy estimate
 epochs: 300
