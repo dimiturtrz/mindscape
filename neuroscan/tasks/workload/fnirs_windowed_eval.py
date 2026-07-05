@@ -15,14 +15,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from baselines.fnirs.features import FnirsLda
 from baselines.fnirs.windowed import WindowedFnirs
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
-from neuroscan.evaluation import metrics
+from neuroscan.tasks.workload._eval import cv_score
 
-_SEEDS = [0, 1, 2]
-_K = 5
 _FS = 10.0
 _DATASET = "shin2017_nback"
 
@@ -41,31 +38,18 @@ for _agg in ("mean", "max", "lse"):
                   lambda a=_agg: WindowedFnirs(win_s=6.0, hop_s=3.0, fs=_FS, aggregate=a)))
 
 
-def _cv(build, X, y, groups, grouped: bool):
-    from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
-    accs, kaps = [], []
-    for seed in _SEEDS:
-        splitter = (StratifiedGroupKFold(_K, shuffle=True, random_state=seed) if grouped
-                    else StratifiedKFold(_K, shuffle=True, random_state=seed))
-        for tr, te in splitter.split(X, y, groups if grouped else None):
-            clf = (build() if build is not None else FnirsLda()).fit(X[tr], y[tr])
-            pred = clf.predict_proba(X[te]).argmax(1)
-            accs.append(metrics.accuracy(y[te], pred)); kaps.append(metrics.kappa(y[te], pred))
-    return float(np.mean(accs)), float(np.std(accs)), float(np.mean(kaps))
-
-
 def main():
     meta = store.load(_DATASET, FnirsCfg())
     X, y = store.gather(meta)
     groups = meta["subject"].to_numpy()
     chance = 1.0 / (int(y.max()) + 1)
     print(f"fNIRS windowed-aggregation sweep vs collapse · Shin n-back · {len(y)} blocks · "
-          f"{meta['subject'].n_unique()} subj · {len(_SEEDS)}x{_K}-fold · chance {chance:.3f}\n")
+          f"{meta['subject'].n_unique()} subj · 3x5-fold · chance {chance:.3f}\n")
     print(f"  {'arm':<26}{'within':>9}{'±sd':>7}   {'cross':>9}{'±sd':>7}{'  Δcross':>9}")
     base_cross = None
     for name, build in _ARMS:
-        wa, ws, _ = _cv(build, X, y, groups, grouped=False)
-        ca, cs, _ = _cv(build, X, y, groups, grouped=True)
+        wa, ws, _ = cv_score(build, X, y, groups, grouped=False)
+        ca, cs, _ = cv_score(build, X, y, groups, grouped=True)
         if base_cross is None:
             base_cross = ca
         dc = "" if build is None else f"{ca - base_cross:+.3f}"
