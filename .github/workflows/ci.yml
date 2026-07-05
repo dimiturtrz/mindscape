@@ -1,0 +1,22 @@
+name: tests
+
+# Gate for the dev -> main flow: unit tests must pass on every PR (and on pushes to dev/main).
+# Enforced as a required status check via branch protection on main.
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install dependencies (locked)
+        run: uv sync --frozen
+      - name: Unit tests
+        run: uv run pytest tests/unit -q
