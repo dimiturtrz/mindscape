@@ -14,7 +14,7 @@ jobs:
     # no dataset on the runner -> point config at an empty dir so the data-gated smoke tests skip cleanly
     # (adapters glob an absent raw/ dir -> no subjects -> pytest.skip) instead of erroring on a missing paths.yaml.
     env:
-      MINDSCAPE_DATA: ${{ runner.temp }}/nodata
+      MINDSCAPE_DATA: /tmp/mindscape-nodata
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
