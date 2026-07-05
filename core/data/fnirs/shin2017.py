@@ -67,6 +67,9 @@ class Shin2017NirsAdapter:
             order = np.argsort(onsets)                                                # chronological
             onsets, y = onsets[order], y[order]
             X, ye = epoch_blocks(cont, onsets, y, fs, cfg)
+            if cfg.clean is not None:                                                  # physiological-noise stage
+                from core.data.fnirs.clean import make_cleaner
+                X = make_cleaner(cfg.clean).transform(X).astype(np.float32)            # stateless -> leakage-free
             if cfg.resample and cfg.resample != fs:
                 from scipy.signal import resample as _rs
                 X = _rs(X, int(round(X.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)

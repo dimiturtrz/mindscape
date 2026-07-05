@@ -31,12 +31,16 @@ class FnirsCfg(BaseModel):
     tmax: float = 20.0
     baseline_s: float = 2.0
     resample: float | None = None
+    # physiological/motion-noise cleaner applied to epochs after bandpass+baseline: None | "cbsi" | "detrend"
+    # | a list (composite chain). Stateless cleaners only here (leakage-free at load); see fnirs/clean.py.
+    clean: str | list[str] | None = None
 
     def key(self) -> str:
         def f(x):
             return str(x).replace(".", "p").replace("-", "m")
+        from core.data.fnirs.clean import clean_key
         rs = "native" if self.resample is None else f(self.resample)
-        return f"b{f(self.l_freq)}-{f(self.h_freq)}_t{f(self.tmin)}-{f(self.tmax)}_r{rs}"
+        return f"b{f(self.l_freq)}-{f(self.h_freq)}_t{f(self.tmin)}-{f(self.tmax)}_r{rs}_c{clean_key(self.clean)}"
 
 
 def epoch_blocks(cont, onsets, y, fs: float, cfg: FnirsCfg) -> tuple:
