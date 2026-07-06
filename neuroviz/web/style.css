@@ -106,3 +106,32 @@ footer { color:var(--mut); padding:.5rem var(--pad) 1.6rem; font-size:.8rem; }
 .head-selectors .seg button { flex:1 1 0; padding:0 .5rem; font-size:.82rem; white-space:nowrap; }
 #approach-group .glabel { font-size:.72rem; opacity:.8; }   /* the child tier reads as subordinate */
 #approach { border-color:#3a4560; }                          /* lighter frame = nested under the task */
+
+/* brain-camera view */
+.camera-body{ display:flex; gap:18px; align-items:stretch; justify-content:center; padding:8px 0; }
+.cam-left{ display:flex; flex-direction:column; gap:14px; }
+.cam-cell,.cam-right{ display:flex; flex-direction:column; align-items:center; gap:4px; }
+.cam-lbl{ font-size:11px; color:#9aa4b2; letter-spacing:.02em; }
+.cam-cell canvas{ background:#0e1116; border-radius:8px; }
+.cam-right canvas{ background:#0e1116; border-radius:10px; }
+.camera-panel .player{ margin-top:10px; }
+
+/* defensive: a hidden panel must stay hidden (the .panel display:flex would otherwise override [hidden]) */
+.panel[hidden]{ display:none !important; }
+
+/* brain-camera: full-width panel; fused fills the right, raw inputs stack on the left */
+.camera-panel{ grid-column:1/-1; }
+.camera-body{ align-items:stretch; }
+.cam-left{ flex:0 0 auto; justify-content:center; }
+.cam-right{ flex:1 1 auto; }
+.cam-right canvas{ width:100%; max-width:520px; height:auto; aspect-ratio:1/1; }
+
+/* two-panel brain-camera: raw inputs (left) | fused (right). Camera mode widens the left so the two raw maps
+   sit SIDE-BY-SIDE and still leaves the fused big on the right. */
+.camera-panel{ grid-column:auto !important; }
+.cam-stack{ display:flex; flex-direction:row; gap:10px; align-items:center; justify-content:center; flex:1; min-height:0; }
+.cam-cell{ display:flex; flex-direction:column; align-items:center; gap:6px; flex:1 1 0; min-width:0; }
+.cam-cell canvas{ width:100%; max-width:100%; height:auto; aspect-ratio:1/1; background:#0e1116; border-radius:8px; }
+.cam-fused-title{ font-size:.95rem; font-weight:600; margin:0 0 .5rem; color:#c8cfdb; }
+.cam-fused-box{ flex:1; min-height:0; display:flex; align-items:center; justify-content:center; }
+.cam-fused-box canvas{ width:100%; max-width:760px; height:auto; aspect-ratio:1/1; background:#0e1116; border-radius:12px; }

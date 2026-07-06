@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>neuroviz — EEG + fNIRS</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=camera12" />
 </head>
 <body>
   <header>
@@ -79,10 +79,34 @@
       </div>
       <p class="hint" id="fhint"></p>
     </section>
+
+    <section class="panel camera-panel" id="cameraLeft" hidden>
+      <div class="controls">
+        <div class="mapgroup"><span class="glabel">subject</span><select id="camsubject"></select></div>
+        <div class="mapgroup"><span class="glabel">view</span><select id="camview"></select></div>
+        <div class="mapgroup"><span class="glabel">method</span><select id="cammethod" disabled><option>none</option></select></div>
+      </div>
+      <div class="result" id="cresult"><!-- block / class headline --></div>
+      <div class="cam-stack">
+        <div class="cam-cell"><span class="cam-lbl" id="camEEGlbl">EEG · α-power</span><canvas id="camEEG" width="260" height="260"></canvas></div>
+        <div class="cam-cell"><span class="cam-lbl">fNIRS · neural (HbO−HbR)</span><canvas id="camFN" width="260" height="260"></canvas></div>
+      </div>
+      <div class="player" id="camplayer">
+        <button id="camplay">▶</button>
+        <input id="camscrub" type="range" min="0" max="199" value="0" step="1" />
+        <span id="camtlabel" class="tlabel">0.0 s</span>
+      </div>
+      <p class="hint" id="chint"></p>
+    </section>
+
+    <section class="panel camera-panel waves" id="cameraRight" hidden>
+      <h2 class="cam-fused-title">FUSED — joint firing pattern (EEG strength × fNIRS extent, locality-gated)</h2>
+      <div class="cam-fused-box"><canvas id="camFused" width="720" height="720"></canvas></div>
+    </section>
   </main>
 
   <footer>Commodity decoders, honest eval — the contribution is the measured cross-subject generalization,
     now shown per trial (truth vs prediction), not the pretty topomap.</footer>
-  <script src="app.js"></script>
+  <script src="app.js?v=camera12"></script>
 </body>
 </html>
