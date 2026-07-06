@@ -64,6 +64,18 @@ def test_fused_node_series_eeg_format():
     assert set(coupling) == {"lag", "decay", "beta"}
 
 
+def test_csd_transform_preserves_shape():
+    """CSD (surface Laplacian) is a spatial filter — same [n, ch, t] shape, finite, and actually CHANGES the
+    data (it's a high-pass, not identity). Real 10-20 names so the montage resolves."""
+    rng = np.random.default_rng(4)
+    ch = ["Fz", "Cz", "Pz", "Oz", "C3", "C4", "F3", "F4", "P3", "P4"]
+    Xe = rng.standard_normal((3, len(ch), 500))
+    out = bc.csd_transform(Xe, ch, 100.0)
+    assert out.shape == Xe.shape
+    assert np.isfinite(out).all()
+    assert not np.allclose(out, Xe)                       # it did something (spatial high-pass)
+
+
 def test_coverage_is_local_and_bounded():
     """Coverage ∈ [0,1], and is ~1 where an EEG and fNIRS sensor coincide, ~0 far from both."""
     pos_e = np.array([[0.0, 0.0], [0.5, 0.5]])

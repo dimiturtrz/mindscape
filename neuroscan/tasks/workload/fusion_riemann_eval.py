@@ -26,6 +26,7 @@ from neuroscan.evaluation import metrics
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _FN_TMAX, _FPS, _TEND = 32.0, 10.0, 20.0
 _SEEDS, _K = [0, 1, 2], 5
+_CSD = True                                        # surface-Laplacian deblur of EEG before fusion
 
 
 def _cov(X):
@@ -37,12 +38,15 @@ def _build_all(band="sum"):
     me = store.load("shin2017_nback_eeg", _EEG_CFG)
     mf = store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))
     subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
-    pos_e = bc.eeg_positions(eegmod.adapter().channels())
+    ch_e = eegmod.adapter().channels()
+    pos_e = bc.eeg_positions(ch_e)
     Cs, ys, gs = [], [], []
     for s in subs:
         Xe, ye = store.gather(me.filter(me["subject"] == s))
         Xf, yf = store.gather(mf.filter(mf["subject"] == s))
         assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
+        if _CSD:
+            Xe = bc.csd_transform(Xe, ch_e, 100.0)                     # spatial deblur before fusion
         pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
         joint, _ = bc.fused_node_series(Xe, Xf, pos_e, pos_f, band=band, fps=_FPS, t_end=_TEND)
         Cs.append(_cov(joint)); ys.append(ye); gs.append(np.array([s] * len(ye)))

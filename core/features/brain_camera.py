@@ -46,6 +46,20 @@ def _to_unit_disk(pos: np.ndarray) -> np.ndarray:
     return p / (r + 1e-9)
 
 
+def csd_transform(Xe: np.ndarray, ch_names, fs: float, *, montage: str = "standard_1005") -> np.ndarray:
+    """Current Source Density / surface Laplacian (spherical spline, Perrin 1989 — via MNE). A reference-free
+    spatial HIGH-PASS that undoes most of the volume-conduction / skull blur, sharpening each EEG channel toward
+    the cortex beneath it. Stays in scalp space (no head model, no inverse) — the cheap PARTIAL fix for EEG's
+    spatial smear before fusion: it de-blurs, but does NOT relocate tangential sources or add depth (that needs
+    source localization). `Xe` [n, ch, t] -> [n, ch, t] (CSD units, spatially sharpened)."""
+    import mne
+    info = mne.create_info(list(ch_names), float(fs), "eeg")
+    ep = mne.EpochsArray(np.asarray(Xe, dtype=float), info, verbose="ERROR")
+    ep.set_montage(montage, match_case=False, on_missing="ignore", verbose="ERROR")
+    ep = mne.preprocessing.compute_current_source_density(ep, verbose="ERROR")
+    return ep.get_data().astype(np.float32)
+
+
 def _band_env(X: np.ndarray, fs: float, band: tuple[float, float]) -> np.ndarray:
     """Band-power envelope per channel: bandpass → analytic-signal magnitude → `[n, ch, t]`. The slow envelope
     is what carries cognitive-state info, so it (not raw EEG) is the fast-layer feature."""

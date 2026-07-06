@@ -23,6 +23,7 @@ from core.features import brain_camera as bc
 
 _FS_E, _FS_F, _TMIN_F = 100.0, 10.0, -2.0
 _FPS, _TEND, _FN_TMAX = 10.0, 20.0, 32.0        # fNIRS epoched past _TEND so read-forward (τ+lag) fills the tail
+_CSD = True                                      # surface-Laplacian deblur of EEG before fusion (scalp-space fix)
 _COV_GRID = 40                                   # locality-coverage kernel resolution exported for the viz
 
 
@@ -38,8 +39,11 @@ def main():
     Xe, ye = store.gather(me.filter(me["subject"] == s))
     Xf, yf = store.gather(mf.filter(mf["subject"] == s))
     assert np.array_equal(ye, yf), "EEG/fNIRS misaligned"
+    ch_e = eegmod.adapter().channels()
+    if _CSD:
+        Xe = bc.csd_transform(Xe, ch_e, _FS_E)                   # spatial deblur before fusion (scalp-space)
     b = args.block
-    pos_e = bc.eeg_positions(eegmod.adapter().channels())
+    pos_e = bc.eeg_positions(ch_e)
     pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(args.subject))
 
     # single source of truth: core computes the fused representation (band-power envelopes + CBSI neural,
