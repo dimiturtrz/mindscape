@@ -60,17 +60,15 @@ def _resample_time(X: np.ndarray, t_src: np.ndarray, t_dst: np.ndarray) -> np.nd
     return interp1d(t_src, X, axis=-1, bounds_error=False, fill_value=0.0)(t_dst).astype(X.dtype)
 
 
-def _interp_weights(pos: np.ndarray, grid: int) -> tuple[np.ndarray, np.ndarray]:
-    """Fixed linear-interpolation as a barycentric weight matrix `W[grid², n_ch]` (positions are constant, so
-    compute the Delaunay triangulation + weights ONCE, then every frame is a matmul) + a validity `mask[grid²]`
-    (pixel within ~1.5 grid-spacings of a sensor). Points outside the hull get zero weight."""
+def _bary(pos: np.ndarray, pts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Barycentric linear-interpolation weight matrix `W[len(pts), n_ch]` mapping channel values at `pos` to
+    arbitrary query points `pts` (Delaunay triangulation, computed once — every frame is then a matmul), plus
+    the distance `d[len(pts)]` from each query point to its nearest sensor. Points outside the hull get zero
+    weight. Channels with non-finite positions are dropped from the triangulation (weight column stays zero)."""
     from scipy.spatial import Delaunay
     ok = np.isfinite(pos).all(1)
     idx = np.where(ok)[0]
     p = pos[ok]
-    gx = np.linspace(-1, 1, grid)
-    gxx, gyy = np.meshgrid(gx, gx)
-    pts = np.stack([gxx.ravel(), gyy.ravel()], axis=1)                  # [G², 2]
     tri = Delaunay(p)
     simp = tri.find_simplex(pts)                                        # [-1] outside hull
     W = np.zeros((len(pts), len(pos)), dtype=np.float32)
@@ -83,6 +81,16 @@ def _interp_weights(pos: np.ndarray, grid: int) -> tuple[np.ndarray, np.ndarray]
     for j in range(3):
         W[rows, verts[:, j]] = bary[:, j]
     d = np.sqrt(((pts[:, None, :] - p[None, :, :]) ** 2).sum(-1)).min(1)
+    return W, d
+
+
+def _interp_weights(pos: np.ndarray, grid: int) -> tuple[np.ndarray, np.ndarray]:
+    """Barycentric weights `W[grid², n_ch]` onto the head grid + a validity `mask[grid²]` (pixel within ~1.5
+    grid-spacings of a sensor)."""
+    gx = np.linspace(-1, 1, grid)
+    gxx, gyy = np.meshgrid(gx, gx)
+    pts = np.stack([gxx.ravel(), gyy.ravel()], axis=1)                  # [G², 2]
+    W, d = _bary(pos, pts)
     mask = (d <= (2.0 / grid) * 1.5).astype(np.float32)                 # [G²]
     return W, mask
 
@@ -201,6 +209,28 @@ def build_tensor(Xe, Xf, pos_e, pos_f, *, grid=16, **kw):
     cov = coverage_map(pos_e, pos_f, grid)                                          # locality gate
     stack = eeg_maps + [neural_map, _broadcast(cov, eeg_maps[0].shape)]
     return np.stack(stack, axis=1).astype(np.float32)                              # [n, C=5, grid, grid, T]
+
+
+def fused_node_series(Xe, Xf, pos_e, pos_f, *, band="sum", **kw):
+    """The FUSION-only signal, collapsed to EEG channel format `[n, n_e, T]` — so the strong EEG decoder
+    (per-subject re-centered tangent-space) can eat it directly. At each EEG sensor node the joint = EEG
+    electrical STRENGTH × the co-located fNIRS neural (CBSI, interpolated to that node) × locality COVERAGE
+    (Gaussian to the nearest fNIRS sensor). This is the genuinely-cross-modal quantity — not raw EEG, not raw
+    fNIRS — so its spatial covariance carries the coupled firing pattern, nothing a single modality already has.
+    `band`='sum' (total electrical strength) or a single band name. `kw` -> channel_series. Returns `(joint,
+    coupling)`; nodes with non-finite EEG positions are dropped (kept consistent by the fixed montage)."""
+    eeg, neural, _, coupling = channel_series(Xe, Xf, **kw)
+    ok = np.isfinite(pos_e).all(1)
+    strength = sum(eeg[b] for b in _BANDS) if band == "sum" else eeg[band]      # [n, n_e, T], envelopes ≥ 0
+    strength = strength[:, ok, :]
+    Wq, _ = _bary(pos_f, pos_e[ok])                                             # fNIRS -> EEG-node interp [n_e, n_f]
+    neural_e = np.einsum("nct,gc->ngt", neural, Wq)                             # CBSI at the EEG nodes [n, n_e, T]
+    s2 = (0.20 ** 2) * 2
+    pf = pos_f[np.isfinite(pos_f).all(1)]
+    d2 = ((pos_e[ok][:, None, :] - pf[None, :, :]) ** 2).sum(-1).min(1)         # dist² each EEG node -> nearest fNIRS
+    cov_e = np.exp(-d2 / s2)                                                    # locality coverage per node [n_e]
+    joint = strength * neural_e * cov_e[None, :, None]                         # [n, n_e, T]
+    return joint.astype(np.float32), coupling
 
 
 def _zscore(m: np.ndarray) -> np.ndarray:

@@ -49,6 +49,21 @@ def test_build_tensor_contract():
     assert np.isfinite(X).all()
 
 
+def test_fused_node_series_eeg_format():
+    """The fusion-only signal collapses to EEG channel format `[n, n_e_finite, T]` (drops non-finite-position
+    EEG nodes), finite, ready for spatial-covariance -> the EEG Riemann decoder."""
+    rng = np.random.default_rng(3)
+    n = 4
+    Xe = rng.standard_normal((n, 8, 4000))
+    Xf = rng.standard_normal((n, 12, 320))
+    pos_e = rng.uniform(-0.8, 0.8, (8, 2)); pos_e[7] = np.nan          # one dropped node
+    pos_f = rng.uniform(-0.8, 0.8, (6, 2))
+    joint, coupling = bc.fused_node_series(Xe, Xf, pos_e, pos_f, fps=10.0, t_end=20.0)
+    assert joint.shape == (n, 7, 200)                                  # 8 EEG nodes − 1 non-finite = 7
+    assert np.isfinite(joint).all()
+    assert set(coupling) == {"lag", "decay", "beta"}
+
+
 def test_coverage_is_local_and_bounded():
     """Coverage ∈ [0,1], and is ~1 where an EEG and fNIRS sensor coincide, ~0 far from both."""
     pos_e = np.array([[0.0, 0.0], [0.5, 0.5]])
