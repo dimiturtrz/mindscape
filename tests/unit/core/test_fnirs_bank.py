@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from core.features import extract_bank, family_names
-from core.features.fnirs_bank import FNIRS_FEATURE_FNS, WeightedFamilyScaler
+from core.features.fnirs.bank import FNIRS_FEATURE_FNS, WeightedFamilyScaler
 
 
 def test_extract_bank_shape_and_column_map():

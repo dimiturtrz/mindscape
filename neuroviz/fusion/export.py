@@ -2,7 +2,7 @@
 block, on a shared time grid (fNIRS lag-aligned), with both montages' 2D positions. The web view interpolates
 these to head-maps (EEG top-left, fNIRS bottom-left, fused right) and animates them.
 
-    python -m neuroviz.export_brain_camera --subject 1 --block 0
+    python -m neuroviz.fusion.export --subject 1 --block 0
 Writes neuroviz/web/data/brain_camera.json (gitignored, like the other view data).
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ from core.data.eeg.base import EpochCfg
 from core.data.eeg import shin2017_nback_eeg as eegmod
 from core.data.fnirs.base import FnirsCfg
 from core.data.fnirs import shin2017 as fnmod
-from core.features import brain_camera as bc
+from core.features import fusion as bc
 
 _FS_E, _FS_F, _TMIN_F = 100.0, 10.0, -2.0
 _FPS, _TEND, _FN_TMAX = 10.0, 20.0, 32.0        # fNIRS epoched past _TEND so read-forward (τ+lag) fills the tail

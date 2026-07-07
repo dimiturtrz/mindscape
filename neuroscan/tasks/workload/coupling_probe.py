@@ -21,7 +21,7 @@ import numpy as np
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
-from core.features import brain_camera as bc
+from core.features import fusion as bc
 
 _FS_E, _FS_F, _TMIN_F, _FPS, _TEND = 100.0, 10.0, -2.0, 10.0, 20.0
 _BETA = (13.0, 30.0)                                 # β power ~ the (de)synchronization that couples to blood

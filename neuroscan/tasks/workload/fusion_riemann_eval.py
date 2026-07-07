@@ -20,7 +20,7 @@ from core.data.eeg.base import EpochCfg
 from core.data.eeg import shin2017_nback_eeg as eegmod
 from core.data.fnirs.base import FnirsCfg
 from core.data.fnirs import shin2017 as fnmod
-from core.features import brain_camera as bc
+from core.features import fusion as bc
 from neuroscan.evaluation import metrics
 
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)

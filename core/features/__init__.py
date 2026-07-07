@@ -1,20 +1,17 @@
-"""Feature extraction — the signal→feature substance the decoders sit on, grouped by feature family so no
-one file carries everything. `baselines/` methods are thin: they *call* these + bolt on a classifier, so
-there's one extractor implementation reused across methods, modalities, transfer, and the viz.
+"""Feature extraction — the signal→feature substance the decoders sit on, organized by MODALITY (matching
+`core/data/{eeg,fnirs}` and `baselines/{eeg,fnirs,fusion}`), then by feature family within.
 
-  covariance.py  EEG geometric — `time_delay_embed` + the manifold transfer transforms
-                 (`recenter_covariances`, `scale_to_identity`)
-  bandpower.py   EEG oscillatory — `band_powers` (θ/α/β) + `CANONICAL_BANDS`
-  amplitude.py   fNIRS hemodynamic — `amplitude_features` (mean/slope/peak)
-  fnirs_bank.py  fNIRS wide descriptor bank — `extract_bank` + `family_names` + `WeightedFamilyScaler`
-                 (the weighted-feature importance search)
+  eeg/     bandpower (θ/α/β `band_powers`) · covariance (`time_delay_embed`, transfer transforms) · csd · montage
+  fnirs/   amplitude (`amplitude_features`) · bank (`extract_bank` descriptor bank) · chromophore (CBSI) · montage
+  fusion/  coupling (derived neurovascular lag) · series (envelope+lag rep) · camera (⚠️ lossy viz raster)
 
-Import from the package (`from core.features import band_powers`); the submodules are the grouping.
+Import the flat feature functions from the package (`from core.features import band_powers`); the cross-modal
+fusion API lives under the subpackage (`from core.features import fusion`).
 """
-from core.features.amplitude import amplitude_features
-from core.features.bandpower import CANONICAL_BANDS, band_powers
-from core.features.covariance import recenter_covariances, scale_to_identity, time_delay_embed
-from core.features.fnirs_bank import (
+from core.features.eeg.bandpower import CANONICAL_BANDS, band_powers
+from core.features.eeg.covariance import recenter_covariances, scale_to_identity, time_delay_embed
+from core.features.fnirs.amplitude import amplitude_features
+from core.features.fnirs.bank import (
     FNIRS_FEATURE_FNS, WeightedFamilyScaler, extract_bank, family_names)
 
 __all__ = ["time_delay_embed", "recenter_covariances", "scale_to_identity",

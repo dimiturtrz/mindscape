@@ -1,4 +1,4 @@
-"""Unit tests for the brain-camera fusion feature extractor (`core.features.brain_camera`).
+"""Unit tests for the brain-camera fusion feature extractor (`core.features.fusion`).
 
 Equivalence-class coverage of the genuinely-new math: CBSI common-mode cancellation (both chromophores), the
 data-derived hemodynamic coupling (does `estimate_coupling` recover a PLANTED lag?), and the tensor contract.
@@ -6,7 +6,7 @@ data-derived hemodynamic coupling (does `estimate_coupling` recover a PLANTED la
 import numpy as np
 import pytest
 
-from core.features import brain_camera as bc
+from core.features import fusion as bc
 
 
 def test_cbsi_cancels_common_mode_keeps_anticorrelated():

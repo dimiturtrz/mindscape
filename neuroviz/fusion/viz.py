@@ -4,7 +4,7 @@ Layout (per the design): LEFT column = the two raw inputs stacked (EEG band-powe
 below); RIGHT = the fused heatmap (EEG + fNIRS overlaid). Sensor nodes dotted on each. One block, animated
 over time — the "watch the brain fire" view, before deciding feature extraction or committing to the web build.
 
-    python -m neuroviz.brain_camera_viz --subject 1 --block 0 --band alpha
+    python -m neuroviz.fusion.viz --subject 1 --block 0 --band alpha
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def _maps(subject: int, block: int, band: str):
     from core.data.eeg import shin2017_nback_eeg as eegmod
     from core.data.fnirs.base import FnirsCfg
     from core.data.fnirs import shin2017 as fnmod
-    from core.features import brain_camera as bc
+    from core.features import fusion as bc
 
     me = store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0))
     mf = store.load("shin2017_nback", FnirsCfg(tmax=32.0))     # past 20 s so the read-forward tail has blood

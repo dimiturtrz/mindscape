@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from core.features.amplitude import _time_axis
+from core.features.fnirs.amplitude import _time_axis
 
 
 def _slope(X: np.ndarray, tc: np.ndarray, tc_ss: float) -> np.ndarray:
