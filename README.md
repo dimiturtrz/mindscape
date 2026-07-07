@@ -31,8 +31,9 @@ across two tasks:
   workload gain and now the strongest single-modality decoder. That makes fusion a **strong + weak** pair: the
   two still fail on *different* blocks (oracle **0.75** vs best-single **0.58**), and once EEG is well-aligned
   its confidence turns informative, so output-space fusion goes from *hurting* to a marginal edge (product
-  **+1.5 pp**) — a wash, not yet a win. The oracle headroom stays mostly uncaptured; the real next win is
-  lifting the weak modality (fNIRS domain adaptation), not a cleverer combiner.
+  **+1.5 pp**) — a wash, not yet a win. The oracle headroom stays mostly uncaptured — and the honest finding
+  is that it *can't* be here: fNIRS is at a physiological ceiling for graded load (it reads WM *engagement*,
+  not *level*), so there's no weak modality to lift and no combiner to save it. The value is the measured null.
 
 Two through-lines under both tasks: the **evaluation regime is the product** — a split is a *criteria filter*
 over the data cloud, so every run self-documents exactly what it held out — and **deployability**: the
@@ -40,20 +41,22 @@ decoders are edge-tiny and export to ONNX at millisecond-scale CPU latency.
 
 It's also how **I'm** ramping into neural decoding: built on public data, the signal-processing /
 calibration / edge-inference discipline carried from prior ML work, the **neuroscience and decoding methods
-learned as I go.** Next: input-level learned fusion (to chase that oracle headroom) + harder semantic
-decoding. Full plan → **[docs/PLAN.md](docs/PLAN.md)**.
+learned as I go.** Next: a harder, richer task (semantic decoding) where the signal is present — the fNIRS
+graded-workload chapter is closed as a measured physiological ceiling, not left as open promise. Full plan →
+**[docs/PLAN.md](docs/PLAN.md)**.
 
 ## See the signal the decoder reads — [neuroviz](neuroviz/)
-![neuroviz — fNIRS n-back workload: the HbO hemodynamic response animating over prefrontal cortex, HbO/HbR waveforms, and the decoder's ground-truth-vs-prediction readout](neuroviz/docs/media/demo.webp)
+![neuroviz — EEG+fNIRS fusion brain-camera (Shin n-back): the fused surface-video — raw EEG band-power + the fNIRS CBSI neural map, and the locality-gated joint firing pattern, with the hemodynamic lag derived per subject](neuroviz/docs/media/demo_fusion.webp)
 
 One dependency-free viewer, organized **task → modality** (matching the two tasks below). **Motor imagery**
 → EEG (mu/beta ERD topomaps + CSP/Riemann patterns). **Mental workload** → three approaches on the same
 n-back task: **EEG** (frontal-theta / parietal-alpha band-power topomaps), **fNIRS** (the HbO/HbR hemodynamic
-response building over the trial), and **Fusion** — a per-block **complementarity map** colouring every
-held-out block by which modality got it right, so you see re-centered EEG (0.58) and fNIRS (0.47) failing on
-*different* blocks (oracle **0.75** vs best-single 0.58) while output-space fusion cashes only a sliver. Each
-view shows the signal a decoder consumes *and whether it got it right* — with the robust cross-subject score.
-→ **[neuroviz/](neuroviz/)**
+response building over the trial), and **Fusion** — the EEG+fNIRS **brain-camera**: the fused surface-video
+(raw EEG band-power + the fNIRS CBSI neural map → a locality-gated **joint firing pattern**; hemodynamic lag
+derived per subject, blood read forward to align to the EEG event). The single-modality views show the signal
+a decoder consumes *and whether it got it right* (robust cross-subject score); the fusion view shows the
+**physics** — honestly a visualization, not a decode win (graded workload sits at a physiological + redundancy
+ceiling; the measured null is below). → **[neuroviz/](neuroviz/)**
 
 ## Task · Motor imagery (BCI-2a, EEG) — the generalization gap, measured
 The science layer is **signal → preprocess → decode → evaluate**, and the *evaluation regime* is the
@@ -217,7 +220,8 @@ Two findings from the same-task design:
   within-subject (25 aligned subjects beat a data-starved personal model). fNIRS stays ~0.47 (barely transfers,
   exactly what BenchNIRS found). So the workload task is a **strong (re-centered EEG) + weak (fNIRS)** pair —
   whether the weak modality *adds* is the **fusion question**, answered below: a marginal edge, large
-  uncaptured complementarity, and the real next win is a stronger fNIRS, not a cleverer combiner.
+  uncaptured complementarity — but a stronger fNIRS is *not* on the table here: graded workload is at a
+  physiological ceiling (see "The graded-load ceiling" below), so this pair stays strong+weak by physics.
 
 ### What actually carries the fNIRS signal — a feature-importance search
 The baseline uses **mean + slope + peak**, the field-standard triple. But *which* of those (and which of a
@@ -294,13 +298,31 @@ within *and* cross-subject). The result — the aggregation is the design axis, 
   a smooth hemodynamic response has no localized cue for a "strongest-window" pool to exploit, so a shared
   per-window feature is just weaker than the global triple. Ruled out by measurement.
 
-So the collapse isn't lazy — it's matched to a smooth signal, and the temporal signal that *does* exist is
-trapped within-subject. That reframes the next step precisely: the cross-subject wall is **distribution shift,
-not representation** — and the within-subject signal windowing unlocks is exactly what **domain adaptation**
-exists to make transfer. The two compose (richer rep + alignment); DA is the next chapter.
+So the collapse isn't lazy — it's matched to a smooth signal, and the temporal gain it leaves is trapped
+*within* subject.
 - **The field's transfer trick didn't help here.** Per-subject z-scoring (the standard fNIRS cross-subject
   fix) gave no gain — a slight drop on this single run — most likely because our per-epoch baseline-correction
   already removes the offset it targets. (One run, not a claim that z-scoring is useless.)
+
+### The graded-load ceiling — physiology, not a method gap (the honest finding)
+We attacked the ~0.46 cross-subject 3-class number **four ways** — a 15-family feature bank, windowed temporal
+representations, CBSI physiological-noise cleaning, and a GLM-β HRF model — and **every one ties the
+mean+slope+peak baseline** (~<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.454<!--/r-->), which itself
+matches the field benchmark (reproduced BenchNIRS 0.389 → 0.392). The wall is a **single boundary: 2-back vs
+3-back is at chance even *within* subject** (Ishii 2013: 0.61 within, 3-class 0.50 within; ours ≈ chance). So
+it is **not a transfer problem** — domain adaptation can only move signal that exists within a subject, and
+here there is none to move. The mechanism is physiology: a fixed ~2.2 s stimulus SOA + neurovascular
+saturation + the inverted-U load response mean 2- and 3-back produce the **same-shaped hemodynamic plateau,
+differing only in a tiny, sign-flipping, subject-relative height**. fNIRS reads *whether* working memory is
+engaged, not *how hard* — a **load detector, not a meter**.
+
+This closes the "lift the weak modality" path in the fusion section below: there is **no lever here** — DA has
+nothing to transfer, and better features can't extract absent signal. And it **matches SOTA**: no published
+method beats ~chance+10 pts on cross-subject Shin n-back (the inflated 0.83–0.96 numbers are within-subject /
+leaky splits). The deliverable is the **rigorous negative + the mechanism**, not a number. fNIRS earns its keep
+where the hemodynamic response *is* the signal (engagement detection, motion-robust ambulatory BCI); graded WM
+*level* cross-subject is simply the wrong task for it. We circle back when better data — generation and
+collection — can change the physics we're currently stuck with.
 
 ### Fusion — a strong + weak pair; complementarity is real, output-space fusion barely cashes it
 Both decoders run on the **same aligned epochs** — EEG **re-centered Riemann** (the transfer fix, zero-shot
@@ -357,12 +379,13 @@ confidence-based combiners (product, max-pick) can *partially* tell which modali
 **output-space fusion works to the extent the modalities are well-calibrated**, and it fails when confidence
 is noise (the weak-modality regime).
 
-But the gains are within noise and a long way under the oracle (0.752). Two real paths to actually cash the
-headroom: **(1) lift the weak modality** — fNIRS cross-subject domain adaptation, so it's a *strong + strong*
-pair where complementarity pays (filed follow-up); **(2)** an input-level gate that reads reliability from the
-raw signals, not just the (still-imperfect) probabilities. The current result: *re-centering makes
-fusion stop hurting and marginally help, complementarity is large but mostly uncaptured, and the next win is a
-stronger fNIRS.*
+But the gains are within noise and a long way under the oracle (0.752). The intuitive fix — **lift the weak
+modality** (fNIRS cross-subject DA → a *strong + strong* pair) — turns out to be closed: fNIRS graded workload
+is at a **physiological ceiling** (see "The graded-load ceiling" above), so there is nothing to lift. The only
+remaining route is an input-level gate that reads reliability from the raw signals, not the probabilities — and
+we tried it (below); it also cashes ~none. The current result: *re-centering makes fusion stop hurting and
+marginally help, complementarity is large but mostly uncaptured, and — measured — there is no realizable way to
+cash it on this strong+weak pair.*
 
 **A second, independent EEG fix — and the input-gate we tried.** Re-centering the *covariance* is one route;
 the *band-power* features have their own. Workload band-power is subject-idiosyncratic in absolute scale, so
@@ -375,8 +398,8 @@ per-modality encoders + a per-trial mixing gate, nested GroupKFold) on those fea
 **<!--r:fusion_gate_cross_subject_kfold_shin2017_nback.gate-->0.573<!--/r-->**, *tying* z-scored-EEG-alone
 (<!--r:calibration_ablation_shin2017_nback_eeg.eeg_z_best-->0.581<!--/r-->) — it captured none of that oracle
 headroom (<!--r:calibration_ablation_shin2017_nback_eeg.oracle_z-->0.766<!--/r-->) either. So even reading the
-raw inputs, the gate doesn't cash it *on this strong+weak pair* — reinforcing that the next real win is a
-stronger fNIRS, not a cleverer combiner.
+raw inputs, the gate doesn't cash it *on this strong+weak pair* — and, per the ceiling section, a stronger
+fNIRS isn't available to make it strong+strong: this pairing is capped by physiology, not by a missing method.
 
 Two caveats. (1) The oracle is an **upper bound** — a perfect selector is unattainable; a real gate
 captures only a fraction. It proves headroom *exists*, not that we can claim it. (2) The literature offers no
@@ -397,7 +420,8 @@ Competent on a public benchmark, **not** a finished system:
   not hidden. The contribution is the measured OOD gap + calibration + efficiency, not the peak.
 - **Fusion is a negative result.** On the Shin workload task, complementarity is real but no realizable
   fusion (naive, learned, or calibrated) beats the best single modality — the value is the rigorous null +
-  the mechanism, not a win. The input-level gate that *might* cash the oracle headroom is future work.
+  the mechanism, not a win. The input-level gate that *might* cash the oracle headroom was also built and
+  measured (ties best-single, cashes ~none) — so the null holds across late, feature, *and* learned-gate fusion.
 - **Neuroscience is a ramp.** The signal-processing / eval discipline carries from prior work; the
   decoding methods and neuroscience are learned as I go.
 - **Not a device.** Public research data only; no real-time online BCI, no clinical or prospective validation.
@@ -429,8 +453,8 @@ uv run python -m neuroscan.tasks.workload.run_fusion --exp nback_fusion
 # a deep decoder, GPU (ad-hoc override of a base config — broadband recipe the nets prefer):
 uv run python -m neuroscan.tasks.run --exp mi_csp_within \
   --set method=atcnet --set recipe.resample=250 --set recipe.fmin=4 --set recipe.fmax=40
-# the neuroviz demo (EEG / fNIRS / Fusion complementarity view):
-uv run python -m neuroviz.export --subject 1 && uv run python -m neuroviz.export_fusion \
+# the neuroviz demo (EEG / fNIRS / Fusion brain-camera view):
+uv run python -m neuroviz.export --subject 1 && uv run python -m neuroviz.fusion.export --subject 1 \
   && python -m http.server 8000 -d neuroviz/web
 uv run pytest -q
 ```

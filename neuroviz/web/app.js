@@ -290,10 +290,14 @@ const FCAT = {
 const fcatOf = (b) => { const e=b.eeg===b.truth, f=b.fnirs===b.truth;
   return e&&f ? "both" : e ? "eeg" : f ? "fnirs" : "none"; };
 
-function showFusion(on){
-  document.querySelectorAll("main > .panel:not(.fusion-panel)").forEach(p=>p.hidden=on);
-  $("fusionview").hidden=!on;
+// three panel modes: "single" (topo+waves), "fusion" (complementarity grid), "camera" (brain-camera video)
+function showPanels(mode){
+  document.querySelectorAll("main > .panel").forEach(p=>{
+    const isF=p.classList.contains("fusion-panel"), isC=p.classList.contains("camera-panel");
+    p.hidden = mode==="fusion" ? !isF : mode==="camera" ? !isC : (isF||isC);
+  });
 }
+function showFusion(on){ showPanels(on ? "fusion" : "single"); }
 
 async function loadFusion(){
   const d = await (await fetch("data/fusion.json")).json();
@@ -357,9 +361,121 @@ function renderFusion(){
     `of that headroom stays on the table. The next real win is a stronger fNIRS, not a cleverer combiner.`;
 }
 
+// ---- brain-camera view -----------------------------------------------------------------------------
+// The fused surface-video: EEG α-power (warm) + fNIRS HbO (cool, lag +5 s), co-registered on one head.
+// LEFT stacks the two raw inputs; RIGHT overlays them. Self-contained (own frames/player) — a different
+// data shape from the single-modality views (per-channel time-series for two montages at once).
+const cam = { data:null, frame:0, playing:false, timer:null, subject:null, band:"alpha", subs:[], cov:null, covKey:null };
+
+// locality-coverage confidence is computed in CORE (core.data.fusion.brain_camera.coverage_map) and exported as
+// a grid; the viz just SAMPLES it per pixel (no fusion logic in JS). Gaussian falloff to the nearest EEG and
+// fNIRS sensor -> dim where either modality has no nearby sensor. Fixed per (subject, size), so sample once.
+function _covFromGrid(covGrid, W, H, cx, cy, R){
+  const g=covGrid.length, cov=new Float32Array(W*H);
+  for(let yy=0;yy<H;yy++)for(let xx=0;xx<W;xx++){ const i=yy*W+xx, dx=xx-cx, dy=yy-cy;
+    if(dx*dx+dy*dy>R*R){cov[i]=0;continue;}
+    const u=(xx-cx)/R, v=(cy-yy)/R;                     // unit-disk coords (y up), matching core's grid
+    const c=Math.max(0,Math.min(g-1,Math.round((u+1)/2*(g-1)))), r=Math.max(0,Math.min(g-1,Math.round((v+1)/2*(g-1))));
+    cov[i]=covGrid[r][c]; }
+  return cov;
+}
+
+function cmapWarm(t){                                   // dark→purple→orange→yellow (EEG layer)
+  t=Math.max(0,Math.min(1,t));
+  const S=[[8,8,22],[74,20,92],[184,52,84],[240,120,44],[252,220,128]];
+  const x=t*(S.length-1),i=Math.floor(x),f=x-i,a=S[i],b=S[Math.min(i+1,S.length-1)];
+  return [a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f];
+}
+function _idw(pos,vals,cx,cy,R,xx,yy){                  // inverse-distance value at pixel, or null outside head
+  const dx=xx-cx,dy=yy-cy; if(dx*dx+dy*dy>R*R) return null;
+  let num=0,den=0;
+  for(let i=0;i<pos.length;i++){ if(!pos[i][0]&&!pos[i][1]) continue;
+    const ex=cx+pos[i][0]*R-xx,ey=cy-pos[i][1]*R-yy,w=1/(ex*ex+ey*ey+1e-3); num+=w*vals[i]; den+=w; }
+  return den?num/den:0;
+}
+function _nodes(ctx,pos,cx,cy,R,col){
+  for(const [x,y] of pos){ if(!x&&!y) continue;
+    ctx.beginPath();ctx.arc(cx+x*R,cy-y*R,2,0,7);ctx.fillStyle="#0e1116";ctx.fill();
+    ctx.strokeStyle=col;ctx.lineWidth=0.8;ctx.stroke(); }
+}
+function _headline(ctx,cx,cy,R){
+  ctx.strokeStyle="#7c879b";ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx-9,cy-R+2);ctx.lineTo(cx,cy-R-10);ctx.lineTo(cx+9,cy-R+2);ctx.stroke();
+}
+function paintHead(cv,pos,vals,mode){
+  const ctx=cv.getContext("2d"),W=cv.width,H=cv.height,cx=W/2,cy=H/2,R=W*0.42;
+  ctx.clearRect(0,0,W,H); const img=ctx.createImageData(W,H),px=img.data;
+  for(let yy=0;yy<H;yy++)for(let xx=0;xx<W;xx++){ const o=(yy*W+xx)*4, v=_idw(pos,vals,cx,cy,R,xx,yy);
+    if(v==null){px[o+3]=0;continue;}
+    const c = mode==="warm" ? cmapWarm((v+1)/2) : cmap((v+1)/2);
+    px[o]=c[0];px[o+1]=c[1];px[o+2]=c[2];px[o+3]=235; }
+  ctx.putImageData(img,0,0); _headline(ctx,cx,cy,R);
+  _nodes(ctx,pos,cx,cy,R,mode==="warm"?"rgba(120,220,255,.7)":"rgba(120,255,150,.7)");
+}
+// principled fusion (not a cosmetic overlay): both modalities are views of the SAME neural activity, so fuse
+// in "activity" space. EEG band-power magnitude = fast electrical activity; fNIRS CBSI (HbO−αHbR, both signals,
+// systemic rejected) = the delayed, spatially-sharper blood response to that activity. Joint = EEG-activity ×
+// fNIRS-activation -> lights up only where BOTH agree: EEG's dynamics, spatially sharpened by fNIRS.
+function paintFused(cv,posE,valsE,posF,valsN){
+  const ctx=cv.getContext("2d"),W=cv.width,H=cv.height,cx=W/2,cy=H/2,R=W*0.42;
+  const key=cam.subject+"_"+W;                                            // coverage kernel is fixed per subject+size
+  if(cam.covKey!==key){ cam.cov=_covFromGrid(cam.data.coverage,W,H,cx,cy,R); cam.covKey=key; }
+  const cov=cam.cov;
+  ctx.clearRect(0,0,W,H);
+  const img=ctx.createImageData(W,H),px=img.data, J=new Float32Array(W*H); let jmax=1e-6;
+  for(let yy=0;yy<H;yy++)for(let xx=0;xx<W;xx++){ const i=yy*W+xx, ve=_idw(posE,valsE,cx,cy,R,xx,yy);
+    if(ve==null){J[i]=-1;continue;} const vn=_idw(posF,valsN,cx,cy,R,xx,yy);
+    // EEG strength (|band-power|) × fNIRS extent/activation × locality-coverage confidence
+    const j=Math.abs(ve)*Math.max(0,vn)*cov[i]; J[i]=j; if(j>jmax) jmax=j; }
+  for(let i=0;i<W*H;i++){ const o=i*4; if(J[i]<0){px[o+3]=0;continue;}
+    const c=cmapWarm(Math.sqrt(J[i]/jmax)); px[o]=c[0];px[o+1]=c[1];px[o+2]=c[2];px[o+3]=235; }
+  ctx.putImageData(img,0,0); _headline(ctx,cx,cy,R);
+  _nodes(ctx,posE,cx,cy,R,"rgba(120,220,255,.6)"); _nodes(ctx,posF,cx,cy,R,"rgba(120,255,150,.8)");
+}
+function renderCamera(){
+  const d=cam.data,f=cam.frame,eeg=d.eeg[cam.band][f],neural=d.fnirs.neural[f];
+  paintHead($("camEEG"),d.pos_eeg,eeg,"warm");
+  paintHead($("camFN"),d.pos_fnirs,neural,"div");                 // fNIRS neural map (CBSI, both chromophores)
+  paintFused($("camFused"),d.pos_eeg,eeg,d.pos_fnirs,neural);     // joint activity
+  $("camEEGlbl") && ($("camEEGlbl").textContent=`EEG · ${cam.band} power`);
+  $("camscrub").value=f; $("camtlabel").textContent=d.frame_times[f].toFixed(1)+" s";
+}
+function camPlay(on){
+  cam.playing=on; $("camplay").textContent=on?"❚❚":"▶";
+  if(cam.timer){clearInterval(cam.timer);cam.timer=null;}
+  if(on) cam.timer=setInterval(()=>{ cam.frame=(cam.frame+2)%cam.data.frame_times.length; renderCamera(); }, 80);
+}
+async function loadCamera(subject){
+  subject = subject || cam.subs[0] || 1;
+  cam.subject = subject;
+  cam.data = await (await fetch(`data/brain_camera_subject${subject}.json`)).json();
+  state.modality="camera";
+  // controls — homogeneous with the single-modality views: subject / view(=EEG band) / method(=none)
+  const ss=$("camsubject"); ss.innerHTML="";
+  cam.subs.forEach(s=>{ const o=document.createElement("option"); o.value=s; o.textContent="subject "+s; ss.appendChild(o); });
+  ss.value=subject; ss.onchange=()=>{ camPlay(false); loadCamera(+ss.value); };
+  const vs=$("camview"); vs.innerHTML="";
+  ["theta","alpha","beta"].forEach(b=>{ const o=document.createElement("option"); o.value=b; o.textContent=b; vs.appendChild(o); });
+  vs.value=cam.band; vs.onchange=()=>{ cam.band=vs.value; renderCamera(); };   // method has no options — fusion has no decoder
+  const lag=(cam.data.coupling&&cam.data.coupling.lag!=null)?cam.data.coupling.lag.toFixed(1):"~6";
+  $("sub").innerHTML=`<b>Fusion · EEG + fNIRS brain-camera</b> (Shin n-back). The fused surface-video: EEG band-power `+
+    `(fast electrical) over the fNIRS CBSI map (slow metabolic, lag-aligned +${lag} s — <b>derived</b> per subject, `+
+    `not fixed), co-registered on one head — EEG's <b>when</b> × fNIRS's <b>where</b>.`;
+  $("cresult").innerHTML=`example block · class <b>${cam.data.classes[cam.data.label]}</b> · ${cam.data.frame_times.length} frames`;
+  $("chint").innerHTML=`LEFT = the two inputs: EEG band-power (fast electrical <b>strength</b>) and the fNIRS `+
+    `<b>neural</b> map (CBSI = HbO−αHbR — both chromophores, systemic rejected, lag +${lag} s <b>derived</b> from the `+
+    `EEG↔blood coupling → the <b>origin + spread</b>). `+
+    `RIGHT = <b>joint activity</b> = EEG-strength × fNIRS-extent × <b>locality</b> coupling (trusted only where a `+
+    `co-located EEG↔fNIRS pair exists). A firing pattern emerges — origin (peak), spread (size), strength (intensity) `+
+    `— none fitted. Low-SNR, honest.`;
+  $("camscrub").max=cam.data.frame_times.length-1; cam.frame=0;
+  showPanels("camera"); renderCamera();
+}
+
 async function init(){
   const man=await (await fetch("data/manifest.json")).json();
   const mods=man.modalities||{eeg:man.subjects||[]};      // back-compat with the old flat manifest
+  cam.subs=Array.isArray(man.camera)?man.camera:[];       // brain-camera subjects for the fusion view
   const taskBar=$("task"), appBar=$("approach"), appGroup=$("approach-group"), subjSel=$("subject");
 
   // task > modality: the toggle is two-tier because the modalities belong to DIFFERENT tasks — EEG here is
@@ -380,8 +496,8 @@ async function init(){
   }
 
   function loadModality(mod){
-    play(false);
-    if(mod==="fusion"){ subjSel.parentElement.hidden=true; loadFusion(); }
+    play(false); camPlay(false);
+    if(mod==="fusion"){ subjSel.parentElement.hidden=true; loadCamera(); }   // Fusion tab = the brain-camera view
     else {
       showFusion(false); subjSel.parentElement.hidden=false; subjSel.innerHTML="";
       mods[mod].forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent="subject "+s;subjSel.appendChild(o);});
@@ -397,15 +513,19 @@ async function init(){
   subjSel.onchange=()=>{play(false);loadSubject(state.modality, subjSel.value);};
   $("play").onclick=()=>play(!state.playing);
   $("scrub").oninput=()=>{play(false);state.frame=+$("scrub").value;render();};
+  $("camplay").onclick=()=>camPlay(!cam.playing);
+  $("camscrub").oninput=()=>{camPlay(false);cam.frame=+$("camscrub").value;renderCamera();};
   $("speed").oninput=()=>{ state.speed=Math.pow(10, +$("speed").value);   // log slider -> speed
                           $("speedlabel").textContent=fmtSpeed(state.speed);
                           if(state.playing) play(true); };   // restart timer with the new interval
   let rz; window.addEventListener("resize",()=>{ clearTimeout(rz); rz=setTimeout(()=>{
+    if(state.modality==="camera"){ renderCamera(); return; }
     if(!state.data) return; state.modality==="fusion" ? renderFusion() : render(); },120); });
   // deep-link: #fusion / #eeg / #fnirs selects the initial view (also lets a headless render target it)
   const want=(location.hash||"").slice(1);
   const first=Object.keys(mods).find(m=>mods[m] && mods[m].length);
-  loadModality(want==="fusion" && man.fusion ? "fusion" : (mods[want] && mods[want].length ? want : first));
+  loadModality(want==="fusion" && man.fusion ? "fusion"
+             : (mods[want] && mods[want].length ? want : first));
 }
 init().catch(e=>{document.body.insertAdjacentHTML("beforeend",
   `<p style="color:#ffb0a0;padding:24px">load error: ${e}. Serve this dir: <code>python -m http.server</code> in neuroviz/web, then open http://localhost:8000</p>`);});

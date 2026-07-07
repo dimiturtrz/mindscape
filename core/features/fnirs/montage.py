@@ -1,0 +1,15 @@
+"""fNIRS optode geometry — 2D channel positions on the unit head disk (single-modality)."""
+from __future__ import annotations
+
+import numpy as np
+
+from core.features.eeg.montage import _to_unit_disk
+
+
+def fnirs_positions(subject_dir) -> np.ndarray:
+    """2D positions of the 36 fNIRS channels from `mnt_nback.mat` (already a head-normalized 2D projection),
+    normalized to the unit disk to match the EEG frame."""
+    import scipy.io as sio
+    mnt = sio.loadmat(subject_dir / "mnt_nback.mat", struct_as_record=False, squeeze_me=True)["mnt_nback"]
+    pos = np.stack([np.asarray(mnt.x, dtype=float), np.asarray(mnt.y, dtype=float)], axis=1)  # [36, 2]
+    return _to_unit_disk(pos)
