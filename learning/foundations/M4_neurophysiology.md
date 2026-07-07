@@ -47,8 +47,8 @@ poorly localized) + low SNR + per-person anatomy.
    problem**.
 5. *Artifacts* — said "no idea" but **guessed gel (electrode drift) + movement (motion) — both real**. Added:
    EOG (eyes), EMG (muscle), line noise.
-6. *Tradeoff* — ✓✓ EEG temporal + fMRI spatial/huge; noted MEG uncovered; **proactively raised fNIRS + its
-   Lys relevance**. Filled in the full EEG/MEG/fMRI/fNIRS table.
+6. *Tradeoff* — ✓✓ nailed EEG (temporal) + fMRI (spatial but huge/slow); flagged MEG as uncovered; and
+   **proactively raised fNIRS and its relevance to wearable BCI**. Filled in the full EEG/MEG/fMRI/fNIRS table.
 
 **New additions to bank:** PSPs-not-spikes, the **inverse problem** (name), the EOG/EMG/line-noise artifact
 trio, the modality tradeoff table.
