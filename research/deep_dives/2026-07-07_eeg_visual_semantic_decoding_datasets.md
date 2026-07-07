@@ -56,3 +56,74 @@ Real EEG→image data is **abundant** (THINGS-EEG1 50 subj + THINGS-EEG2 10 subj
 - 175-h EEG speech scaling (imagined nulls at scale): https://arxiv.org/abs/2407.07595 · overt→imagined transfer: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12245923/
 - honest cross-subject vowel benchmark (ethos match): https://arxiv.org/pdf/2605.00865
 - OpenNeuro GraphQL: https://openneuro.org/crn/graphql
+
+---
+
+## 2026-07-07 (extension) — dataset expansion + shared-stimulus map
+
+**Why:** find what the first pass MISSED, verify THINGS-MEG, defuse the Spampinato trap, and — load-bearing for our cross-dataset contribution — nail down exactly which datasets share the SAME stimulus images. Method: fresh OpenNeuro GraphQL sweep (442 EEG datasets, 125 visual-keyword hits) + HF/Zenodo/arXiv. Specs below are cited; where a spec came from a Haiku scout and I could not reach the primary file, it's flagged `[unverified]`.
+
+### A. THINGS-MEG — verified, and it IS the same THINGS image set
+- **OpenNeuro `ds004212`** (confirmed). Hebart et al. 2023, *eLife* 12:e82580 (THINGS-data). **4 subjects × 12 sessions**, **272-channel CTF MEG** + eye-tracking, 500 ms stim + ~1000 ms fixation (SOA 1500±200 ms), passive viewing. **22,248 training images (1,854 concepts × 12 exemplars) + 200-image test set repeated per session.**
+- **Same stimulus database — CONFIRMED.** THINGS-MEG, THINGS-EEG1, THINGS-EEG2 all draw from the **THINGS database: 1,854 object concepts, 26,107 naturalistic images** (elifesciences.org/articles/82580; things-initiative.org). MEG and EEG1 both cover **all 1,854 concepts × 12 exemplars**; EEG2 covers a **1,654-concept train subset + 200-concept test**. So THINGS-MEG shares the concept set (and, for the 200-concept test, the exemplar images) with both EEG sets.
+- **Correction to a scout artifact:** the "1,654 concepts × 10 img × 4 reps + 200 × 1 × 80 reps" split is **THINGS-EEG2's** design (Gifford 2022, 63-ch, 100 ms SOA), NOT THINGS-EEG1's. **THINGS-EEG1** (Grootswagers 2022, *Sci Data* 9:3, ds003825, 64-ch, 1000 Hz, 5–10 Hz RSVP) shows all **22,248** images (1,854 × 12), broad-and-shallow across 50 subjects. EEG2 is deep-and-narrow (10 subjects, heavy repetition) — the reconstruction benchmark.
+
+### B. NET-NEW datasets (not in the original list)
+
+**Tier-1 — naturalistic object/scene EEG/MEG viewing (directly usable):**
+| dataset | id / URL | subj | images | ch | rate | license | paradigm |
+|---|---|---|---|---|---|---|---|
+| **NOD-EEG** | OpenNeuro `ds005811` | 19 | **~57,000 ImageNet** (1000 cat × ~57) | 64/66 (mixed) | 500/1000 Hz | CC-BY-4.0 | viewing + animacy judgment |
+| **NOD-MEG** | OpenNeuro `ds005810` | 31 | same 57k ImageNet | 275 (CTF) | 1200→250 Hz | CC-BY-4.0 | viewing + animacy judgment |
+| **NOD-fMRI** | OpenNeuro `ds004496` | 30 | same 57k ImageNet | — | — | CC-BY-4.0 | (fMRI arm of NOD) |
+| **EEG-ImageNet (2024)** | GitHub `Promise-Z5Q2SQ/EEG-ImageNet-Dataset` | 16 | 4,000 (ImageNet-21k, 80 cat) | 62 | 1000 Hz | open | RSVP 500 ms; multi-granularity labels |
+| **MSS natural-image** | Nature SD `s41597-025-04843-x` | 32 | 10,000 (PASCAL+ImageNet) | 122 | 1000 Hz | CC-BY | dual RSVP (5 Hz stream + 1 s/img) |
+| **ds002814** | OpenNeuro `ds002814` | 21 | 125 (5 cat: animals/chairs/faces/fruits/vehicles) | `[unverified]` | `[unverified]` | `[unverified]` | 1-back, joint fMRI+EEG |
+| **ds004995 (food time-course)** | OpenNeuro `ds004995` | 20 | 314 (154 food/160 non-food) | 128 | 1000 Hz | CC0 | passive viewing |
+| **ds005586 (occluded scenes)** | OpenNeuro `ds005586` | 23 | game-board scenes, 0–32 objects | 60 | `[unverified]` | `[unverified]` | passive viewing of object-count/occlusion |
+
+Key find: **NOD** (Zhang et al. 2025, *Sci Data* 12:857, PMC12102372) = a 3-modality suite (EEG+MEG+fMRI) over ~57k ImageNet images — the largest naturalistic-object EEG set after THINGS, and the cleanest same-image cross-modality set (see map below). The **2024 "EEG-ImageNet"** (Promise) is a *distinct, new* dataset — NOT Spampinato's 2017 set (§C).
+
+**Tier-2 — video / imagery / adjacent (context, weaker fit to static EEG→image):**
+- **EEG2Video / SEED-DV** (NeurIPS 2024, GitHub `XuanhaoLiu/EEG2Video`): 20 subj, 1,400 naturalistic video clips (40 concepts), ~62-ch. Video, not static images — train/test domain shift.
+- **CineBrain** (arXiv 2503.06940): 6 subj, simultaneous **EEG+fMRI** on ~9 h audiovisual narrative (Big Bang Theory). Fusion, small-N.
+- **ds004306** (OpenNeuro, 12 subj, 124-ch, 1024 Hz, CC-BY-4.0): semantic **perception vs imagination** of 3 concepts × 3 modalities — imagery-transfer probe.
+- **ds005274 = "UV_EEG" / Nature SD visual-imagery BCI** (`s41597-025-06512-5`, 22 subj, 32-ch, 1000 Hz, CC-BY-NC-ND): 10 imagined objects (3 categories). **One dataset, two identifiers** — dedup.
+- **Dream2Image** (arXiv 2510.06252, HF `opsecsystems/Dream2Image`, 38 subj): dream EEG → generated images. Endogenous — frontier-probe only.
+- **EgoBrain** (ICLR 2026, HF `ut-vision/EgoBrain`, 40 subj, EEG+IMU+egocentric video, CC-BY-NC): action understanding, not image reconstruction.
+- **ds004357 "Features-EEG"** (16 subj, 128-ch, CC-BY): 256 gabor gratings — low-level features, NOT naturalistic objects. Noted for completeness, low relevance.
+
+**Dedup / already-known (do not double-count):** the "Infant 200-objects" Nature SD paper (`s41597-025-04744-z`, Grootswagers, 42 infants) **= `ds005106`** already in the list. `ds007964` (rsvp-flagged) is actually an *emotional word-association* task, not visual. **No Alljoined-2/3 exists.** BraVL and NSD are fMRI. Reading-EEG sets surfaced (`ds004952` ChineseEEG, `ds005383` TMNRED, `ds007753` BCCWJ-EEG) belong to the EEG→text stage, not here.
+
+### C. The Spampinato/Kavasidis 2017 "brain2image" trap — leakage, not a target
+**The dataset** (Spampinato, Palazzo, Kavasidis et al., CVPR 2017, arXiv 1609.00344; GitHub `perceivelab/eeg_visual_classification`): 6–7 subjects, 32-channel EEG @ 1 kHz, **40 ImageNet classes × 50 images = 2,000 stimuli**, reported **~40% 40-way accuracy**. **The fatal design:** images were shown **blocked by class** — "all 50 stimuli in a block being images of the same class," 0.5 s each, blocks separated by 10 s blanking. So each class = one contiguous ~25 s recording window.
+
+**The rebuttal** (Li, Johansen, … Siskind, *IEEE TPAMI* 2020, arXiv 1812.07697, orig. titled "Training on the test set? An analysis of Spampinato et al."): because trials are blocked, slow non-stimulus EEG drift (DC/low-frequency cortical state) is **constant within a block and correlated between that block's train and test trials** — "classification of arbitrary brain states based on block-level temporal correlations that are known to exist in all EEG data, rather than stimulus-related activity." When they **interleave classes (rapid-event design)**, accuracy **collapses to ~chance** (2.5% for 40-way); a **random-codebook classifier matches or beats** the EEG one. They name Spampinato et al. explicitly and prescribe **randomized/interleaved trials**. Palazzo & Spampinato's 2020 reply concedes the slow-drift inflation exists but argues it's overstated.
+
+**Verdict — do NOT use as a decoding target or benchmark.** The block design makes it a **temporal-leakage trap**: any classifier can score ~40% by learning *which 25-second window* a trial came from, with zero visual-stimulus information. Reported accuracy is an artifact of train/test sharing a block, not evidence of image decoding. It is the canonical cautionary tale, not a dataset. **Design rule we inherit:** only trust EEG→image sets with **interleaved/randomized trials** (THINGS-EEG1/2, THINGS-MEG, NOD all use randomized RSVP/viewing — clean) and always verify our own splits never let train and test share a temporal block.
+
+### D. Shared-stimulus map (LOAD-BEARING for cross-dataset train-on-one/test-on-other)
+Two clean shared-stimulus groups enable cross-dataset / cross-modality transfer:
+
+**GROUP A — THINGS family** (shared *concept set*; 200-concept test = shared *exemplar images*):
+- `ds003825` **THINGS-EEG1** — all 1,854 concepts × 12 exemplars (22,248 imgs), 50 subj, EEG.
+- `osf.io/3jk45` **THINGS-EEG2** — 1,654 train concepts × 10 + 200 test concepts × 1 (16,740 imgs), 10 subj, EEG.
+- `ds004212` **THINGS-MEG** — all 1,854 concepts × 12 + 200 test, 4 subj, MEG.
+- **Overlap:** all three draw from the SAME THINGS DB (1,854 concepts / 26,107 images). EEG1 ∩ MEG = **full 1,854-concept overlap** (both use 12 exemplars/concept — likely the same exemplar files, same pool; exact file-identity `[unverified]`). EEG2's 1,654+200 concepts ⊂ 1,854. The **200-concept, single-exemplar test set is the cleanest bridge**: documented as *identical images* across EEG2 and MEG; EEG1 also holds a 200-concept test (same-200 identity `[unverified]`). → supports **cross-dataset (EEG1↔EEG2)** and **cross-modality (EEG↔MEG)** zero-shot retrieval on shared THINGS stimuli. This is the natural home for our honest cross-subject/cross-dataset generalization-gap contribution.
+
+**GROUP B — NOD family** (shared *exact image files* — strongest form of sharing):
+- `ds005811` **NOD-EEG** (19 subj) · `ds005810` **NOD-MEG** (31 subj) · `ds004496` **NOD-fMRI** (30 subj).
+- **Overlap:** the paper states the ~57,000 ImageNet stimuli "used for MEG and EEG are **identical**" (same `synsetID_imageID.JPEG` files). → the cleanest same-image cross-modality set available, exact-file-matched (better than THINGS for image-level pairing).
+
+**NOT a clean shared group (ImageNet-derived but different subsets — no direct image-level transfer):** Spampinato-2017 (40 cls/2k imgs, and a leakage trap anyway), EEG-ImageNet-2024 (4k imgs, ImageNet-21k), NOD (ILSVRC2012 57k) — all ImageNet but disjoint subsets. **Possible minor group:** `ds004018` and `ds005106` are both "200-object" RSVP sets from the Carlson/Grootswagers line — may share the 200-object stimulus set `[unverified]`; worth a file-level check if a second small object set is wanted. Food sets (`ds007012`, `ds008092`, `ds004995`) use different image pools — not confirmed shared.
+
+**Bottom line:** our cross-dataset plan stands and now has a second, stronger option. **THINGS group** = concept-level shared, huge, the field's benchmark (EEG1↔EEG2↔MEG). **NOD group** = exact-image shared across EEG/MEG/fMRI — use it for a clean cross-*modality* generalization test if we want image-level (not just concept-level) pairing.
+
+### Extension sources
+- THINGS-MEG (ds004212) / THINGS-data: https://elifesciences.org/articles/82580 · https://openneuro.org/datasets/ds004212
+- THINGS-EEG1 (ds003825, Grootswagers 2022): https://www.nature.com/articles/s41597-021-01102-7 · THINGS-EEG2 (Gifford 2022): https://doi.org/10.1016/j.neuroimage.2022.119754
+- NOD (Zhang 2025, Sci Data 12:857): https://pmc.ncbi.nlm.nih.gov/articles/PMC12102372/ · NOD-EEG https://openneuro.org/datasets/ds005811 · NOD-MEG https://openneuro.org/datasets/ds005810
+- EEG-ImageNet 2024: https://arxiv.org/html/2406.07151v1 · https://github.com/Promise-Z5Q2SQ/EEG-ImageNet-Dataset · MSS 32-subj: https://www.nature.com/articles/s41597-025-04843-x
+- ds004995 food: https://openneuro.org/datasets/ds004995 · ds002814: https://www.biorxiv.org/content/10.1101/2022.05.12.491595v1 · ds004306: https://pmc.ncbi.nlm.nih.gov/articles/PMC10272218/ · ds005274 imagery: https://www.nature.com/articles/s41597-025-06512-5
+- EEG2Video/SEED-DV: https://github.com/XuanhaoLiu/EEG2Video · CineBrain: https://arxiv.org/abs/2503.06940 · Dream2Image: https://arxiv.org/abs/2510.06252 · EgoBrain: https://huggingface.co/datasets/ut-vision/EgoBrain
+- Spampinato 2017: https://arxiv.org/abs/1609.00344 · Li et al. 2020 block-design rebuttal: https://arxiv.org/abs/1812.07697
