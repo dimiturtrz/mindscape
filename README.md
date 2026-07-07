@@ -427,10 +427,16 @@ Competent on a public benchmark, **not** a finished system:
 - **Not a device.** Public research data only; no real-time online BCI, no clinical or prospective validation.
 
 ## Data
-**BCI Competition IV-2a** — 9 subjects, 4-class motor imagery (left/right hand, feet, tongue), 22 EEG
-channels @ 250 Hz, 2 sessions × 288 trials — pulled via **[MOABB](https://moabb.neurotechx.com/)** and
-kept **outside the repo** (size + licensing). Per-dataset adapters remap to a canonical schema and cache
-epochs to a recipe-keyed store; splits are queries over that cloud. One data root, set once:
+**BCI Competition IV-2a** (motor imagery) — 9 subjects, 4-class (left/right hand, feet, tongue), 22 EEG
+channels @ 250 Hz, 2 sessions × 288 trials — pulled via **[MOABB](https://moabb.neurotechx.com/)**.
+
+**Shin 2017 hybrid EEG+fNIRS** (mental workload) — 26 subjects, **simultaneous** EEG + fNIRS (36 optode
+channels) on an n-back working-memory task (0/2/3-back) — the EEG · fNIRS · fusion half. Not on MOABB; pulled
+direct from **[TU Berlin DepositOnce](https://doi.org/10.14279/depositonce-5830.2)** (`EEG_01-26_MATLAB.zip`
+\+ per-subject `VP<NNN>-NIRS.zip`, GPL-3.0), parsed from the `.mat` by per-modality adapters.
+
+Both kept **outside the repo** (size + licensing). Per-dataset adapters remap each to a canonical schema and
+cache epochs to a recipe-keyed store; splits are queries over that cloud. One data root, set once:
 ```bash
 cp paths.example.yaml paths.yaml      # then: data: <abs path to a data dir outside the repo>
 ```
@@ -487,6 +493,7 @@ learn as I go.
 
 ## References
 - **BCI Competition IV-2a** — Tangermann et al., *Review of the BCI Competition IV*, Front. Neurosci. 2012.
+- **Shin 2017 (hybrid EEG+fNIRS n-back)** — Shin et al., *Open Access Dataset for EEG+NIRS Single-Trial Classification*, IEEE TNSRE 2017 (data: TU Berlin DepositOnce, DOI 10.14279/depositonce-5830.2). CBSI: Cui et al., *A quantitative comparison of NIRS and fMRI*, NeuroImage 2011.
 - **CSP / FBCSP** — Ang et al., *Filter Bank Common Spatial Pattern (FBCSP) in BCI*, IJCNN 2008 / 2012.
 - **EEGNet** — Lawhern et al., *EEGNet: a compact CNN for EEG-based BCIs*, J. Neural Eng. 2018.
 - **ShallowConvNet / Deep4Net** — Schirrmeister et al., *Deep learning with CNNs for EEG decoding*, HBM 2017.
