@@ -112,8 +112,8 @@ footer { color:var(--mut); padding:.5rem var(--pad) 1.6rem; font-size:.8rem; }
 .cam-left{ display:flex; flex-direction:column; gap:14px; }
 .cam-cell,.cam-right{ display:flex; flex-direction:column; align-items:center; gap:4px; }
 .cam-lbl{ font-size:11px; color:#9aa4b2; letter-spacing:.02em; }
-.cam-cell canvas{ background:#0e1116; border-radius:8px; }
-.cam-right canvas{ background:#0e1116; border-radius:10px; }
+.cam-cell canvas{ background:transparent; border-radius:8px; }
+.cam-right canvas{ background:transparent; border-radius:10px; }
 .camera-panel .player{ margin-top:10px; }
 
 /* defensive: a hidden panel must stay hidden (the .panel display:flex would otherwise override [hidden]) */
@@ -131,7 +131,7 @@ footer { color:var(--mut); padding:.5rem var(--pad) 1.6rem; font-size:.8rem; }
 .camera-panel{ grid-column:auto !important; }
 .cam-stack{ display:flex; flex-direction:row; gap:10px; align-items:center; justify-content:center; flex:1; min-height:0; }
 .cam-cell{ display:flex; flex-direction:column; align-items:center; gap:6px; flex:1 1 0; min-width:0; }
-.cam-cell canvas{ width:100%; max-width:100%; height:auto; aspect-ratio:1/1; background:#0e1116; border-radius:8px; }
+.cam-cell canvas{ width:100%; max-width:100%; height:auto; aspect-ratio:1/1; background:transparent; border-radius:8px; }
 .cam-fused-title{ font-size:.95rem; font-weight:600; margin:0 0 .5rem; color:#c8cfdb; }
 .cam-fused-box{ flex:1; min-height:0; display:flex; align-items:center; justify-content:center; }
-.cam-fused-box canvas{ width:100%; max-width:760px; height:auto; aspect-ratio:1/1; background:#0e1116; border-radius:12px; }
+.cam-fused-box canvas{ width:100%; max-width:760px; height:auto; aspect-ratio:1/1; background:transparent; border-radius:12px; }
