@@ -16,7 +16,20 @@ from __future__ import annotations
 
 import torch
 import torch.nn.functional as F
+from pydantic import BaseModel
 from torch import nn
+
+_POOL_TIMES = 16   # fixed temporal budget the encoder pools down to (keeps proj input shape constant)
+
+
+class NiceConfig(BaseModel):
+    """Encoder hyperparameters. `n_channels`/`n_times` come from the data; the rest are the NICE recipe."""
+    n_channels: int
+    n_times: int
+    embed_dim: int = 512
+    n_temporal_filters: int = 40
+    temporal_kernel: int = 25
+    dropout: float = 0.5
 
 
 class NiceEncoder(nn.Module):
@@ -27,19 +40,20 @@ class NiceEncoder(nn.Module):
     so the encoder stays light and the CLIP target carries the semantic structure.
     """
 
-    def __init__(self, n_channels: int, n_times: int, embed_dim: int = 512,
-                 f_temporal: int = 40, k_temporal: int = 25, p_drop: float = 0.5):
+    def __init__(self, config: NiceConfig):
         super().__init__()
-        self.temporal = nn.Conv2d(1, f_temporal, (1, k_temporal), padding=(0, k_temporal // 2))
-        self.spatial = nn.Conv2d(f_temporal, f_temporal, (n_channels, 1), groups=1)
-        self.bn = nn.BatchNorm2d(f_temporal)
-        self.pool = nn.AdaptiveAvgPool2d((1, 16))          # collapse to a fixed temporal budget
-        self.drop = nn.Dropout(p_drop)
+        n_filters = config.n_temporal_filters
+        self.temporal = nn.Conv2d(1, n_filters, (1, config.temporal_kernel),
+                                  padding=(0, config.temporal_kernel // 2))
+        self.spatial = nn.Conv2d(n_filters, n_filters, (config.n_channels, 1))
+        self.bn = nn.BatchNorm2d(n_filters)
+        self.pool = nn.AdaptiveAvgPool2d((1, _POOL_TIMES))
+        self.drop = nn.Dropout(config.dropout)
         self.proj = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(f_temporal * 16, embed_dim),
+            nn.Linear(n_filters * _POOL_TIMES, config.embed_dim),
             nn.GELU(),
-            nn.Linear(embed_dim, embed_dim),
+            nn.Linear(config.embed_dim, config.embed_dim),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

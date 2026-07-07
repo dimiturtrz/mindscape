@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import torch
 
-from neuroscan.models.nice import NiceEncoder, clip_infonce, retrieval_topk
+from neuroscan.models.nice import NiceConfig, NiceEncoder, clip_infonce, retrieval_topk
 
 
 def test_encoder_shape_and_norm():
-    enc = NiceEncoder(n_channels=63, n_times=250, embed_dim=512).eval()
+    enc = NiceEncoder(NiceConfig(n_channels=63, n_times=250, embed_dim=512)).eval()
     z = enc(torch.randn(8, 63, 250))
     assert z.shape == (8, 512)
     assert torch.allclose(z.norm(dim=-1), torch.ones(8), atol=1e-4)   # L2-normalized

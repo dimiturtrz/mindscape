@@ -141,12 +141,12 @@ def _concept_idx(concept_str: str) -> int:
 
 def _labels_for(split: str) -> tuple[np.ndarray, np.ndarray]:
     """(concept_idx per code, img_file per code) as arrays indexed by code-1, for 'training' | 'test'."""
-    m = _meta()
+    meta = _meta()
     key = "train" if split == "training" else "test"
-    concepts = np.asarray(m[f"{key}_img_concepts"])
-    files = np.asarray(m[f"{key}_img_files"])
-    cidx = np.array([_concept_idx(c) for c in concepts], dtype=np.int64)
-    return cidx, files
+    concepts = np.asarray(meta[f"{key}_img_concepts"])
+    files = np.asarray(meta[f"{key}_img_files"])
+    concept_idx = np.array([_concept_idx(name) for name in concepts], dtype=np.int64)
+    return concept_idx, files
 
 
 # ── epoching ──
@@ -154,10 +154,10 @@ def _labels_for(split: str) -> tuple[np.ndarray, np.ndarray]:
 def _session_epochs(path, split: str, tmin: float, tmax: float, resample: float,
                     fmin: float | None, fmax: float | None):
     """One session .npy -> (X [n,63,t] float32, concept[n], img_file[n]). Stim code -> image via metadata."""
-    d = np.load(path, allow_pickle=True).item()
-    raw = np.asarray(d["raw_eeg_data"])
+    session = np.load(path, allow_pickle=True).item()
+    raw = np.asarray(session["raw_eeg_data"])
     eeg, stim = raw[:_N_EEG], raw[_N_EEG]
-    fs = float(np.asarray(d["sfreq"]))
+    fs = float(np.asarray(session["sfreq"]))
 
     if fmin is not None or fmax is not None:
         from core.data.signal import bandpass
@@ -165,47 +165,65 @@ def _session_epochs(path, split: str, tmin: float, tmax: float, resample: float,
 
     onset = np.where((stim[1:] != 0) & (stim[:-1] == 0))[0] + 1
     codes = stim[onset].astype(int)                                  # 1-based image id
-    cidx_map, files_map = _labels_for(split)
-    valid = (codes >= 1) & (codes <= len(cidx_map))                 # drop target/catch trials out of range
+    concept_by_code, file_by_code = _labels_for(split)
+    valid = (codes >= 1) & (codes <= len(concept_by_code))          # drop target/catch trials out of range
     onset, codes = onset[valid], codes[valid]
 
-    a, b = int(round(tmin * fs)), int(round(tmax * fs))
-    keep = (onset + a >= 0) & (onset + b <= eeg.shape[1])
+    start, stop = int(round(tmin * fs)), int(round(tmax * fs))
+    keep = (onset + start >= 0) & (onset + stop <= eeg.shape[1])
     onset, codes = onset[keep], codes[keep]
 
-    X = np.stack([eeg[:, o + a:o + b] for o in onset]).astype(np.float32)   # [n,63,t]
+    epochs = np.stack([eeg[:, at + start:at + stop] for at in onset]).astype(np.float32)   # [n,63,t]
     # per-channel z-score: EEG is in volts (~1e-5), which leaves BatchNorm's running variance
     # ill-conditioned -> eval-mode embeddings collapse to chance. Standardizing to O(1) fixes it.
-    X = (X - X.mean(axis=2, keepdims=True)) / (X.std(axis=2, keepdims=True) + 1e-7)
+    epochs = (epochs - epochs.mean(axis=2, keepdims=True)) / (epochs.std(axis=2, keepdims=True) + 1e-7)
     if resample and resample != fs:
-        from scipy.signal import resample as _rs
-        X = _rs(X, int(round(X.shape[2] * resample / fs)), axis=2).astype(np.float32)
-    return X, cidx_map[codes - 1], files_map[codes - 1]
+        from scipy.signal import resample as _resample
+        epochs = _resample(epochs, int(round(epochs.shape[2] * resample / fs)), axis=2).astype(np.float32)
+    return epochs, concept_by_code[codes - 1], file_by_code[codes - 1]
 
 
 def get_epochs(subjects_: list[int] | None = None, *, split: str = "training",
                tmin: float = 0.0, tmax: float = 1.0, resample: float = 250.0,
-               fmin: float | None = None, fmax: float | None = None
+               fmin: float | None = None, fmax: float | None = None, n_jobs: int = 1
                ) -> tuple[np.ndarray, np.ndarray, np.ndarray, pl.DataFrame]:
     """Epoch THINGS-EEG2 for the EEG->image task (our own preprocessing off the raw).
 
-    Returns (X [n,63,t] float32, concept [n] int in [0,1653]/[0,199], img_file [n] str, meta {subject,session}).
-    `split` = 'training' (16,540 concepts-images) or 'test' (200 held-out concepts). The concept index matches
+    Returns (eeg [n,63,t] float32, concept [n] int in [0,1653]/[0,199], img_file [n] str, meta {subject,session}).
+    `split` = 'training' (16,540 concept-images) or 'test' (200 held-out concepts). The concept index matches
     `neuroscan/tasks/visual/clip_targets.py` (sorted concept order), so retrieval lines up.
+
+    `n_jobs > 1` loads sessions concurrently on a THREAD pool — each session is a ~2.7 GB `.npy` load +
+    band-pass + resample, all of which release the GIL, so threads overlap the disk read with the CPU work
+    without pickling gigabytes across processes. Order is preserved (reproducible). Memory scales with
+    n_jobs (each in-flight session holds its raw array), so keep it modest.
     """
-    idx = _index()
-    subs = subjects_ or sorted(idx)
-    Xs, cs, fsl, subj, sess = [], [], [], [], []
-    for sub in subs:
-        for spath in sorted(idx[sub].glob(f"ses-*/raw_eeg_{split}.npy")):
-            X, c, f = _session_epochs(spath, split, tmin, tmax, resample, fmin, fmax)
-            Xs.append(X); cs.append(c); fsl.append(f)
-            n = len(c)
-            subj += [str(sub)] * n
-            sess += [spath.parent.name] * n
-    X = np.concatenate(Xs).astype(np.float32)
-    return (X, np.concatenate(cs), np.concatenate(fsl),
-            pl.DataFrame({"subject": subj, "session": sess}))
+    index = _index()
+    chosen = subjects_ or sorted(index)
+    work = [(subject, path) for subject in chosen
+            for path in sorted(index[subject].glob(f"ses-*/raw_eeg_{split}.npy"))]
+
+    def _epoch(item):
+        subject, path = item
+        return subject, path, _session_epochs(path, split, tmin, tmax, resample, fmin, fmax)
+
+    if n_jobs and n_jobs > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=n_jobs) as pool:
+            results = list(pool.map(_epoch, work))          # map preserves input order
+    else:
+        results = [_epoch(item) for item in work]
+
+    eeg_parts, concept_parts, file_parts, subject_col, session_col = [], [], [], [], []
+    for subject, path, (eeg, concept, files) in results:
+        eeg_parts.append(eeg)
+        concept_parts.append(concept)
+        file_parts.append(files)
+        subject_col += [str(subject)] * len(concept)
+        session_col += [path.parent.name] * len(concept)
+    return (np.concatenate(eeg_parts).astype(np.float32),
+            np.concatenate(concept_parts), np.concatenate(file_parts),
+            pl.DataFrame({"subject": subject_col, "session": session_col}))
 
 
 # NOTE: not registered in core/data/registry.py — the EEG->image retrieval paradigm has its own
