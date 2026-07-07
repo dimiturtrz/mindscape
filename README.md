@@ -46,16 +46,17 @@ graded-workload chapter is closed as a measured physiological ceiling, not left 
 **[docs/PLAN.md](docs/PLAN.md)**.
 
 ## See the signal the decoder reads — [neuroviz](neuroviz/)
-![neuroviz — fNIRS n-back workload: the HbO hemodynamic response animating over prefrontal cortex, HbO/HbR waveforms, and the decoder's ground-truth-vs-prediction readout](neuroviz/docs/media/demo.webp)
+![neuroviz — EEG+fNIRS fusion brain-camera (Shin n-back): the fused surface-video — raw EEG band-power + the fNIRS CBSI neural map, and the locality-gated joint firing pattern, with the hemodynamic lag derived per subject](neuroviz/docs/media/demo_fusion.webp)
 
 One dependency-free viewer, organized **task → modality** (matching the two tasks below). **Motor imagery**
 → EEG (mu/beta ERD topomaps + CSP/Riemann patterns). **Mental workload** → three approaches on the same
 n-back task: **EEG** (frontal-theta / parietal-alpha band-power topomaps), **fNIRS** (the HbO/HbR hemodynamic
-response building over the trial), and **Fusion** — a per-block **complementarity map** colouring every
-held-out block by which modality got it right, so you see re-centered EEG (0.58) and fNIRS (0.47) failing on
-*different* blocks (oracle **0.75** vs best-single 0.58) while output-space fusion cashes only a sliver. Each
-view shows the signal a decoder consumes *and whether it got it right* — with the robust cross-subject score.
-→ **[neuroviz/](neuroviz/)**
+response building over the trial), and **Fusion** — the EEG+fNIRS **brain-camera**: the fused surface-video
+(raw EEG band-power + the fNIRS CBSI neural map → a locality-gated **joint firing pattern**; hemodynamic lag
+derived per subject, blood read forward to align to the EEG event). The single-modality views show the signal
+a decoder consumes *and whether it got it right* (robust cross-subject score); the fusion view shows the
+**physics** — honestly a visualization, not a decode win (graded workload sits at a physiological + redundancy
+ceiling; the measured null is below). → **[neuroviz/](neuroviz/)**
 
 ## Task · Motor imagery (BCI-2a, EEG) — the generalization gap, measured
 The science layer is **signal → preprocess → decode → evaluate**, and the *evaluation regime* is the
@@ -452,8 +453,8 @@ uv run python -m neuroscan.tasks.workload.run_fusion --exp nback_fusion
 # a deep decoder, GPU (ad-hoc override of a base config — broadband recipe the nets prefer):
 uv run python -m neuroscan.tasks.run --exp mi_csp_within \
   --set method=atcnet --set recipe.resample=250 --set recipe.fmin=4 --set recipe.fmax=40
-# the neuroviz demo (EEG / fNIRS / Fusion complementarity view):
-uv run python -m neuroviz.export --subject 1 && uv run python -m neuroviz.export_fusion \
+# the neuroviz demo (EEG / fNIRS / Fusion brain-camera view):
+uv run python -m neuroviz.export --subject 1 && uv run python -m neuroviz.fusion.export --subject 1 \
   && python -m http.server 8000 -d neuroviz/web
 uv run pytest -q
 ```
