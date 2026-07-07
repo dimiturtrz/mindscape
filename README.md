@@ -62,6 +62,28 @@ a decoder consumes *and whether it got it right* (robust cross-subject score); t
 **physics** — honestly a visualization, not (yet) a decode win (the graded 2-vs-3 contrast is at a
 physiological ceiling; what fusion does and doesn't capture is measured below). → **[neuroviz/](neuroviz/)**
 
+## Mapping the field — a working frame for where these tasks sit
+This is my attempt to organize non-invasive decoding as I learn it — a working frame, not a settled taxonomy;
+others carve it differently. It reads as a ladder ordered by **what** you decode off the signal, where value
+seems to climb and tractability to fall as you go up — because the higher rungs lean **endogenous**
+(self-generated, weak, un-timed) and the lower ones **exogenous** (stimulus-driven, strong, time-locked,
+averageable). The rough principle I keep coming back to: *a decoder works to the degree the signal is driven
+by something known.* Corrections welcome.
+
+| axis | what you decode | output | example paradigms | tractability |
+|---|---|---|---|---|
+| **Control** | intent to *act* | commands (move, select) | motor imagery, P300, SSVEP | works, but low-bandwidth + often gaze-bound |
+| **State** | cognitive / affective *state* | monitoring (load, drowsiness) | mental workload / n-back — *passive BCI* | per-subject seems doable; graded levels appear to hit physiological ceilings |
+| **Perception** | the *stimulus* being perceived | reconstruct what you see / read | image viewing, reading | looks more tractable — exogenous |
+| **Communication** | inner *meaning / intent* | language, imagined content | imagined speech / text | the frontier — mostly endogenous, seems hard |
+
+**mindscape works up this ladder.** The two tasks below sit on the bottom two rungs — **motor imagery
+= control**, **n-back = state** — both measured cross-subject, no leaderboard cherry-picking. Next I want to
+try **perception** (EEG→image, where the signal is genuinely present and the field seems to under-report its
+cross-subject gap), with **communication** (EEG→text) as a follow-on frontier-probe — decoding the *reading*
+phase where signal is real, treating imagined "telepathy" as a probe, not a promise. That intended climb →
+**[docs/PLAN.md](docs/PLAN.md)**.
+
 ## Task · Motor imagery (BCI-2a, EEG) — the generalization gap, measured
 The science layer is **signal → preprocess → decode → evaluate**, and the *evaluation regime* is the
 point. Every decoder is one `(fit_fn, score_fn)` pair fed through a single harness; the **regime** —

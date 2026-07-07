@@ -51,14 +51,15 @@ EASY  P300/ERP detection ─ binary, big robust signal, Riemannian baseline near
   │   Motor imagery ────── 2–4 class, MOABB-standard, EEGNet ~4 lines   ← STAGE 0
   │   Affective/state ──── classification, longer windows, DEAP/SEED/Sleep-EDF
   │   Auditory attention ─ binary but needs stimulus reconstruction
-  │   Visual/semantic ──── embedding regression, zero-shot, OOD-fragile, MEG helps  ← STAGE 1
-HARD  Speech/language ──── seq2seq, MEG-hungry, SOTA still CER 32%      ← STAGE 1 / Lys thesis
+  │   Visual/semantic ──── embedding regression, zero-shot, OOD-fragile, MEG helps  ← STAGE 1 (perception)
+HARD  Speech/language ──── seq2seq, MEG-hungry, SOTA still CER 32%      ← STAGE 1 (comms)
 ```
 
-Difficulty driver = **output cardinality + cross-subject transfer**, not the paradigm. Binary same-subject = easy;
-open-vocab seq2seq cross-subject = frontier. MI is the right Stage 0: hard enough to be non-trivial (4-class,
-real OOD gap to measure) but standardized enough to be cheap (MOABB). P300/SSVEP are *too* solved — nothing
-honest left to contribute.
+The difficulty driver is **output cardinality × cross-subject transfer**, not the paradigm label: binary
+within-subject is easy; open-vocabulary seq2seq across subjects is the frontier. Those two axes line up
+cleanly — **perception** (view / read, stimulus-driven, decodable) sits below **communication** (produce /
+imagine, endogenous, hard). MI is the right Stage 0: non-trivial (4-class, a real OOD gap to measure) yet
+standardized and cheap (MOABB). P300/SSVEP are *too* solved — little honest headroom left to contribute.
 
 ---
 
@@ -90,55 +91,63 @@ THINGS/MEG-MASC are BIDS → small custom adapter, handled by the `paths.yaml` o
   datasets/paradigms. Within-session mean acc ± std. Founded Barachant/Jayaram. *Stage 0 reproduce target.*
 
 **Tier 2 — annual competitions (the literal DCASE-analogue: time-boxed, leaderboard, paper):**
-- **NeurIPS 2025 EEG Foundation Challenge** — cross-task → cross-subject decoding + psychopathology
-  prediction. 128-ch, **3000+ subjects, multi-TB**. >1000 teams, >8000 submissions (winner 0.887).
-  *Its task IS mindscape's thesis (cross-subject generalization) — externally validated.*
-- **PNPL Competition 2025** — speech detection + phoneme classification on **LibriBrain**. The speech-decoding
-  DCASE; maps to Lys thesis. Gives a baseline + harness.
-- **BCI Competition I–IV** — the OG (BCI IV-2a originates here); like early DCASE.
+- **NeurIPS 2025 EEG Foundation Challenge** — the marquee event: cross-task → cross-subject decoding plus
+  psychopathology prediction, 128-ch, **3000+ subjects, multi-TB**, >1000 teams / >8000 submissions
+  (winner 0.887). *Its task IS mindscape's thesis — cross-subject generalization, externally validated.*
+- **PNPL Competition 2025** — speech detection + phoneme classification on **LibriBrain**. The
+  speech-decoding analogue of DCASE — a ready-made baseline + harness for the communication axis.
+- **BCI Competition I–IV** — the original series (BCI IV-2a originates here); the field's early-DCASE.
 
 **Tier 3 — foundation-model benchmarks (emerging):**
-- **Brain4FMs**, **Neuroprobe** — benchmark EEG foundation models. Field trending to pretrain-once-decode-many.
+- **Brain4FMs**, **Neuroprobe** — benchmarks for EEG foundation models; the field is trending toward
+  pretrain-once, decode-many.
 
-**Implication:** field consensus (NeurIPS 2025) names **cross-task + cross-subject generalization** as THE open
-problem — mindscape's honest-eval angle verbatim. Cite it. Optionally *enter* EEG2025/PNPL later = strongest
-possible builder-who-ships signal for Lys (live leaderboard).
+**Implication:** the field's own consensus (NeurIPS 2025) names **cross-task + cross-subject generalization**
+as THE open problem — which is mindscape's honest-eval angle almost verbatim, so cite it as external
+validation. Entering EEG2025 / PNPL later is optional upside (a live public leaderboard is a strong ship-it
+signal), but the contribution stands on its own without a leaderboard entry.
 
 ---
 
 ## 5. SOTA landscape (the ceiling to quarantine against — DON'T chase)
 
 **MI, BCI IV-2a** (4-class, chance 25%):
-- Within-subject SOTA ~**88.5%** (two-stage transformer); transformer pack 83–88%; EEGEncoder 86.5%.
-- Cross-subject SOTA ~**74%** (EEGEncoder) — the hard wall; ~14 pt gap persists even at SOTA.
-- Reproduce baseline (EEGNet/ShallowConvNet) ~**67–74% within** — correct to sit ~15 pt under SOTA. SOTA = ceiling, not target.
+- Within-subject SOTA ~**88.5%** (two-stage transformer); the transformer pack lands 83–88%; EEGEncoder 86.5%.
+- Cross-subject SOTA ~**74%** (EEGEncoder) — the hard wall: a ~14 pt gap persists even at SOTA.
+- Baseline to reproduce (EEGNet / ShallowConvNet) ~**67–74% within-subject** — correctly ~15 pt under SOTA;
+  SOTA is the ceiling, not the target.
 
-**Non-invasive brain-to-text** (Lys thesis):
+**Non-invasive brain-to-text decoding** (the communication frontier — the hardest rung):
 - **Meta Brain2Qwerty (Feb 2025) = SOTA.** MEG, end-to-end DL, 9 subj, 22k sentences. **CER 32% avg, 19% best**;
-  EEG far worse (CER 67%); word acc ~61% (v2) vs ~8% prior. **MEG ≫ EEG** for speech — modality gap is large/published.
-- North star to cite, not compete with.
+  EEG far worse (CER 67%); word acc ~61% (v2) vs ~8% prior. The **MEG ≫ EEG** speech gap is large and
+  published — a standing caution against expecting brain-to-text on consumer EEG.
+- A north star to cite for scale + ceiling, not a target to compete with here.
 
 ---
 
-## 6. Build order (mapped to role ROI — from `docs/PLAN.local.md`)
+## 6. Build order (capability ROI)
 
-1. **Stage 0 — MI on BCI IV-2a via MOABB + Braindecode + verified eval harness.**
-   Lowest effort, proves the spine, **triggers public flip** → makes the Lys application real (closes the
-   "no BCI project" gap) + backs Beacon Biosignals. First commit = `paths.yaml` + MOABB adapter + harness
-   running on 2a (within-subj acc + cross-subj acc + ECE + per-subject diagnostics). **Do first.**
-2. **Stage 0.5 — prove harness generalizes.** Point the *same* harness at a 2nd MOABB MI set
-   (PhysioNetMI / Schirrmeister2017). Runs on data it wasn't written for → harness is real. Cheap credibility.
-3. **Stage 1 — speech/semantic + honest OOD/calibration.** THINGS-EEG2 first (EEG, cheaper than MEG), then
-   MEG-MASC / LibriBrain for speech. Only new code = BIDS adapter; eval harness already exists. Strongest
-   Lys-specific signal (their thesis = communication). The honest-eval headline number.
-4. **Stage 2 — efficient on-device decoder.** Quantize/distill the Stage-0 decoder, ONNX → edge runtime,
-   latency/size/(power) vs full precision, parity-gated. The differentiator nobody else in the pool brings;
-   ties to Lys's bandwidth/efficiency framing.
+1. **Stage 0 — MI on BCI IV-2a via MOABB + Braindecode + a verified eval harness.**
+   Lowest effort, highest return: it proves the whole spine end-to-end and closes the "no BCI project" gap
+   with a first credible decoding result on public data. First commit = `paths.yaml` + a MOABB adapter +
+   the harness running on 2a (within-subject acc + cross-subject acc + ECE + per-subject diagnostics).
+   **Do this first.**
+2. **Stage 0.5 — prove the harness generalizes.** Point the *same* harness at a 2nd MOABB MI set
+   (PhysioNetMI / Schirrmeister2017). If it runs on data it was never written for, the harness is real —
+   cheap, high-signal credibility.
+3. **Stage 1 — semantic/visual, then speech, with honest OOD + calibration.** THINGS-EEG2 first (EEG, far
+   cheaper than MEG), then MEG-MASC / LibriBrain for speech. The only new code is a BIDS adapter; the eval
+   harness already exists. This is the **communication axis** (brain-to-text = the frontier), where the
+   honest cross-subject headline number carries the most weight.
+4. **Stage 2 — an efficient on-device decoder.** Quantize / distill the Stage-0 decoder, export to ONNX → an
+   edge runtime, and report latency / size / (power) against full precision, parity-gated. The differentiator
+   most decoding work skips — the on-device bandwidth + efficiency angle.
 
 ### The one real decision: MOABB-first vs roll-your-own loader
-**MOABB-first.** Free verified ceiling (honesty rule #1), free cross-subject splits (headline number, no
-split-leakage risk), less plumbing → faster public flip. Risk: don't over-fit the harness to MOABB's API —
-keep the eval layer taking plain arrays, decoupled, so Stage 1 BIDS data feeds it untouched.
+**MOABB-first.** It buys a free verified ceiling (honesty rule #1) and free cross-subject splits (the headline
+number, with no split-leakage risk), and less plumbing means a working spine sooner. The one risk: don't
+over-fit the harness to MOABB's API — keep the eval layer taking plain arrays, decoupled, so Stage 1 BIDS
+data feeds it untouched.
 
 ---
 
