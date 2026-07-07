@@ -64,28 +64,49 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--train", type=int, nargs="+", default=[1], help="training subject id(s)")
     ap.add_argument("--test", type=int, default=1, help="held-out test subject id")
-    ap.add_argument("--epochs", type=int, default=20)
-    ap.add_argument("--batch", type=int, default=1024)
+    ap.add_argument("--epochs", type=int, default=40)
+    ap.add_argument("--batch", type=int, default=512,
+                    help="<=1024; batch>=2048 trips a cuDNN illegal-access on this conv shape (Blackwell/cu130)")
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--resample", type=float, default=250.0)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--patience", type=int, default=8, help="early-stop patience on val-top1 (epochs)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     regime = "within" if args.train == [args.test] else "cross"
     print(f"regime={regime}  train={args.train}  test={args.test}  device={device}")
 
-    Xtr, _, Ytr = _load(args.train, "training", args.resample)
+    Xtr, ctr, Ytr = _load(args.train, "training", args.resample)
     Xte, cte, _ = _load([args.test], "test", args.resample)
     protos = ct.concept_prototypes("test")
     print(f"train {Xtr.shape} -> CLIP {Ytr.shape} | test {Xte.shape} ({int(cte.max())+1} concepts)")
 
+    # Leak-free early stopping: hold out 10% of TRAINING concepts as a validation retrieval set. Model
+    # selection (which epoch to keep) reads ONLY this val set — the test subject/concepts are never used to
+    # pick the checkpoint, so the reported test number isn't inflated by selecting the best test epoch.
+    rng = np.random.default_rng(args.seed)
+    concepts = np.unique(ctr)
+    val_set = set(rng.choice(concepts, max(1, len(concepts) // 10), replace=False).tolist())
+    vmask = np.array([c in val_set for c in ctr])
+    val_list = sorted(val_set)
+    c2i = {c: i for i, c in enumerate(val_list)}
+    vproto = np.stack([Ytr[ctr == c].mean(0) for c in val_list]).astype(np.float32)
+    vproto /= (np.linalg.norm(vproto, axis=1, keepdims=True) + 1e-8)
+    Xval, cval = Xtr[vmask], np.array([c2i[c] for c in ctr[vmask]])
+    Xtr_f, Ytr_f = Xtr[~vmask], Ytr[~vmask]
+    print(f"early-stop val: {len(val_list)} held-out train concepts, {int(vmask.sum())} epochs")
+
     enc = NiceEncoder(Xtr.shape[1], Xtr.shape[2], embed_dim=Ytr.shape[1]).to(device)
     logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
     opt = torch.optim.AdamW([*enc.parameters(), logit_scale], lr=args.lr, weight_decay=1e-4)
-    dl = DataLoader(TensorDataset(torch.tensor(Xtr), torch.tensor(Ytr)),
+    dl = DataLoader(TensorDataset(torch.tensor(Xtr_f), torch.tensor(Ytr_f)),
                     batch_size=args.batch, shuffle=True, drop_last=True)
 
+    best_val, best_state, best_ep, since = -1.0, None, -1, 0
     for ep in range(args.epochs):
         enc.train()
         tot = 0.0
@@ -96,14 +117,25 @@ def main():
             loss.backward()
             opt.step()
             tot += loss.item()
+        val = evaluate(enc, Xval, cval, vproto, device)["single_trial"][1]     # selection signal (val only)
+        if val > best_val:
+            best_val, best_ep, since = val, ep, 0
+            best_state = {k: v.detach().cpu().clone() for k, v in enc.state_dict().items()}
+        else:
+            since += 1
         if ep % 5 == 0 or ep == args.epochs - 1:
             r = evaluate(enc, Xte, cte, protos, device)
-            print(f"ep {ep:3d}  loss {tot/len(dl):.3f}  "
-                  f"single top1 {r['single_trial'][1]*100:.2f}% top5 {r['single_trial'][5]*100:.2f}%  "
-                  f"avg top1 {r['concept_avg'][1]*100:.2f}% top5 {r['concept_avg'][5]*100:.2f}%")
+            print(f"ep {ep:3d}  loss {tot/len(dl):.3f}  val-top1 {val*100:.2f}%  "
+                  f"test single {r['single_trial'][1]*100:.2f}%/{r['single_trial'][5]*100:.2f}%  "
+                  f"avg {r['concept_avg'][1]*100:.2f}%/{r['concept_avg'][5]*100:.2f}%")
+        if since >= args.patience:
+            print(f"early stop at ep {ep} (best val = ep {best_ep})")
+            break
 
+    enc.load_state_dict(best_state)                            # report TEST at the best-VAL checkpoint
     r = evaluate(enc, Xte, cte, protos, device)
-    result = {"regime": regime, "train": args.train, "test": args.test, "epochs": args.epochs,
+    result = {"regime": regime, "train": args.train, "test": args.test,
+              "best_val_epoch": best_ep, "val_top1": best_val, "epochs_run": ep + 1,
               "chance_top1": 1 / (int(cte.max()) + 1), **r}
     print(json.dumps(result, indent=2))
     if args.out:
