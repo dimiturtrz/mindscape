@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "fvcore"]   # fvcore: params + FLOPs profiling (neuroscan/models/profile.py)
+dev = ["pytest", "pytest-cov", "fvcore"]   # fvcore: params + FLOPs profiling (neuroscan/models/profile.py)
 export = ["onnx", "onnxruntime", "onnxscript"]   # ONNX export + parity check (Stage 2; core/export_onnx.py)
 data = ["osfclient", "openneuro-py"]   # dataset fetch (Stage-3 EEG->image: OSF / OpenNeuro); not a runtime dep
 visual = ["open-clip-torch"]           # CLIP image embeddings = the EEG->image retrieval target (Stage-3 NICE baseline)
@@ -49,6 +49,79 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "PLR2004", "FBT"]   # asserts, magic literals, bool args are fine in tests
 "__init__.py" = ["F401"]                  # re-export facades
+
+# Vulture: dead-code (functions/classes/attrs) — the axis ruff can't see. Scans core+neuroscan+baselines
+# ONLY (NOT tests): a prod symbol referenced solely by a test surfaces as dead here instead of being masked
+# by its test fan-in (the trap that fools both vulture and coverage). CI runs two tiers — conf>=80 blocks
+# (near-certain: unreachable, unused locals; currently clean), conf>=60 warns (dead funcs, eats
+# entry-point/no-fan-in FPs). ignore_names/decorators kill the pydantic FPs (a ClassVar `model_config` +
+# validator/serializer methods look unused but are framework-called — mindscape has many BaseModel configs).
+[tool.vulture]
+paths = ["core", "neuroscan", "baselines"]
+exclude = ["neuroviz", "runs", "mlruns"]
+min_confidence = 60
+ignore_names = ["model_config"]
+ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
+
+# Coverage (pytest-cov). Denominator is LIBRARY LOGIC, not dependency glue: we test our input/output logic,
+# NOT the filesystem, mlflow, libs, downloads, or GPU training. So `omit` drops the dependency/entrypoint
+# SHELLS — CLI runners (load->fit->record orchestration), torch models + trainers (device+data), data
+# adapters (OSF/OpenNeuro download, disk read), onnx/CLIP glue, mlflow tracking. Honesty rule: never omit a
+# module to DODGE pure logic — extract the core and test it (e.g. `_eval.cv_score`, `combine`, `base`), then
+# omit the shell. Logic files stay IN; low coverage there is honest signal to close (bd mindscape-y63
+# coverage-ratchet), not noise to hide. The logic cores under `tasks/` are now extracted + tested, so the
+# gate is ENFORCED: CI blocks below 80% (logic %) via `coverage report --fail-under=80` — a regression
+# guard well under the current ~92%, not the target (ratchet the floor up deliberately as coverage settles);
+# the advisory report step stays for the per-file missing-line view.
+[tool.coverage.run]
+source = ["core", "neuroscan", "baselines"]
+omit = [
+    # top-level CLI entrypoints (argparse + dispatch)
+    "neuroscan/tasks/run.py", "neuroscan/tasks/reproduce_all.py",
+    "neuroscan/tasks/motor_imagery/reproduce_atcnet.py",
+    "neuroscan/tasks/motor_imagery/align.py",   # MI transfer RUNNER (its logic is baselines/eeg/transfer.py, 100% tested)
+    # dependency glue: onnx quantize / CLIP download / mlflow tracking / ONNX export
+    "neuroscan/tasks/motor_imagery/quantize.py", "neuroscan/tasks/visual/clip_targets.py",
+    "neuroscan/tracking.py",
+    "core/export_onnx.py",   # ONNX export (onnx dep; trained-decoder glue)
+    # interface / registry maps (no logic)
+    "core/decoder.py",   # typing.Protocol decoder contract (structural interface, no body)
+    "core/data/registry.py",   # top-level dataset registry map (sibling core/data/*/registry.py already omitted)
+    # GPU training entrypoints + torch models/trainers (device + data, not logic)
+    "neuroscan/tasks/visual/train_nice.py", "neuroscan/models/decoders.py", "neuroscan/models/eegnet.py",
+    "neuroscan/models/profile.py",   # fvcore params+FLOPs (model on device)
+    "neuroscan/tasks/workload/feature_importance/optuna_search.py",   # Optuna study runner (entrypoint)
+    "neuroscan/tasks/workload/feature_importance/differentiable.py",  # torch/GPU differentiable feature-selection runner
+    "baselines/fusion/gate.py", "baselines/fusion/spatiotemporal.py", "core/data/eeg/braindecode_pre.py",
+    # data adapters: filesystem read / OSF+OpenNeuro download
+    "core/data/*/registry.py", "core/data/eeg/things_eeg2.py", "core/data/fnirs/shin2017.py",
+    "core/data/eeg/shin2017_nback_eeg.py",   # BBCI .mat disk read (its pure epoching lives in core.data.signal)
+    "core/features/fnirs/montage.py",   # fnirs_positions loads .mat (disk); pure _to_unit_disk tested in features/eeg/montage
+    # workload/fusion runners: load -> fit -> record orchestration (their logic lives in combine/base/_eval,
+    # and the per-subject z-score in core.features.zscore_per_subject)
+    "neuroscan/tasks/workload/run_fnirs.py", "neuroscan/tasks/workload/run_fusion.py",
+    "neuroscan/tasks/workload/fusion_gate.py", "neuroscan/tasks/workload/calibration_ablation.py",
+    "neuroscan/tasks/workload/fusion_camera_eval.py",
+    "neuroscan/tasks/workload/fusion_riemann_eval.py", "neuroscan/tasks/workload/fnirs_windowed_eval.py",
+    "neuroscan/tasks/workload/fnirs_glm_eval.py", "neuroscan/tasks/workload/fnirs_clean_ablation.py",
+    "neuroscan/tasks/workload/coupling_probe.py", "neuroscan/tasks/workload/workload_confusion.py",
+    "neuroscan/tasks/workload/repro_benchnirs.py",
+    "neuroscan/tasks/workload/feature_importance/recipes.py",   # fixed-recipe CV RUNNER (pure _cv logic tested; rest is store.load/disk record)
+]
+
+# Coverage floor is ENFORCED at 80% (logic %) in CI (coverage report --fail-under=80) — regression guard
+# under the current ~92%. Ratchet up deliberately as coverage settles higher.
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "^\\s*\\.\\.\\.$",
+    "@(abc\\.)?abstractmethod",
+]
 
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there so uv resolves the cu130 wheel
 # (RTX 5090) instead of the CPU build. `explicit` = only packages pinned in [tool.uv.sources] use it.

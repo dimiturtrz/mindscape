@@ -35,7 +35,7 @@ from baselines.fusion.gate import GateConfig, GatedFusion
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
-from core.features import amplitude_features, band_powers
+from core.features import amplitude_features, band_powers, zscore_per_subject
 from neuroscan.evaluation import metrics, results
 
 logger = logging.getLogger(__name__)
@@ -62,19 +62,6 @@ def _load_features():
     return Fe, Ff, ye.astype(np.int64), groups
 
 
-def _zscore_per_subject(F, groups):
-    """Standardize each feature within each subject (its own mean/std) — unsupervised, so it applies to a
-    held-out test subject too. Removes the subject-specific offset that sinks cross-subject band-power."""
-    out = np.empty_like(F)
-    for subject in np.unique(groups):
-        mask = groups == subject
-        mu, sd = F[mask].mean(0), F[mask].std(0)
-        out[mask] = (F[mask] - mu) / (sd + 1e-6)
-    return out
-
-
-
-
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     for _n in ("mne", "moabb", "braindecode"):
@@ -86,7 +73,7 @@ def main():
     args = ap.parse_args()
 
     Fe, Ff, y, groups = _load_features()
-    Fe, Ff = _zscore_per_subject(Fe, groups), _zscore_per_subject(Ff, groups)
+    Fe, Ff = zscore_per_subject(Fe, groups), zscore_per_subject(Ff, groups)
     subs = np.array(sorted(set(groups)))
     n_classes = int(y.max()) + 1
     logger.info(f"gated fusion: {len(y)} blocks · {len(subs)} subjects · EEG {Fe.shape[1]}d · fNIRS {Ff.shape[1]}d · "
