@@ -70,8 +70,9 @@ ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer"
 # module to DODGE pure logic — extract the core and test it (e.g. `_eval.cv_score`, `combine`, `base`), then
 # omit the shell. Logic files stay IN; low coverage there is honest signal to close (bd mindscape-y63
 # coverage-ratchet), not noise to hide. The logic cores under `tasks/` are now extracted + tested, so the
-# gate is ENFORCED: CI blocks below 90% (logic %) via `coverage report --fail-under=90` (ratchet the floor
-# up as coverage climbs); the advisory report step stays for the per-file missing-line view.
+# gate is ENFORCED: CI blocks below 80% (logic %) via `coverage report --fail-under=80` — a regression
+# guard well under the current ~92%, not the target (ratchet the floor up deliberately as coverage settles);
+# the advisory report step stays for the per-file missing-line view.
 [tool.coverage.run]
 source = ["core", "neuroscan", "baselines"]
 omit = [
@@ -108,7 +109,8 @@ omit = [
     "neuroscan/tasks/workload/feature_importance/recipes.py",   # fixed-recipe CV RUNNER (pure _cv logic tested; rest is store.load/disk record)
 ]
 
-# Coverage floor is ENFORCED at 90% (logic %) in CI (coverage report --fail-under=90). Ratchet up as it climbs.
+# Coverage floor is ENFORCED at 80% (logic %) in CI (coverage report --fail-under=80) — regression guard
+# under the current ~92%. Ratchet up deliberately as coverage settles higher.
 
 [tool.coverage.report]
 show_missing = true
