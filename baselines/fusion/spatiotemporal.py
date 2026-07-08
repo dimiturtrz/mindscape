@@ -56,7 +56,9 @@ class BrainCameraNet:
                 xb = inputs[idx].to(self.dev_)
                 yb = labels[idx].to(self.dev_)
                 opt.zero_grad()
-                lossf(self.net_(xb), yb).backward()
+                with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(self.dev_.type == "cuda")):
+                    loss = lossf(self.net_(xb), yb)
+                loss.backward()                            # bf16 autocast; no GradScaler needed
                 opt.step()
         return self
 

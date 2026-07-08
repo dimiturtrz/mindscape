@@ -93,8 +93,9 @@ class RetrievalSet:
 def evaluate(encoder, data: RetrievalSet, device, batch: int = _EVAL_BATCH) -> dict:
     """Single-trial + concept-averaged retrieval top-1/5 against a per-concept prototype bank."""
     encoder.eval()
-    embedded = torch.cat([encoder(torch.tensor(data.eeg[i:i + batch]).to(device)).cpu()
-                          for i in range(0, len(data.eeg), batch)])      # [N,512] normalized
+    with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda")):
+        embedded = torch.cat([encoder(torch.tensor(data.eeg[i:i + batch]).to(device)).float().cpu()
+                              for i in range(0, len(data.eeg), batch)])  # [N,512] normalized (back to fp32)
     candidate_bank = torch.tensor(data.candidates)
     labels = torch.tensor(data.concept)
     single = retrieval_topk(embedded, candidate_bank, labels)
@@ -123,21 +124,12 @@ def _val_split(concept: np.ndarray, targets: np.ndarray, seed: int, fraction: fl
     return ~val_mask, val_mask, val_labels, prototypes
 
 
-def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dict:
-    """Fit the encoder (contrastive) with leak-free early stopping; return the test result at the best-val
-    checkpoint. Reusable entry point — `main()` only builds the config and prints/saves this dict."""
-    torch.manual_seed(cfg.seed)
-    np.random.seed(cfg.seed)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    regime = "within" if train_subjects == [test_subject] else "cross"
-    logger.info(f"regime={regime}  train={train_subjects}  test={test_subject}  device={device}")
-
-    train_eeg, train_concept, train_targets = _load_split(train_subjects, "training", cfg.resample)
-    test_eeg, test_concept, _ = _load_split([test_subject], "test", cfg.resample)
-    test_bank = clip_targets.concept_prototypes("test")
-    logger.info(f"train {train_eeg.shape} -> CLIP {train_targets.shape} | "
-          f"test {test_eeg.shape} ({int(test_concept.max())+1} concepts)")
-
+def train_encoder(train_eeg: np.ndarray, train_targets: np.ndarray, train_concept: np.ndarray,
+                  cfg: TrainConfig, device: str):
+    """Contrastive-fit a NICE encoder with leak-free early stopping on held-out TRAIN concepts, returning the
+    best-val checkpoint. Dataset-agnostic core shared by the within/cross-subject EEG2 runs (train()) and the
+    cross-dataset EEG1 run (cross_dataset_eval) — the caller supplies epochs + per-trial CLIP targets +
+    per-trial concept ids (only used to carve the leak-free val split)."""
     fit_mask, val_mask, val_labels, val_bank = _val_split(
         train_concept, train_targets, cfg.seed, cfg.val_fraction)
     fit_indices = np.where(fit_mask)[0]            # view, not a copy — fit is the bulk of the epoch pile
@@ -160,8 +152,9 @@ def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dic
             eeg_batch = eeg_batch.to(device)
             target_batch = torch.nn.functional.normalize(target_batch.to(device), dim=-1)
             optimizer.zero_grad()
-            loss = clip_infonce(encoder(eeg_batch), target_batch, logit_scale.exp().clamp(max=100))
-            loss.backward()
+            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda")):
+                loss = clip_infonce(encoder(eeg_batch), target_batch, logit_scale.exp().clamp(max=100))
+            loss.backward()                                # bf16 autocast needs no GradScaler (unlike fp16)
             optimizer.step()
             total_loss += loss.item()
 
@@ -172,18 +165,33 @@ def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dic
         else:
             since_improved += 1
         if epoch % 5 == 0 or epoch == cfg.epochs - 1:
-            test = evaluate(encoder, RetrievalSet(test_eeg, test_concept, test_bank), device)
-            logger.info(f"ep {epoch:3d}  loss {total_loss/len(loader):.3f}  val-top1 {val_top1*100:.2f}%  "
-                  f"test single {test['single_trial'][1]*100:.2f}%/{test['single_trial'][5]*100:.2f}%  "
-                  f"avg {test['concept_avg'][1]*100:.2f}%/{test['concept_avg'][5]*100:.2f}%")
+            logger.info(f"ep {epoch:3d}  loss {total_loss / len(loader):.3f}  val-top1 {val_top1 * 100:.2f}%")
         if since_improved >= cfg.patience:
             logger.info(f"early stop at ep {epoch} (best val = ep {best_epoch})")
             break
 
-    encoder.load_state_dict(best_state)                            # report TEST at the best-VAL checkpoint
+    encoder.load_state_dict(best_state)                            # keep the best-VAL checkpoint
+    return encoder, {"best_val_epoch": best_epoch, "val_top1": best_val, "epochs_run": epoch + 1}
+
+
+def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dict:
+    """Fit the encoder (contrastive) on EEG2 with leak-free early stopping; return the test result at the
+    best-val checkpoint. Reusable entry point — `main()` only builds the config and prints/saves this dict."""
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    regime = "within" if train_subjects == [test_subject] else "cross"
+    logger.info(f"regime={regime}  train={train_subjects}  test={test_subject}  device={device}")
+
+    train_eeg, train_concept, train_targets = _load_split(train_subjects, "training", cfg.resample)
+    test_eeg, test_concept, _ = _load_split([test_subject], "test", cfg.resample)
+    test_bank = clip_targets.concept_prototypes("test")
+    logger.info(f"train {train_eeg.shape} -> CLIP {train_targets.shape} | "
+          f"test {test_eeg.shape} ({int(test_concept.max())+1} concepts)")
+
+    encoder, stats = train_encoder(train_eeg, train_targets, train_concept, cfg, device)
     test = evaluate(encoder, RetrievalSet(test_eeg, test_concept, test_bank), device)
-    return {"regime": regime, "train": train_subjects, "test": test_subject,
-            "best_val_epoch": best_epoch, "val_top1": best_val, "epochs_run": epoch + 1,
+    return {"regime": regime, "train": train_subjects, "test": test_subject, **stats,
             "chance_top1": 1 / (int(test_concept.max()) + 1), **test}
 
 
