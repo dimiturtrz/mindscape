@@ -11,8 +11,7 @@ fusion API lives under the subpackage (`from core.features import fusion`).
 from core.features.eeg.bandpower import CANONICAL_BANDS, band_powers
 from core.features.eeg.covariance import recenter_covariances, scale_to_identity, time_delay_embed
 from core.features.fnirs.amplitude import amplitude_features
-from core.features.fnirs.bank import (
-    FNIRS_FEATURE_FNS, WeightedFamilyScaler, extract_bank, family_names)
+from core.features.fnirs.bank import FNIRS_FEATURE_FNS, WeightedFamilyScaler, extract_bank, family_names
 
 __all__ = ["time_delay_embed", "recenter_covariances", "scale_to_identity",
            "band_powers", "CANONICAL_BANDS", "amplitude_features",

@@ -8,22 +8,21 @@ measured rather than asserted.
 """
 from __future__ import annotations
 
-import numpy as np
-
 N_CHANS, N_TIMES, N_CLASSES = 22, 1125, 4
 
 
 def profile(cls: str, n_chans=N_CHANS, n_times=N_TIMES, n_classes=N_CLASSES) -> dict:
-    import torch
     import braindecode.models as M
+    import torch
 
     net = getattr(M, cls)(n_chans=n_chans, n_outputs=n_classes, n_times=n_times).eval()
     params = sum(p.numel() for p in net.parameters() if p.requires_grad)
     dummy = torch.zeros(1, n_chans, n_times)
     flops = None
     try:
-        from fvcore.nn import FlopCountAnalysis
         import logging
+
+        from fvcore.nn import FlopCountAnalysis
         logging.getLogger("fvcore").setLevel(logging.ERROR)
         flops = int(FlopCountAnalysis(net, dummy).unsupported_ops_warnings(False)
                     .uncalled_modules_warnings(False).total())

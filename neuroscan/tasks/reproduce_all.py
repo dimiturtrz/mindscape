@@ -22,6 +22,7 @@ from core.data.fnirs.base import FnirsCfg
 from neuroscan import models
 from neuroscan.evaluation import harness, results
 
+
 def _canonical_runs():
     """The harness runs the README cites, straight from experiments.yaml (task: decode | fnirs) — one source
     of truth. align/fusion carry their own aggregation + entrypoints, so `align` / `run_fusion` regenerate

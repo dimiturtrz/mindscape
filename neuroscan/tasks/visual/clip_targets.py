@@ -106,7 +106,7 @@ def embeddings_by_file(split: str) -> dict[str, np.ndarray]:
     exact image it viewed (the adapter returns the basename)."""
     cached = np.load(compute(split))
     basenames = [Path(str(path)).name for path in cached["paths"]]
-    return dict(zip(basenames, cached["emb"]))
+    return dict(zip(basenames, cached["emb"], strict=True))
 
 
 def concept_prototypes(split: str) -> np.ndarray:

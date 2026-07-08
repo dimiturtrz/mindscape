@@ -14,9 +14,17 @@ from core.features.eeg.montage import eeg_positions
 from core.features.fnirs.chromophore import cbsi_neural
 from core.features.fnirs.montage import fnirs_positions
 from core.features.fusion.camera import (
-    build_tensor, coverage_map, fused_node_series, _apply, _bary, _broadcast, _interp_weights, _zscore)
-from core.features.fusion.coupling import estimate_coupling, _HRF_WIDTH, _gamma_kernel
-from core.features.fusion.series import channel_series, _band_env, _BANDS, _resample_time
+    _apply,
+    _bary,
+    _broadcast,
+    _interp_weights,
+    _zscore,
+    build_tensor,
+    coverage_map,
+    fused_node_series,
+)
+from core.features.fusion.coupling import _HRF_WIDTH, _gamma_kernel, estimate_coupling
+from core.features.fusion.series import _BANDS, _band_env, _resample_time, channel_series
 
 __all__ = ["eeg_positions", "fnirs_positions", "csd_transform", "cbsi_neural", "estimate_coupling",
            "channel_series", "coverage_map", "build_tensor", "fused_node_series"]

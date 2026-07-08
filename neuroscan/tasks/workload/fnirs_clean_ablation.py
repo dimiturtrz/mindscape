@@ -7,8 +7,6 @@ within/cross delta is the CLEANING, nothing else. Each arm re-epochs the data wi
 """
 from __future__ import annotations
 
-import numpy as np
-
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
 from neuroscan.tasks.workload._eval import cv_score

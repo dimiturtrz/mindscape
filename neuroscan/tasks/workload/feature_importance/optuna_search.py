@@ -27,7 +27,7 @@ import numpy as np
 from core.config import REPO
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
-from core.features import extract_bank, family_names, WeightedFamilyScaler
+from core.features import WeightedFamilyScaler, extract_bank, family_names
 from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
 
 _CFG = Path(__file__).with_name("optuna.yaml")            # study config lives beside the code (config-as-data)

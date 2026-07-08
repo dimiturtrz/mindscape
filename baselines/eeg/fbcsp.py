@@ -40,7 +40,7 @@ class Fbcsp(Baseline):
         it's a 2 Hz high-beta sliver, irrelevant to the theta/alpha workload signal, and covering it would add
         a ragged narrow band + force a re-eval of a baseline that already trails. 2a (4–40) is on-grid."""
         edges = np.arange(self.fmin, self.fmax + 1e-6, self.band_width)
-        return [(float(lo), float(hi)) for lo, hi in zip(edges[:-1], edges[1:])]
+        return [(float(lo), float(hi)) for lo, hi in zip(edges[:-1], edges[1:], strict=True)]
 
     def _sos_bank(self):
         """Butterworth SOS (second-order sections) per band, designed ONCE and cached — the canonical FBCSP
@@ -83,7 +83,7 @@ class Fbcsp(Baseline):
 
     def _features(self, X: np.ndarray) -> np.ndarray:
         X = np.asarray(X, dtype=np.float64)
-        feats = [csp.transform(self._filter(X, sos)) for sos, csp in zip(self._sos_bank(), self.csps_)]
+        feats = [csp.transform(self._filter(X, sos)) for sos, csp in zip(self._sos_bank(), self.csps_, strict=True)]
         return np.concatenate(feats, axis=1)[:, self.sel_]
 
     def predict_proba(self, X):

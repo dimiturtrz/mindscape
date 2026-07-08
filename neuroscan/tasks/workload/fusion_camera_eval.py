@@ -13,10 +13,10 @@ import numpy as np
 
 from baselines.fusion.spatiotemporal import BrainCameraNet
 from core.data import store
-from core.data.eeg.base import EpochCfg
 from core.data.eeg import shin2017_nback_eeg as eegmod
-from core.data.fnirs.base import FnirsCfg
+from core.data.eeg.base import EpochCfg
 from core.data.fnirs import shin2017 as fnmod
+from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
 from neuroscan.evaluation import metrics
 
@@ -54,7 +54,7 @@ def main():
             accs.append(metrics.accuracy(y[te], pred)); kaps.append(metrics.kappa(y[te], pred))
     a, k = float(np.mean(accs)), float(np.mean(kaps))
     print(f"\n  brain-camera 3D-CNN · cross-subject {len(_SEEDS)}x{_K}-fold: acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
-    print(f"  reference (per-subject-z features -> LDA): best-single 0.580 · late 0.587 · feature 0.564 · oracle 0.752")
+    print("  reference (per-subject-z features -> LDA): best-single 0.580 · late 0.587 · feature 0.564 · oracle 0.752")
     print(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {'CASHED something' if a > 0.595 else 'null'}")
     print("  NOTE: not a fair representation test — this is a raw 3D-CNN (no per-subject re-centering) on 702 "
           "cross-subject samples (overfits); the 0.580 ref had per-subject-z + LDA. Fair test = re-center + a "

@@ -24,10 +24,10 @@ from pathlib import Path
 
 import numpy as np
 
-from core import config
 from baselines.eeg import transfer
 from baselines.fusion import combine
-from core.data import splits, store
+from core import config
+from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from neuroscan import models

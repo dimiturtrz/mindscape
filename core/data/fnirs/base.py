@@ -15,8 +15,7 @@ from pydantic import BaseModel
 # Cross-modality primitives (bandpass, block epoching, n-back labels) live in the neutral data layer
 # (core/data/signal) so the EEG adapter doesn't import "up" into fNIRS. Re-exported here so existing
 # `from core.data.fnirs.base import bandpass / epoch_blocks / CANONICAL_NBACK` call sites keep working.
-from core.data.signal import (  # noqa: F401
-    CANONICAL_NBACK, CANONICAL_NBACK_NAMES, bandpass, block_epochs)
+from core.data.signal import CANONICAL_NBACK, CANONICAL_NBACK_NAMES, bandpass, block_epochs  # noqa: F401
 
 
 class FnirsCfg(BaseModel):

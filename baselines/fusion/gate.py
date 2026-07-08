@@ -5,8 +5,6 @@ stopping). This is the one fusion path that reads the raw INPUT features rather 
 `tasks/workload/fusion_gate.py`): it ties z-scored-EEG-alone. Kept as an honest negative."""
 from __future__ import annotations
 
-import numpy as np
-
 SEED = 0
 
 

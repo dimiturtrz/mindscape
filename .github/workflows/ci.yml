@@ -35,7 +35,7 @@ jobs:
         with:
           enable-cache: true
       - name: Ruff — enforced (graduated families block)
-        run: uvx ruff@0.15.13 check core neuroscan baselines --select W
+        run: uvx ruff@0.15.13 check core neuroscan baselines --select W,F,I,B
       - name: Ruff — advisory backlog (non-blocking)
         run: uvx ruff@0.15.13 check . --statistics || true
       - name: Ruff — format check (advisory)

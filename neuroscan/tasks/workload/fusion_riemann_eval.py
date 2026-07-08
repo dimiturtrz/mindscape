@@ -16,10 +16,10 @@ import numpy as np
 
 from baselines.eeg import transfer
 from core.data import store
-from core.data.eeg.base import EpochCfg
 from core.data.eeg import shin2017_nback_eeg as eegmod
-from core.data.fnirs.base import FnirsCfg
+from core.data.eeg.base import EpochCfg
 from core.data.fnirs import shin2017 as fnmod
+from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
 from neuroscan.evaluation import metrics
 
@@ -67,7 +67,7 @@ def main():
     a, k = float(np.mean(accs)), float(np.mean(kaps))
     print(f"\n  fused-only (joint EEG×fNIRS×coverage) · re-centered tangent · cross-subject {len(_SEEDS)}x{_K}-fold: "
           f"acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
-    print(f"  reference (same protocol, EEG-only re-centered Riemann): best-single 0.580")
+    print("  reference (same protocol, EEG-only re-centered Riemann): best-single 0.580")
     print(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {'FUSION CASHED something' if a > 0.595 else 'fair null (fusion adds nothing decodable)'}")
 
 

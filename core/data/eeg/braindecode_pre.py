@@ -24,7 +24,11 @@ def get_data(dataset_name: str = "BNCI2014_001", subjects: list[int] | None = No
     which is what the published ATCNet pipeline actually does."""
     from braindecode.datasets import MOABBDataset
     from braindecode.preprocessing import (
-        Preprocessor, create_windows_from_events, exponential_moving_standardize, preprocess)
+        Preprocessor,
+        create_windows_from_events,
+        exponential_moving_standardize,
+        preprocess,
+    )
 
     from core.config import configure_moabb_download
     configure_moabb_download()
