@@ -1896,7 +1896,9 @@ dependencies = [
     { name = "omegaconf" },
     { name = "onnxruntime" },
     { name = "onnxscript" },
+    { name = "open-clip-torch" },
     { name = "optuna" },
+    { name = "pillow" },
     { name = "polars" },
     { name = "pydantic" },
     { name = "pyriemann" },
@@ -1926,9 +1928,6 @@ export = [
     { name = "onnxruntime" },
     { name = "onnxscript" },
 ]
-visual = [
-    { name = "open-clip-torch" },
-]
 
 [package.metadata]
 requires-dist = [
@@ -1946,10 +1945,11 @@ requires-dist = [
     { name = "onnxruntime", marker = "extra == 'export'" },
     { name = "onnxscript", specifier = ">=0.7.1" },
     { name = "onnxscript", marker = "extra == 'export'" },
-    { name = "open-clip-torch", marker = "extra == 'visual'" },
+    { name = "open-clip-torch" },
     { name = "openneuro-py", marker = "extra == 'data'" },
     { name = "optuna", specifier = ">=4.9.0" },
     { name = "osfclient", marker = "extra == 'data'" },
+    { name = "pillow" },
     { name = "polars" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pyriemann", specifier = ">=0.5" },
@@ -1960,7 +1960,7 @@ requires-dist = [
     { name = "scipy" },
     { name = "torch", specifier = ">=2.7", index = "https://download.pytorch.org/whl/cu130" },
 ]
-provides-extras = ["dev", "export", "data", "visual", "all"]
+provides-extras = ["dev", "export", "data", "all"]
 
 [[package]]
 name = "ml-dtypes"

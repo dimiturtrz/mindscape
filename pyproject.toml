@@ -22,13 +22,14 @@ dependencies = [
     "onnxruntime>=1.27.0",
     "onnxscript>=0.7.1",
     "mlflow>=3.14.0",        # experiment tracking (neuroscan/tracking.py); MINDSCAPE_NO_MLFLOW = off-switch
+    "open-clip-torch",       # CLIP image embeddings — the EEG->image retrieval target (Stage-3 NICE baseline)
+    "pillow",                # image IO for the CLIP target computation (clip_targets.py)
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "fvcore"]   # fvcore: params + FLOPs profiling (neuroscan/models/profile.py)
 export = ["onnx", "onnxruntime", "onnxscript"]   # ONNX export + parity check (Stage 2; core/export_onnx.py)
 data = ["osfclient", "openneuro-py"]   # dataset fetch (Stage-3 EEG->image: OSF / OpenNeuro); not a runtime dep
-visual = ["open-clip-torch"]           # CLIP image embeddings = the EEG->image retrieval target (Stage-3 NICE baseline)
 all = ["pytest", "onnx", "onnxruntime"]
 
 [tool.pytest.ini_options]
