@@ -96,7 +96,3 @@ def within_subject(meta: pl.DataFrame, subject: str, test_sessions=(), val_frac:
     test, rest = shuffled[:n_test], shuffled[n_test:]
     train, val = _val_carve(rest, val_frac, seed)
     return train, val, test
-
-
-def sessions(meta: pl.DataFrame) -> list[str]:
-    return sorted(meta["session"].unique().to_list())

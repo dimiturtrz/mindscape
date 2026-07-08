@@ -23,25 +23,6 @@ def holdout_mask(concept_names: np.ndarray, holdout: set[str]) -> np.ndarray:
     return np.array([name not in holdout for name in names], dtype=bool)
 
 
-def align_targets(concept_names: np.ndarray, name_to_index: dict[str, int]
-                  ) -> tuple[np.ndarray, np.ndarray]:
-    """Map each trial's concept NAME to its index in a shared candidate bank. Returns (label_index[m],
-    keep_mask[n]) where keep_mask drops trials whose concept isn't in the bank (so the two datasets' differing
-    concept coverage is reconciled explicitly, not silently mis-indexed). label_index is aligned to the kept
-    trials, in order."""
-    names = np.asarray(concept_names)
-    keep = np.array([name in name_to_index for name in names], dtype=bool)
-    labels = np.array([name_to_index[name] for name in names[keep]], dtype=np.int64)
-    return labels, keep
-
-
-def name_to_bank_index(candidate_names: list[str]) -> dict[str, int]:
-    """{concept name -> row index} for a candidate bank whose rows are ordered by `candidate_names`. The
-    inverse of the sorted-concept order EEG2's prototypes use, so an EEG1 concept name resolves to the right
-    bank row."""
-    return {name: index for index, name in enumerate(candidate_names)}
-
-
 def common_channel_order(names_a: list[str], names_b: list[str]) -> list[str]:
     """The electrodes present in BOTH montages, in `names_a`'s order — the shared spatial layout a
     cross-dataset encoder must use. THINGS-EEG1 and -EEG2 share 62 of 63 electrodes (EEG1 has Fz not Cz,

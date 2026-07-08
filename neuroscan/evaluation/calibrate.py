@@ -72,16 +72,6 @@ class TemperatureScaler:
         return metrics.ece(conf, (pred == labels).astype(float))[0]
 
 
-def fit_temperature(logits: np.ndarray, labels: np.ndarray) -> float:
-    """Back-compat shim — prefer `TemperatureScaler().fit(logits, labels)`."""
-    return TemperatureScaler().fit(logits, labels).T
-
-
-def ece_at(logits: np.ndarray, labels: np.ndarray, T: float = 1.0) -> float:
-    """Back-compat shim — ECE of softmax(logits / T)."""
-    return TemperatureScaler(T).ece(logits, labels)
-
-
 def _parse_args():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="bnci2014_001")

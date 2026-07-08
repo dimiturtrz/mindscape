@@ -61,7 +61,9 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 paths = ["core", "neuroscan", "baselines"]
 exclude = ["neuroviz", "runs", "mlruns"]
 min_confidence = 60
-ignore_names = ["model_config"]
+# framework false positives (used implicitly, not dead): torch nn.Module.forward (called via __call__),
+# onnxruntime SessionOptions.intra_op_num_threads (read by the ORT session).
+ignore_names = ["model_config", "forward", "intra_op_num_threads"]
 ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
 
 # Coverage (pytest-cov). Denominator is LIBRARY LOGIC, not dependency glue: we test our input/output logic,
