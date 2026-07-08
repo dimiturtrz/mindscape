@@ -18,6 +18,7 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import torch
 
 from core.data import splits, store
 from core.data.eeg.base import EpochCfg
@@ -42,8 +43,6 @@ class TemperatureScaler:
         self.T = T
 
     def fit(self, logits: np.ndarray, labels: np.ndarray) -> "TemperatureScaler":
-        import torch
-
         z = torch.tensor(logits, dtype=torch.float32)
         y = torch.tensor(labels, dtype=torch.long)
         logT = torch.zeros(1, requires_grad=True)

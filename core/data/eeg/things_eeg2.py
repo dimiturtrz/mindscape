@@ -25,13 +25,17 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import urllib.request
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import polars as pl
+from scipy.signal import resample as _resample
 
 from core.config import raw_dir
+from core.data.signal import bandpass
 
 logger = logging.getLogger(__name__)
 
@@ -112,8 +116,6 @@ def download(*, raw: bool = True) -> None:
 
 def _index() -> dict[int, object]:
     """{subject int -> its dir}, discovered on disk under `<data>/raw/things_eeg2/raw/` (naming-robust)."""
-    import re
-
     out: dict[int, object] = {}
     for d in sorted((raw_dir() / _ROOT / "raw").glob("sub-*")):
         m = re.search(r"sub-0*(\d+)", d.name)
@@ -163,7 +165,6 @@ def _session_epochs(path, split: str, tmin: float, tmax: float, resample: float,
     fs = float(np.asarray(session["sfreq"]))
 
     if fmin is not None or fmax is not None:
-        from core.data.signal import bandpass
         eeg = bandpass(eeg, fmin or 0.1, fmax or (fs / 2 - 1), fs)
 
     onset = np.where((stim[1:] != 0) & (stim[:-1] == 0))[0] + 1
@@ -181,7 +182,6 @@ def _session_epochs(path, split: str, tmin: float, tmax: float, resample: float,
     # ill-conditioned -> eval-mode embeddings collapse to chance. Standardizing to O(1) fixes it.
     epochs = (epochs - epochs.mean(axis=2, keepdims=True)) / (epochs.std(axis=2, keepdims=True) + 1e-7)
     if resample and resample != fs:
-        from scipy.signal import resample as _resample
         epochs = _resample(epochs, int(round(epochs.shape[2] * resample / fs)), axis=2).astype(np.float32)
     return epochs, concept_by_code[codes - 1], file_by_code[codes - 1]
 
@@ -211,7 +211,6 @@ def get_epochs(subjects_: list[int] | None = None, *, split: str = "training",
         return subject, path, _session_epochs(path, split, tmin, tmax, resample, fmin, fmax)
 
     if n_jobs and n_jobs > 1:
-        from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=n_jobs) as pool:
             results = list(pool.map(_epoch, work))          # map preserves input order
     else:

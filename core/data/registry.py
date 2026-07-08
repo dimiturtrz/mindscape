@@ -1,12 +1,16 @@
 """Unified dataset adapter registry — name -> adapter, across modalities (EEG + fNIRS).
 
 The store/splits/harness are modality-agnostic (they ride on the [n,ch,t]+meta schema), so one registry
-serves both. Add a dataset = one factory + one `register` line. Adapters are built lazily (heavy imports
-— MOABB, scipy.io — deferred to first use), so importing the registry stays cheap.
+serves both. Add a dataset = one factory + one `register` line. Adapters are built lazily (the factory is
+only called on `get_adapter`), so no dataset is instantiated until requested.
 """
 from __future__ import annotations
 
 from typing import Callable
+
+from core.data.eeg.bnci2014_001 import adapter as _bnci2014_001_adapter
+from core.data.eeg.shin2017_nback_eeg import adapter as _shin2017_nback_eeg_adapter
+from core.data.fnirs.shin2017 import adapter as _shin2017_nback_adapter
 
 _FACTORIES: dict[str, Callable] = {}
 
@@ -26,20 +30,17 @@ def dataset_names() -> list[str]:
     return sorted(_FACTORIES)
 
 
-# --- registrations (one line per dataset; keep imports inside factories) ---
+# --- registrations (one line per dataset) ---
 def _bnci2014_001():
-    from core.data.eeg.bnci2014_001 import adapter
-    return adapter()
+    return _bnci2014_001_adapter()
 
 
 def _shin2017_nback():
-    from core.data.fnirs.shin2017 import adapter
-    return adapter("nback")
+    return _shin2017_nback_adapter("nback")
 
 
 def _shin2017_nback_eeg():
-    from core.data.eeg.shin2017_nback_eeg import adapter
-    return adapter()
+    return _shin2017_nback_eeg_adapter()
 
 
 register("bnci2014_001", _bnci2014_001)          # EEG motor imagery

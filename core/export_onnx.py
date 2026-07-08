@@ -15,12 +15,13 @@ import time
 from pathlib import Path
 
 import numpy as np
+import onnxruntime as ort
+import torch
+from onnxruntime.quantization import QuantType, quantize_dynamic
 
 
 def export(net, n_chans: int, n_times: int, path: str | Path, device: str = "cpu") -> Path:
     """Export a trained torch module to ONNX with a dynamic batch axis. Returns the path."""
-    import torch
-
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     net = net.to(device).eval()
@@ -32,7 +33,6 @@ def export(net, n_chans: int, n_times: int, path: str | Path, device: str = "cpu
 
 
 def _session(path: str | Path):
-    import onnxruntime as ort
     so = ort.SessionOptions()
     so.intra_op_num_threads = 1            # single-thread = realistic edge latency
     return ort.InferenceSession(str(path), so, providers=["CPUExecutionProvider"])
@@ -46,8 +46,6 @@ def run(path: str | Path, X: np.ndarray) -> np.ndarray:
 
 def parity(net, onnx_path: str | Path, X_std: np.ndarray, device: str = "cpu") -> float:
     """Max abs difference between torch logits and ONNX logits on the same input. Gate before trusting."""
-    import torch
-
     net = net.to(device).eval()
     with torch.no_grad():
         tlog = net(torch.tensor(X_std.astype(np.float32), device=device)).cpu().numpy()
@@ -56,8 +54,6 @@ def parity(net, onnx_path: str | Path, X_std: np.ndarray, device: str = "cpu") -
 
 def quantize_int8(fp32_path: str | Path, int8_path: str | Path) -> Path:
     """Dynamic weight-only INT8 quantization (no calibration set needed). Returns the int8 path."""
-    from onnxruntime.quantization import QuantType, quantize_dynamic
-
     int8_path = Path(int8_path)
     quantize_dynamic(str(fp32_path), str(int8_path), weight_type=QuantType.QInt8)
     return int8_path

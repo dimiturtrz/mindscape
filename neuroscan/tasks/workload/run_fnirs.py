@@ -22,7 +22,7 @@ from core import config
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
 from neuroscan import models
-from neuroscan.evaluation import harness
+from neuroscan.evaluation import harness, results
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,6 @@ def main():
                       params={"exp": args.exp, "method": method, "regime": regime, "dataset": dataset,
                               "modality": "fnirs"}, run_dir=run_dir, n_jobs=n_jobs)
     (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
-    from neuroscan.evaluation import results
     if not args.no_record and results.record(run_dir):
         logger.info(f"   recorded -> results.json ({run_dir.name})")
     fm = res["fold_mean"]

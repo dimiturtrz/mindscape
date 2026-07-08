@@ -9,9 +9,13 @@ is recorded to the results snapshot, so the README table is marker-backed, not h
 """
 from __future__ import annotations
 
+import json
 import logging
 
 import numpy as np
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 from core.config import REPO
 from core.data import store
@@ -39,10 +43,6 @@ _DATASET = "shin2017_nback"
 
 
 def _cv(F, fam, y, groups, families):
-    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-    from sklearn.pipeline import make_pipeline
-    from sklearn.preprocessing import StandardScaler
-
     Fr = F[:, np.isin(fam, families)]
     accs, kaps = [], []
     for tr, te in grouped_folds(Fr, y, groups, _SEEDS, _K):
@@ -56,8 +56,6 @@ def _cv(F, fam, y, groups, families):
 
 def _record(key, acc, kappa, n_classes):
     """Write a harness-schema aggregate for this recipe and merge it into results.json (marker-backing)."""
-    import json
-
     run = f"fnirs_recipe_{key}_{_DATASET}"
     run_dir = REPO / "runs" / run
     run_dir.mkdir(parents=True, exist_ok=True)

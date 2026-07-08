@@ -12,10 +12,14 @@ NICE target); embeddings are L2-normalized (cosine == dot).
 from __future__ import annotations
 
 import logging
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import open_clip
+import torch
+from PIL import Image
 
 from core.config import processed_dir, raw_dir
 
@@ -58,8 +62,6 @@ def _list_images(split: str) -> list[ImageItem]:
 
 
 def _load_clip(device: str):
-    import open_clip
-
     model, _, preprocess = open_clip.create_model_and_transforms(_CLIP_ARCH, pretrained=_CLIP_PRETRAINED)
     return model.eval().to(device), preprocess
 
@@ -70,9 +72,6 @@ def compute(split: str, *, device: str | None = None, batch: int = 256, force: b
     npz: `emb` [N, 512] float32 (L2-normalized), `concept` [N] int (concept index), `paths` [N] str.
     Idempotent — returns the cache path, recomputing only if missing or `force`.
     """
-    import torch
-    from PIL import Image
-
     cache_path = processed_dir() / _ROOT / f"clip_{split}.npz"
     if cache_path.exists() and not force:
         return cache_path
@@ -127,6 +126,4 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     for _n in ("mne", "moabb", "braindecode"):
         logging.getLogger(_n).setLevel(logging.WARNING)
-    import sys
-
     compute(sys.argv[1] if len(sys.argv) > 1 else "test")

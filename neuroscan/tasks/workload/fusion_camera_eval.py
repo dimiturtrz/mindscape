@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 
 import numpy as np
+from sklearn.model_selection import StratifiedGroupKFold
 
 from baselines.fusion.spatiotemporal import BrainCameraNet
 from core.data import store
@@ -51,7 +52,6 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     for _n in ("mne", "moabb", "braindecode"):
         logging.getLogger(_n).setLevel(logging.WARNING)
-    from sklearn.model_selection import StratifiedGroupKFold
     X, y, g = _build_all()
     logger.info(f"brain-camera fusion · {X.shape[0]} blocks · {len(set(g))} subj · tensor {X.shape[1:]} · "
           f"grid {_GRID} fps {_FPS} lag derived/subj · chance {1/(y.max()+1):.3f}")

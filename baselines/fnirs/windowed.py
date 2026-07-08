@@ -27,6 +27,9 @@ aggregation, nothing else.
 from __future__ import annotations
 
 import numpy as np
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 from baselines.base import Baseline
 from core.features import FNIRS_FEATURE_FNS
@@ -89,9 +92,6 @@ class WindowedFnirs(Baseline):
     # --- classifier ------------------------------------------------------------------------------------
     @staticmethod
     def _lda():
-        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-        from sklearn.pipeline import make_pipeline
-        from sklearn.preprocessing import StandardScaler
         return make_pipeline(StandardScaler(),
                              LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto"))
 

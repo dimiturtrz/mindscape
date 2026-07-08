@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import numpy as np
 import polars as pl
+import scipy.io as sio
+from scipy.signal import resample as _rs
 
 from core.config import raw_dir
 from core.data.fnirs.base import CANONICAL_NBACK, FnirsCfg, bandpass, epoch_blocks
+from core.data.fnirs.clean import make_cleaner
 
 
 class Shin2017NirsAdapter:
@@ -42,8 +45,6 @@ class Shin2017NirsAdapter:
 
     def _load_continuous(self, sub: int):
         """Return (cont [72, T] HbO|HbR, fs, onsets[samples], canonical_labels[n]) for one subject."""
-        import scipy.io as sio
-
         d = self._subject_dir(sub)
         cnt = sio.loadmat(d / f"cnt_{self.task}.mat", struct_as_record=False, squeeze_me=True)[f"cnt_{self.task}"]
         mrk = sio.loadmat(d / f"mrk_{self.task}.mat", struct_as_record=False, squeeze_me=True)[f"mrk_{self.task}"]
@@ -69,10 +70,8 @@ class Shin2017NirsAdapter:
             onsets, y = onsets[order], y[order]
             X, ye = epoch_blocks(cont, onsets, y, fs, cfg)
             if cfg.clean is not None:                                                  # physiological-noise stage
-                from core.data.fnirs.clean import make_cleaner
                 X = make_cleaner(cfg.clean).transform(X).astype(np.float32)            # stateless -> leakage-free
             if cfg.resample and cfg.resample != fs:
-                from scipy.signal import resample as _rs
                 X = _rs(X, int(round(X.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
             n = len(ye)
             Xs.append(X)

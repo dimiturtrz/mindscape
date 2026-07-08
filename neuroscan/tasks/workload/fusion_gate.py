@@ -28,13 +28,14 @@ import logging
 from pathlib import Path
 
 import numpy as np
+from sklearn.model_selection import GroupKFold
 
 from baselines.fusion.gate import GatedFusion
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from core.features import amplitude_features, band_powers
-from neuroscan.evaluation import metrics
+from neuroscan.evaluation import metrics, results
 
 logger = logging.getLogger(__name__)
 
@@ -82,8 +83,6 @@ def main():
     ap.add_argument("--out", default=None)
     ap.add_argument("--no-record", action="store_true")
     args = ap.parse_args()
-
-    from sklearn.model_selection import GroupKFold
 
     Fe, Ff, y, groups = _load_features()
     Fe, Ff = _zscore_per_subject(Fe, groups), _zscore_per_subject(Ff, groups)
@@ -133,7 +132,6 @@ def main():
            "pooled_acc": gate, "acc_std": std, "per_fold": rows}
     (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
     if not args.no_record:
-        from neuroscan.evaluation import results
         results.record(run_dir)
     logger.info(f"-> {run_dir}/aggregate.json")
 

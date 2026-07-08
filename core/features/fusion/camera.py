@@ -8,6 +8,7 @@ EEG. For real decoding, use raw/multiband EEG covariance + a boundary-aware fNIR
 from __future__ import annotations
 
 import numpy as np
+from scipy.spatial import Delaunay
 
 from core.features.fusion.series import _BANDS, channel_series
 
@@ -17,7 +18,6 @@ def _bary(pos: np.ndarray, pts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     arbitrary query points `pts` (Delaunay triangulation, computed once — every frame is then a matmul), plus
     the distance `d[len(pts)]` from each query point to its nearest sensor. Points outside the hull get zero
     weight. Channels with non-finite positions are dropped from the triangulation (weight column stays zero)."""
-    from scipy.spatial import Delaunay
     ok = np.isfinite(pos).all(1)
     idx = np.where(ok)[0]
     p = pos[ok]

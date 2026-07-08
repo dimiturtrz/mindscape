@@ -6,17 +6,19 @@ null: complementarity is real, no output-space combiner cashes it — confidence
 from __future__ import annotations
 
 import numpy as np
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.model_selection import GroupKFold
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+from core.features import amplitude_features
+from neuroscan.evaluation.calibrate import TemperatureScaler
 
 
 def feature_fusion(Fe_tr, Xf_tr, y_tr, Fe_te, Xf_te) -> np.ndarray:
     """Feature-level fusion: concat the EEG feature `Fe` (the re-centered tangent-space vector — the strong
     EEG representation, so this is a fair test) + fNIRS mean/slope/peak -> shrinkage-LDA. Test probs. The
     caller supplies `Fe` (via `transfer.recentered_tangent_features`) so the EEG side matches the probs side."""
-    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-    from sklearn.pipeline import make_pipeline
-    from sklearn.preprocessing import StandardScaler
-
-    from core.features import amplitude_features
     ftr = np.concatenate([Fe_tr, amplitude_features(Xf_tr)], axis=1)
     fte = np.concatenate([Fe_te, amplitude_features(Xf_te)], axis=1)
     clf = make_pipeline(StandardScaler(),
@@ -31,11 +33,6 @@ def smart_aggregators(eeg_probs, fn_fit, fn_score, Xe_tr, Xf_tr, y_tr, g_tr, pe,
     is the EEG decoder as a probability function (so re-centering — which needs the subject groups — flows
     into the OOF too). Returns (stacking probs, calibrated eeg probs, calibrated fnirs probs); falls back to
     the raw probs if a train subject group is too small to inner-split."""
-    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-    from sklearn.model_selection import GroupKFold
-
-    from neuroscan.evaluation.calibrate import TemperatureScaler
-
     n, C = pe.shape
     oof_e, oof_f = np.zeros((n, C)), np.zeros((n, C))
     try:

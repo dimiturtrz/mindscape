@@ -17,6 +17,12 @@ natural base for cross-subject transfer (manifold re-centering). Interface = the
 from __future__ import annotations
 
 import numpy as np
+from pyriemann.classification import MDM, FgMDM
+from pyriemann.estimation import Covariances
+from pyriemann.tangentspace import TangentSpace as _TS
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import FunctionTransformer
 
 from baselines.base import Baseline
 from core.features import time_delay_embed
@@ -42,13 +48,10 @@ class _RiemannBaseline(Baseline):
 
 
 def _cov(estimator: str):
-    from pyriemann.estimation import Covariances
     return Covariances(estimator=estimator)
 
 
 def _tangent_lr():
-    from pyriemann.tangentspace import TangentSpace as _TS
-    from sklearn.linear_model import LogisticRegression
     return [_TS(metric="riemann"), LogisticRegression(max_iter=500, C=1.0)]
 
 
@@ -57,7 +60,6 @@ class TangentSpace(_RiemannBaseline):
     reference (what MOABB benchmarks and what wins real BCI competitions)."""
 
     def _build(self):
-        from sklearn.pipeline import make_pipeline
         return make_pipeline(_cov(self.estimator), *_tangent_lr())
 
 
@@ -66,8 +68,6 @@ class Mdm(_RiemannBaseline):
     (Riemannian distance). Parameter-free, no real training."""
 
     def _build(self):
-        from pyriemann.classification import MDM
-        from sklearn.pipeline import make_pipeline
         return make_pipeline(_cov(self.estimator), MDM(metric="riemann"))
 
 
@@ -77,8 +77,6 @@ class Fgmdm(_RiemannBaseline):
     ≈ tangent-space+LR, above FBCSP. Same primitives as our TS+LR + MDM, recombined."""
 
     def _build(self):
-        from pyriemann.classification import FgMDM
-        from sklearn.pipeline import make_pipeline
         return make_pipeline(_cov(self.estimator), FgMDM(metric="riemann"))
 
 
@@ -91,8 +89,6 @@ class Acm(_RiemannBaseline):
         self.order, self.lag = order, lag
 
     def _build(self):
-        from sklearn.pipeline import make_pipeline
-        from sklearn.preprocessing import FunctionTransformer
         aug = FunctionTransformer(time_delay_embed, kw_args={"order": self.order, "lag": self.lag}, validate=False)
         return make_pipeline(aug, _cov(self.estimator), *_tangent_lr())
 

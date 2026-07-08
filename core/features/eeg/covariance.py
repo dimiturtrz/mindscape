@@ -5,6 +5,9 @@ these produce it (`time_delay_embed` before the covariance) and move whole cloud
 from __future__ import annotations
 
 import numpy as np
+from pyriemann.utils.base import invsqrtm, powm
+from pyriemann.utils.distance import distance_riemann
+from pyriemann.utils.mean import mean_riemann
 
 
 def time_delay_embed(X: np.ndarray, order: int, lag: int) -> np.ndarray:
@@ -24,9 +27,6 @@ def recenter_covariances(C: np.ndarray) -> np.ndarray:
     the domain's Riemannian (Fréchet) mean. Removes the per-domain LOCATION shift on the SPD manifold
     (Zanini et al. 2018) while preserving the relative class geometry — the manifold version of whitening,
     applied per subject to kill the between-subject nuisance. Unsupervised → deployment-friendly."""
-    from pyriemann.utils.base import invsqrtm
-    from pyriemann.utils.mean import mean_riemann
-
     C = np.asarray(C, dtype=np.float64)
     W = invsqrtm(mean_riemann(C))
     return np.einsum("ij,njk,kl->nil", W, C, W)
@@ -36,9 +36,6 @@ def scale_to_identity(C: np.ndarray, target_disp: float = 1.0) -> np.ndarray:
     """Normalize dispersion (RPA step 2): after re-centering to the identity, stretch each covariance so the
     mean squared Riemannian distance to I equals `target_disp` — matches the domains' *spread*, not just
     their location. `C -> C**p` with `p = sqrt(target_disp / current_dispersion)`."""
-    from pyriemann.utils.base import powm
-    from pyriemann.utils.distance import distance_riemann
-
     eye = np.eye(C.shape[-1])
     disp = float(np.mean([distance_riemann(c, eye) ** 2 for c in C])) + 1e-12
     p = np.sqrt(target_disp / disp)

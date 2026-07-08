@@ -6,6 +6,7 @@ the gap between confidence and accuracy that domain shift blows open (the siblin
 from __future__ import annotations
 
 import numpy as np
+from sklearn.metrics import cohen_kappa_score
 
 
 def accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -14,7 +15,6 @@ def accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 def kappa(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """Cohen's kappa — chance-corrected agreement; the standard BCI motor-imagery metric."""
-    from sklearn.metrics import cohen_kappa_score
     return float(cohen_kappa_score(y_true, y_pred))
 
 

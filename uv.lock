@@ -1883,6 +1883,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "braindecode" },
+    { name = "mlflow" },
     { name = "mne" },
     { name = "moabb" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -1902,7 +1903,6 @@ dependencies = [
 
 [package.optional-dependencies]
 all = [
-    { name = "mlflow" },
     { name = "onnx" },
     { name = "onnxruntime" },
     { name = "pytest" },
@@ -1920,9 +1920,6 @@ export = [
     { name = "onnxruntime" },
     { name = "onnxscript" },
 ]
-track = [
-    { name = "mlflow" },
-]
 visual = [
     { name = "open-clip-torch" },
 ]
@@ -1931,8 +1928,7 @@ visual = [
 requires-dist = [
     { name = "braindecode", specifier = ">=0.8" },
     { name = "fvcore", marker = "extra == 'dev'" },
-    { name = "mlflow", marker = "extra == 'all'" },
-    { name = "mlflow", marker = "extra == 'track'" },
+    { name = "mlflow", specifier = ">=3.14.0" },
     { name = "mne", specifier = ">=1.6" },
     { name = "moabb", specifier = ">=1.0" },
     { name = "numpy" },
@@ -1957,7 +1953,7 @@ requires-dist = [
     { name = "scipy" },
     { name = "torch", specifier = ">=2.7", index = "https://download.pytorch.org/whl/cu130" },
 ]
-provides-extras = ["dev", "export", "track", "data", "visual", "all"]
+provides-extras = ["dev", "export", "data", "visual", "all"]
 
 [[package]]
 name = "ml-dtypes"

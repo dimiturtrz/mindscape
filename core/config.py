@@ -14,6 +14,9 @@ from __future__ import annotations
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
+import mne
+from moabb.datasets import download as _dl
+from moabb.utils import set_download_dir
 from omegaconf import OmegaConf
 from pydantic import BaseModel
 
@@ -124,12 +127,10 @@ def configure_moabb_download() -> Path:
     os.environ["MNE_DATA"] = native                   # overwrite, don't setdefault — be authoritative
     os.environ["MOABB_RESULTS"] = os.fspath(processed_dir() / "moabb_results")
     try:
-        import mne
         mne.set_config("MNE_DATA", native, set_env=True)
     except Exception:
         pass
     try:
-        from moabb.utils import set_download_dir
         set_download_dir(native)
     except Exception:
         pass
@@ -147,12 +148,6 @@ def _patch_moabb_drive_colon() -> None:
     the WHOLE path, clobbering the drive colon ('<drive>:\\...' -> '<drive>-\\...'), so downloads go RELATIVE and
     leak into the repo cwd (the recurring `D-/`) + re-download every time. We restore a leading drive and
     sanitize only the rest (behavior-preserving otherwise). Idempotent. TODO: file/track upstream PR."""
-    try:
-        from pathlib import Path as _P
-
-        from moabb.datasets import download as _dl
-    except Exception:
-        return
     if getattr(_dl._sanitize_path, "_mindscape_patched", False):
         return
     _bad = ':*?"<>|'
@@ -161,8 +156,8 @@ def _patch_moabb_drive_colon() -> None:
         s = str(path)
         if len(s) >= _DRIVE_PREFIX_LEN and s[1] == ":" and s[0].isalpha():        # 'D:...' -> keep 'D:', clean rest
             drive, rest = s[:2], s[2:]
-            return _P(drive + rest.translate({ord(c): "-" for c in _bad}))
-        return _P(s.translate({ord(c): "-" for c in _bad}))
+            return Path(drive + rest.translate({ord(c): "-" for c in _bad}))
+        return Path(s.translate({ord(c): "-" for c in _bad}))
 
     _safe._mindscape_patched = True
     _dl._sanitize_path = _safe

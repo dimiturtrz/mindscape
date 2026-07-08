@@ -10,13 +10,13 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import numpy as np
+from sklearn.model_selection import StratifiedGroupKFold
 
 
 def grouped_folds(F: np.ndarray, y: np.ndarray, groups: np.ndarray,
                   seeds, k: int) -> Iterator[tuple[np.ndarray, np.ndarray]]:
     """Yield `(train_idx, test_idx)` for each fold of each seeded StratifiedGroupKFold pass. Subject-grouped;
     repeated over `seeds` to average out the split noise in the CV estimate."""
-    from sklearn.model_selection import StratifiedGroupKFold
     for seed in seeds:
         sgkf = StratifiedGroupKFold(n_splits=k, shuffle=True, random_state=seed)
         yield from sgkf.split(F, y, groups)

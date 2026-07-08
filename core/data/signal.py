@@ -8,6 +8,7 @@ it). `core/data/eeg/*` and `core/data/fnirs/*` both depend on this; it depends o
 from __future__ import annotations
 
 import numpy as np
+from scipy.signal import butter, filtfilt
 
 # canonical n-back workload classes (load level) — shared by the fNIRS and EEG n-back adapters
 CANONICAL_NBACK: dict[str, int] = {"0-back": 0, "2-back": 1, "3-back": 2}
@@ -16,7 +17,6 @@ CANONICAL_NBACK_NAMES: dict[int, str] = {v: k for k, v in CANONICAL_NBACK.items(
 
 def bandpass(X: np.ndarray, l_freq: float, h_freq: float, fs: float, order: int = 4) -> np.ndarray:
     """Zero-phase Butterworth bandpass on continuous [ch, T] (filtfilt — no phase shift)."""
-    from scipy.signal import butter, filtfilt
     nyq = fs / 2.0
     b, a = butter(order, [l_freq / nyq, min(h_freq, nyq * 0.99) / nyq], btype="band")
     return filtfilt(b, a, X, axis=-1)

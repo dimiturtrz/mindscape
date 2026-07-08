@@ -6,6 +6,7 @@ the CV plumbing.
 from __future__ import annotations
 
 import numpy as np
+from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 
 from baselines.fnirs.features import FnirsLda
 from neuroscan.evaluation import metrics
@@ -16,8 +17,6 @@ def cv_score(build, X, y, groups, *, grouped: bool, seeds=(0, 1, 2), k: int = 5,
     (cross-subject); else StratifiedKFold (within, subjects in train+test). `build` is a `() -> decoder`
     thunk (None -> `FnirsLda`). `classes=[a, b]` restricts to those two labels and relabels binary
     (b -> 1) for a per-boundary probe."""
-    from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
-
     X, y, groups = np.asarray(X), np.asarray(y), np.asarray(groups)
     if classes is not None:
         m = np.isin(y, classes)

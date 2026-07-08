@@ -14,14 +14,22 @@ covariance estimation, the calibration split, and the metrics; it just calls the
 from __future__ import annotations
 
 import numpy as np
+from pyriemann.tangentspace import TangentSpace, tangent_space
+from pyriemann.transfer import (
+    MDWM,
+    TLCenter,
+    TLClassifier,
+    TLRotate,
+    TLScale,
+    encode_domains,
+)
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
 
 from core.features import recenter_covariances, scale_to_identity
 
 
 def _tangent_lr():
-    from pyriemann.tangentspace import TangentSpace
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.pipeline import make_pipeline
     return make_pipeline(TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0))
 
 
@@ -51,8 +59,6 @@ def recentered_tangent_features(C, groups) -> np.ndarray:
     the identity -> a Euclidean feature vector `[n, d(d+1)/2]`. The feature-space view of the strong EEG
     decoder — for feature-level fusion, so its EEG side matches the re-centered covariance the probs side
     uses (not a crude log-variance). `groups` = subject per row (re-centering is per-domain)."""
-    from pyriemann.tangentspace import tangent_space
-
     rc = np.empty_like(C)
     for g in np.unique(groups):
         rc[groups == g] = recenter_covariances(C[groups == g])
@@ -72,8 +78,6 @@ def calibrated_predict(kind: str, Csrc, ysrc, Ccal, ycal, Cev, mdwm_lambda: floa
     eval set. `kind='rpa'` = full RPA (center+scale+rotate) then tangent-space LR; `kind='mdwm'` = Minimum
     Distance to Weighted Mean (source↔target class-mean blend, weight `mdwm_lambda`). Returns int labels for
     `Cev`. The caller guarantees Ccal and Cev are disjoint — no test labels enter here."""
-    from pyriemann.transfer import MDWM, TLCenter, TLClassifier, TLRotate, TLScale, encode_domains
-
     Xf = np.concatenate([Csrc, Ccal])
     yf = np.concatenate([ysrc, ycal]).astype(str)
     dom = np.array(["source"] * len(ysrc) + ["target"] * len(ycal))
@@ -83,7 +87,6 @@ def calibrated_predict(kind: str, Csrc, ysrc, Ccal, ycal, Cev, mdwm_lambda: floa
     if kind == "mdwm":
         model = MDWM(domain_tradeoff=mdwm_lambda, target_domain="target")
     else:                                                            # full RPA + tangent-space LR
-        from sklearn.pipeline import make_pipeline
         model = make_pipeline(TLCenter("target"), TLScale("target", centered_data=True),
                               TLRotate("target"), TLClassifier("target", _tangent_lr()))
     model.fit(Xenc, yenc)

@@ -5,6 +5,9 @@ stopping). This is the one fusion path that reads the raw INPUT features rather 
 `tasks/workload/fusion_gate.py`): it ties z-scored-EEG-alone. Kept as an honest negative."""
 from __future__ import annotations
 
+import torch
+import torch.nn as nn
+
 SEED = 0
 
 
@@ -18,8 +21,6 @@ class GatedFusion:
                         wd=wd, lr=lr, max_epochs=max_epochs, patience=patience)
 
     def _build(self):
-        import torch.nn as nn
-
         c = self.cfg
         d = c["d_model"]
 
@@ -35,7 +36,6 @@ class GatedFusion:
                                        nn.Linear(d, 1))          # per-trial scalar α (pre-sigmoid)
 
             def forward(s, xe, xf):
-                import torch
                 ze, zf = s.enc_e(xe), s.enc_f(xf)
                 pe = torch.softmax(s.head_e(ze), dim=1)
                 pf = torch.softmax(s.head_f(zf), dim=1)
@@ -46,8 +46,6 @@ class GatedFusion:
         return Net()
 
     def fit(self, Xe, Xf, y, Xe_va, Xf_va, y_va):
-        import torch
-
         torch.manual_seed(SEED)
         self.net = self._build()
         opt = torch.optim.Adam(self.net.parameters(), lr=self.cfg["lr"], weight_decay=self.cfg["wd"])
@@ -77,8 +75,6 @@ class GatedFusion:
         return self
 
     def predict(self, Xe, Xf):
-        import torch
-
         self.net.eval()
         with torch.no_grad():
             p, a = self.net(torch.as_tensor(Xe), torch.as_tensor(Xf))

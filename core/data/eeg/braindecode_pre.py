@@ -12,6 +12,15 @@ from __future__ import annotations
 
 import numpy as np
 import polars as pl
+from braindecode.datasets import MOABBDataset
+from braindecode.preprocessing import (
+    Preprocessor,
+    create_windows_from_events,
+    exponential_moving_standardize,
+    preprocess,
+)
+
+from core.config import configure_moabb_download
 
 
 def get_data(dataset_name: str = "BNCI2014_001", subjects: list[int] | None = None,
@@ -22,15 +31,6 @@ def get_data(dataset_name: str = "BNCI2014_001", subjects: list[int] | None = No
     `ems=True` applies continuous exponential-moving standardization here (braindecode default recipe);
     `ems=False` returns bandpassed microvolts only — use with the trainer's z-score (StandardScaler),
     which is what the published ATCNet pipeline actually does."""
-    from braindecode.datasets import MOABBDataset
-    from braindecode.preprocessing import (
-        Preprocessor,
-        create_windows_from_events,
-        exponential_moving_standardize,
-        preprocess,
-    )
-
-    from core.config import configure_moabb_download
     configure_moabb_download()
 
     ds = MOABBDataset(dataset_name=dataset_name, subject_ids=subjects)

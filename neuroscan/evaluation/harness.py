@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 
 import numpy as np
+from joblib import Parallel, delayed
 
 from core.data import splits, store
 from neuroscan import tracking
@@ -70,7 +71,6 @@ def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str 
     if n_jobs == 1:
         done = [_fit_score_fold(f, fit_fn, score_fn) for f in folds]
     else:
-        from joblib import Parallel, delayed
         done = Parallel(n_jobs=n_jobs, backend="threading")(
             delayed(_fit_score_fold)(f, fit_fn, score_fn) for f in folds)
 

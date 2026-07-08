@@ -19,6 +19,8 @@ import re
 
 import numpy as np
 import polars as pl
+import scipy.io as sio
+from scipy.signal import resample as _rs
 
 from core.config import raw_dir
 from core.data.eeg.base import EpochCfg
@@ -54,16 +56,12 @@ class Shin2017NbackEegAdapter:
     def channels(self) -> list[str]:
         """The 28 EEG channel names (BBCI `cnt.clab`, dropping the 2 trailing EOG) — standard 10-05 labels,
         montage-mappable. Read from the first subject; the montage is fixed across the set."""
-        import scipy.io as sio
-
         d = next(iter(self._index().values()))
         cnt = sio.loadmat(d / "cnt_nback.mat", struct_as_record=False, squeeze_me=True)["cnt_nback"]
         return [str(c) for c in np.asarray(cnt.clab)][:_N_EEG]
 
     def _load_continuous(self, d):
         """(cont [28, T] EEG, fs, block onsets[samples], canonical labels[27]) — block-level workload only."""
-        import scipy.io as sio
-
         cnt = sio.loadmat(d / "cnt_nback.mat", struct_as_record=False, squeeze_me=True)["cnt_nback"]
         mrk = sio.loadmat(d / "mrk_nback.mat", struct_as_record=False, squeeze_me=True)["mrk_nback"]
         cont = np.asarray(cnt.x).T[:_N_EEG]                             # [28, T], drop HEOG/VEOG
@@ -90,7 +88,6 @@ class Shin2017NbackEegAdapter:
             onsets, y = onsets[order], y[order]
             X, ye = block_epochs(cont, onsets, y, fs, cfg.tmin, tmax, baseline_s=0.0)   # no baseline: CSP/Riemann read covariance
             if cfg.resample and cfg.resample != fs:
-                from scipy.signal import resample as _rs
                 X = _rs(X, int(round(X.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
             n = len(ye)
             Xs.append(X)

@@ -12,7 +12,11 @@ ONNX-exportable (the Stage-2 edge path rides on it). RTX 5090 + bf16 autocast: m
 """
 from __future__ import annotations
 
+import copy
+
+import braindecode.models as M
 import numpy as np
+import torch
 
 # method -> (braindecode class, training + crop hparams). crop_frac=0.5 + 16 train crops is the standard
 # 2a recipe; strong nets get more epochs (cheap on the 5090, capped by early stopping).
@@ -61,9 +65,6 @@ class BraindecodeClf:
     def __init__(self, cls, n_chans, n_times, n_classes, epochs, lr, batch=128, weight_decay=1e-4,
                  device=None, log_every=0, val_frac=0.2, patience=0,
                  crop_len=None, n_train_crops=16, n_test_crops=8, standardize="ems", seed=0):
-        import braindecode.models as M
-        import torch
-
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.epochs, self.lr, self.batch, self.wd = epochs, lr, batch, weight_decay
         self.log_every, self.val_frac, self.patience = log_every, val_frac, patience
@@ -91,10 +92,6 @@ class BraindecodeClf:
         return Xtr, ytr, Xva, yva
 
     def fit(self, X, y):
-        import copy
-
-        import torch
-
         Xs = self.std.fit(X)(X)
         Xtr, ytr, Xva, yva = self._make_train_val(Xs, y)
         xt = torch.tensor(Xtr, device=self.device)
@@ -144,8 +141,6 @@ class BraindecodeClf:
 
     def _trial_outputs(self, X, softmax: bool):
         """Per-trial outputs (probabilities if softmax else logits), crop-averaged when cropping."""
-        import torch
-
         Xs = self.std(X)
         self.net.eval()
         if self.crop_len:
