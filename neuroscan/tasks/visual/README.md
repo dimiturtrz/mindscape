@@ -13,29 +13,30 @@ python -m neuroscan.tasks.visual.train_nice --train 1 --test 1              # wi
 python -m neuroscan.tasks.visual.train_nice --train 1 2 3 --test 4          # cross-subject (LOSO)
 ```
 
-## Results — honest, leak-free (preliminary, 2 subjects)
+## Results — honest, leak-free
 
 Model selection (which epoch to keep) is on a **validation set of 165 held-out *training* concepts** — the
-test subject/concepts never touch checkpoint selection. Numbers are the best-val checkpoint (ep 9). Chance =
-1/200 = 0.5% (top1), 2.5% (top5).
+test subject/concepts never touch checkpoint selection (best-val checkpoint). Chance = 1/200 = 0.5% (top1),
+2.5% (top5). All 10 subjects available; cross-subject is a LOSO (train N, hold one out).
 
-| | within (s01→s01) | cross (s01→s02) |
-|---|---|---|
-| single-trial top1 | 4.06% | 1.45% |
-| single-trial top5 | 14.0% | 6.35% |
-| concept-avg top1 | **15.0%** | **2.0%** |
-| concept-avg top5 | 35.5% | 10.5% |
+| concept-avg | within (s01→s01) | cross · train-1 (s01→s02) | cross · LOSO train-4 (s01-04→s05) |
+|---|---|---|---|
+| **top1** | **15.0%** | 2.0% | **6.0%** |
+| top5 | 35.5% | 10.5% | 25.0% |
+| single-trial top1 | 4.06% | 1.45% | 1.94% |
 
-**The point is the gap, not the peak.** Within-subject concept-avg top1 (15%, 30× chance) craters to 2%
-(4× chance) cross-subject — a 7.5× drop. Same finding as motor imagery (0.71→0.36): the model learns a
-*subject-specific* EEG→semantic map that barely transfers. Within-subject is comparable to the NICE family;
-the honest cross-subject number is the contribution the field under-reports.
+**The point is the gap — and that it moves with subject count.** Within-subject concept-avg top1 (15%, 30×
+chance) craters cross-subject, but the crater *shrinks as training subjects are added*: 2% (train-1) → **6%**
+(train-4 LOSO), top5 10.5% → 25%. Single-trial stays near the floor (~2%) — that's the genuinely hard part.
+Same shape as motor imagery (0.71→0.36): a *subject-specific* EEG→semantic map that transfers better the more
+subjects it sees. Within-subject is comparable to the NICE family; the honest cross-subject number **and its
+subject-count scaling** is the contribution the field under-reports. (A full train-9 LOSO is one run away —
+the DataLoader is numpy-backed + index-viewed so 9 subjects' epochs fit in RAM without the doubled copy.)
 
 ## Critique / limitations (what's weak, on purpose visible)
 
-- **Single training subject** — cross here is train-on-*one*-person → test-on-another, the hardest, lowest
-  case. Real LOSO (train on many, hold one out) will lift cross off the floor; it widens automatically as the
-  download completes (currently 2–4 of 10 subjects).
+- **Subject count** — the train-4 LOSO (6%) already shows cross lifts off the train-1 floor (2%); the full
+  train-9 LOSO (all 10 downloaded) is the remaining stronger number, one memory-fixed run away.
 - **InfoNCE false negatives** — same-concept-different-image pairs in a batch are treated as negatives though
   their CLIP targets are ~0.7 similar; a concept-aware batch sampler or soft targets would help. Not yet done.
 - **Compact encoder, short training** — 693k params, early-stops ~ep 9; a bigger encoder / more epochs / LR

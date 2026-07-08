@@ -74,15 +74,17 @@ by something known.* Corrections welcome.
 |---|---|---|---|---|
 | **Control** | intent to *act* | commands (move, select) | motor imagery, P300, SSVEP | works, but low-bandwidth + often gaze-bound |
 | **State** | cognitive / affective *state* | monitoring (load, drowsiness) | mental workload / n-back — *passive BCI* | per-subject seems doable; graded levels appear to hit physiological ceilings |
-| **Perception** | the *stimulus* being perceived | reconstruct what you see / read | image viewing, reading | looks more tractable — exogenous |
+| **Perception** | the *stimulus* being perceived | reconstruct what you see / read | image viewing, reading | **measured** — within decodes, cross lifts with subject count |
 | **Communication** | inner *meaning / intent* | language, imagined content | imagined speech / text | the frontier — mostly endogenous, seems hard |
 
-**mindscape works up this ladder.** The two tasks below sit on the bottom two rungs — **motor imagery
-= control**, **n-back = state** — both measured cross-subject, no leaderboard cherry-picking. Next I want to
-try **perception** (EEG→image, where the signal is genuinely present and the field seems to under-report its
-cross-subject gap), with **communication** (EEG→text) as a follow-on frontier-probe — decoding the *reading*
-phase where signal is real, treating imagined "telepathy" as a probe, not a promise. That intended climb →
-**[docs/PLAN.md](docs/PLAN.md)**.
+**mindscape works up this ladder.** Three rungs now measured cross-subject (no leaderboard cherry-picking):
+**motor imagery = control**, **n-back = state**, and now **perception** — EEG→image on THINGS-EEG2 (a
+NICE-style CLIP-retrieval decoder), where within-subject decodes (concept-avg top1 **15%**, 30× chance) but
+cross-subject craters and then *lifts with training-subject count* (**2%** train-1 → **6%** train-4 LOSO) —
+the same subject-generalization story as motor imagery, in perception
+(→ **[neuroscan/tasks/visual/](neuroscan/tasks/visual/)**). **Communication** (EEG→text) is the follow-on
+frontier-probe — decode the *reading* phase where signal is real, treat imagined "telepathy" as a probe, not
+a promise. The climb → **[docs/PLAN.md](docs/PLAN.md)**.
 
 ## Task · Motor imagery (BCI-2a, EEG) — the generalization gap, measured
 The science layer is **signal → preprocess → decode → evaluate**, and the *evaluation regime* is the
