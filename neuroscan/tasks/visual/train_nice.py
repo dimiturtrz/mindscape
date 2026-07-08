@@ -168,10 +168,12 @@ def _epoch_steps(data: _FitArrays, neighbor_groups, cfg: TrainConfig, rng, epoch
         spec = BatchSpec(cfg.concepts_per_batch, cfg.samples_per_concept, n_bpe)
         pos_batches = (clip_hard_batches(data.concept[fit], neighbor_groups, spec, rng)
                        if cfg.sampling == "clip_hard" else balanced_batches(data.concept[fit], spec, rng))
-        return [(torch.from_numpy(data.eeg[fit[pos]]), torch.from_numpy(data.targets[fit[pos]])) for pos in pos_batches]
+        # generator, NOT a list: build+free each batch's tensors on demand (a list materializes the whole
+        # epoch of copied tensors at once -> OOM on the 240k-trial cross set).
+        return ((torch.from_numpy(data.eeg[fit[pos]]), torch.from_numpy(data.targets[fit[pos]])) for pos in pos_batches)
     if cfg.sampling == "stratified":
-        return [(torch.from_numpy(data.eeg[epoch_idx[pos]]), torch.from_numpy(data.targets[epoch_idx[pos]]))
-                for pos in stratified_batches(data.concept[epoch_idx], cfg.batch, rng) if len(pos) > 1]
+        return ((torch.from_numpy(data.eeg[epoch_idx[pos]]), torch.from_numpy(data.targets[epoch_idx[pos]]))
+                for pos in stratified_batches(data.concept[epoch_idx], cfg.batch, rng) if len(pos) > 1)
     return DataLoader(_EpochDataset(data.eeg, data.targets, epoch_idx),
                       batch_size=cfg.batch, shuffle=True, drop_last=True)
 
