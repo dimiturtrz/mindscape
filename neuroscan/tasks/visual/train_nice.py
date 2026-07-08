@@ -25,13 +25,31 @@ import json
 import numpy as np
 import torch
 from pydantic import BaseModel
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
 from neuroscan.models.nice import NiceConfig, NiceEncoder, clip_infonce, retrieval_topk
 from neuroscan.tasks.visual import clip_targets
 
 _EVAL_BATCH = 512   # batch >=2048 trips a cuDNN illegal-access on this conv shape (Blackwell / cu130)
+
+
+class _EpochDataset(Dataset):
+    """Numpy-backed — converts per sample, so the (large) training array is never copied into one torch
+    tensor up front. `indices` optionally views a subset of the arrays without copying them (the fit split
+    of a much larger epoch pile). Together these keep a full 9-subject LOSO (~38 GB of epochs) in RAM instead
+    of OOM-ing on the doubled copies (torch tensor + boolean-mask slice)."""
+
+    def __init__(self, eeg: np.ndarray, targets: np.ndarray, indices: np.ndarray | None = None):
+        self.eeg, self.targets = eeg, targets
+        self.indices = indices
+
+    def __len__(self) -> int:
+        return len(self.indices) if self.indices is not None else len(self.eeg)
+
+    def __getitem__(self, idx: int):
+        row = int(self.indices[idx]) if self.indices is not None else idx
+        return torch.from_numpy(self.eeg[row]), torch.from_numpy(self.targets[row])
 
 
 class TrainConfig(BaseModel):
@@ -108,8 +126,8 @@ def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dic
 
     fit_mask, val_mask, val_labels, val_bank = _val_split(
         train_concept, train_targets, cfg.seed, cfg.val_fraction)
-    fit_eeg, fit_targets = train_eeg[fit_mask], train_targets[fit_mask]
-    val_eeg = train_eeg[val_mask]
+    fit_indices = np.where(fit_mask)[0]            # view, not a copy — fit is the bulk of the epoch pile
+    val_eeg = train_eeg[val_mask]                  # small (one split fraction), copy is fine
     print(f"early-stop val: {len(val_bank)} held-out train concepts, {int(val_mask.sum())} epochs")
 
     encoder = NiceEncoder(NiceConfig(n_channels=train_eeg.shape[1], n_times=train_eeg.shape[2],
@@ -117,7 +135,7 @@ def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dic
     logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
     optimizer = torch.optim.AdamW([*encoder.parameters(), logit_scale],
                                   lr=cfg.lr, weight_decay=cfg.weight_decay)
-    loader = DataLoader(TensorDataset(torch.tensor(fit_eeg), torch.tensor(fit_targets)),
+    loader = DataLoader(_EpochDataset(train_eeg, train_targets, fit_indices),
                         batch_size=cfg.batch, shuffle=True, drop_last=True)
 
     best_val, best_state, best_epoch, since_improved = -1.0, None, -1, 0
