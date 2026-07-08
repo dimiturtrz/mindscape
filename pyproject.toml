@@ -89,6 +89,7 @@ omit = [
     "core/data/registry.py",   # top-level dataset registry map (sibling core/data/*/registry.py already omitted)
     # GPU training entrypoints + torch models/trainers (device + data, not logic)
     "neuroscan/tasks/visual/train_nice.py", "neuroscan/tasks/visual/retrieval_audit.py",
+    "neuroscan/tasks/visual/cross_dataset_eval.py",   # cross-dataset EEG1->EEG2 GPU runner
     "neuroscan/models/decoders.py", "neuroscan/models/eegnet.py",
     "neuroscan/models/profile.py",   # fvcore params+FLOPs (model on device)
     "neuroscan/tasks/workload/feature_importance/optuna_search.py",   # Optuna study runner (entrypoint)
@@ -97,6 +98,7 @@ omit = [
     # data adapters: filesystem read / OSF+OpenNeuro download
     "core/data/*/registry.py", "core/data/eeg/things_eeg2.py", "core/data/fnirs/shin2017.py",
     "core/data/eeg/shin2017_nback_eeg.py",   # BBCI .mat disk read (its pure epoching lives in core.data.signal)
+    "core/data/eeg/things_eeg1.py",   # BrainVision disk read (its pure epochs_from_events is unit-tested)
     "core/features/fnirs/montage.py",   # fnirs_positions loads .mat (disk); pure _to_unit_disk tested in features/eeg/montage
     # workload/fusion runners: load -> fit -> record orchestration (their logic lives in combine/base/_eval,
     # and the per-subject z-score in core.features.zscore_per_subject)
