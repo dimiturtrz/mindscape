@@ -83,3 +83,20 @@ bd close <id>         # Complete work
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
 
+## Conventions & Patterns
+
+### Code quality — ruff ratchet (bd mindscape-y63)
+
+CI has an **enforced** lint gate (`ruff check core neuroscan baselines --select <graduated>`) that grows one
+family per PR — fix-all-first, then graduate the family into the enforced `--select`. Plus **advisory** steps
+(full curated backlog + `ruff format --check`). Config lives in `[tool.ruff]` (line-length 120). `N` (the
+`X`/`y` tensor idiom) and `RUF001/002/003` (intentional `→ ≈ ×` unicode in docstrings) are deliberately not
+selected. Working rules:
+
+- **Bare `# noqa: CODE`** only — no prose (RUF100 enforces it suppresses a real hit). Prefer fixing.
+- **Imports at top** — break circulars by extraction, never lazy imports.
+- **Config objects, not param lists** — collapse too-many-args to a pydantic/dataclass config.
+- **No blind `except`** — a specific exception, or let it crash.
+- **Minimal comments** — self-documenting names.
+- Keep **CLAUDE.md ↔ AGENTS.md in sync**.
+

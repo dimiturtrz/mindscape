@@ -24,3 +24,19 @@ jobs:
         run: uv sync --frozen
       - name: Unit tests
         run: uv run pytest tests/unit -q
+
+  # Code-quality ratchet (bd mindscape-y63). ENFORCED step blocks on the graduated families (grows one per
+  # phase); ADVISORY steps surface the rest of the curated backlog + formatting without blocking.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Ruff — enforced (graduated families block)
+        run: uvx ruff@0.15.13 check core neuroscan baselines --select W
+      - name: Ruff — advisory backlog (non-blocking)
+        run: uvx ruff@0.15.13 check . --statistics || true
+      - name: Ruff — format check (advisory)
+        run: uvx ruff@0.15.13 format --check . || true

@@ -34,6 +34,22 @@ all = ["pytest", "onnx", "onnxruntime", "mlflow"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+# Code-quality ratchet (bd mindscape-y63): one family fixed-to-zero per PR, then graduated into the CI
+# enforced --select. `select` here is the ADVISORY target (the full curated backlog); CI's enforced step
+# passes a growing --select subset. N (the X/y tensor idiom, 383 hits) and RUF001/002/003 (intentional
+# → ≈ × unicode in docstrings) are deliberately not selected.
+[tool.ruff]
+line-length = 120
+extend-exclude = ["mlruns", "runs", "*.egg-info", "docs", "learning", "research", "neuroviz/web"]
+
+[tool.ruff.lint]
+select = ["F", "I", "E", "W", "B", "C4", "UP", "T20", "PLR", "PLC", "BLE", "S", "FBT", "SIM", "RUF", "C90"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLR2004", "FBT"]   # asserts, magic literals, bool args are fine in tests
+"__init__.py" = ["F401"]                  # re-export facades
+
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there so uv resolves the cu130 wheel
 # (RTX 5090) instead of the CPU build. `explicit` = only packages pinned in [tool.uv.sources] use it.
 [[tool.uv.index]]
