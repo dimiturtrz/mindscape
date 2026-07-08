@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -66,6 +67,7 @@ class TrainConfig(BaseModel):
     seed: int = 0
     patience: int = 8            # early-stop patience on val-top1 (epochs)
     val_fraction: float = 0.1    # share of TRAINING concepts held out for leak-free model selection
+    train_frac: float = 1.0      # per-epoch random subset of fit trials (bd pqh: <1 speeds over-sized data)
 
 
 def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
@@ -134,20 +136,25 @@ def train_encoder(train_eeg: np.ndarray, train_targets: np.ndarray, train_concep
         train_concept, train_targets, cfg.seed, cfg.val_fraction)
     fit_indices = np.where(fit_mask)[0]            # view, not a copy — fit is the bulk of the epoch pile
     val_eeg = train_eeg[val_mask]                  # small (one split fraction), copy is fine
-    logger.info(f"early-stop val: {len(val_bank)} held-out train concepts, {int(val_mask.sum())} epochs")
+    rng = np.random.default_rng(cfg.seed)
+    epoch_n = len(fit_indices) if cfg.train_frac >= 1.0 else max(cfg.batch, int(len(fit_indices) * cfg.train_frac))
+    logger.info(f"early-stop val: {len(val_bank)} held-out train concepts, {int(val_mask.sum())} epochs; "
+          f"fit {len(fit_indices)} trials, {epoch_n}/epoch (train_frac {cfg.train_frac})")
 
     encoder = NiceEncoder(NiceConfig(n_channels=train_eeg.shape[1], n_times=train_eeg.shape[2],
                                      embed_dim=train_targets.shape[1])).to(device)
     logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
     optimizer = torch.optim.AdamW([*encoder.parameters(), logit_scale],
                                   lr=cfg.lr, weight_decay=cfg.weight_decay)
-    loader = DataLoader(_EpochDataset(train_eeg, train_targets, fit_indices),
-                        batch_size=cfg.batch, shuffle=True, drop_last=True)
 
     best_val, best_state, best_epoch, since_improved = -1.0, None, -1, 0
     for epoch in range(cfg.epochs):
+        epoch_idx = fit_indices if cfg.train_frac >= 1.0 else rng.choice(fit_indices, epoch_n, replace=False)
+        loader = DataLoader(_EpochDataset(train_eeg, train_targets, epoch_idx),   # fresh subset each epoch
+                            batch_size=cfg.batch, shuffle=True, drop_last=True)
         encoder.train()
         total_loss = 0.0
+        epoch_start = time.perf_counter()
         for eeg_batch, target_batch in loader:
             eeg_batch = eeg_batch.to(device)
             target_batch = torch.nn.functional.normalize(target_batch.to(device), dim=-1)
@@ -164,8 +171,10 @@ def train_encoder(train_eeg: np.ndarray, train_targets: np.ndarray, train_concep
             best_state = {k: v.detach().cpu().clone() for k, v in encoder.state_dict().items()}
         else:
             since_improved += 1
+        epoch_s = time.perf_counter() - epoch_start
         if epoch % 5 == 0 or epoch == cfg.epochs - 1:
-            logger.info(f"ep {epoch:3d}  loss {total_loss / len(loader):.3f}  val-top1 {val_top1 * 100:.2f}%")
+            logger.info(f"ep {epoch:3d}  loss {total_loss / len(loader):.3f}  val-top1 {val_top1 * 100:.2f}%  "
+                  f"{epoch_s:.1f}s ({len(loader) / epoch_s:.0f} batch/s)")
         if since_improved >= cfg.patience:
             logger.info(f"early stop at ep {epoch} (best val = ep {best_epoch})")
             break

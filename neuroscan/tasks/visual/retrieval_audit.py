@@ -78,22 +78,40 @@ def summarize(rows: list[dict], ks: tuple[int, ...] = (1, 5)) -> dict:
     return {"n_subjects": len(rows), "grid": grid, "robust_cell": _ROBUST, "inflation_over_robust": inflation}
 
 
-def run_audit(cfg: AuditConfig) -> dict:
-    """Train the within- + cross-subject encoder for each held-out subject, assemble the robustness grid."""
+def _load_row(path: Path) -> dict:
+    """Read a checkpointed subject row, restoring the int top-k keys JSON turned into strings."""
+    raw = json.loads(path.read_text())
+    return {cell: {int(k): v for k, v in cell_scores.items()} for cell, cell_scores in raw.items()}
+
+
+def run_audit(cfg: AuditConfig, ckpt_dir: str = "runs/retrieval_audit_ckpt") -> dict:
+    """Train the within- + cross-subject encoder for each held-out subject, assemble the robustness grid.
+
+    Checkpoints each subject's row to `ckpt_dir` AS IT COMPLETES and resumes from it (bd 9js) — a stall on the
+    Nth subject never loses the first N-1 (this exact loss nearly happened during the qoa run)."""
     pool = cfg.all_subjects or tuple(things.subjects())
     train_cfg = TrainConfig(epochs=cfg.epochs, batch=cfg.batch, lr=cfg.lr,
                             resample=cfg.resample, seed=cfg.seed, patience=cfg.patience)
+    ckpt = Path(ckpt_dir)
+    ckpt.mkdir(parents=True, exist_ok=True)
     rows = []
-    for test_subject in cfg.subjects:
+    for i, test_subject in enumerate(cfg.subjects, 1):
+        row_path = ckpt / f"subject_{test_subject}.json"
+        if row_path.exists():
+            logger.info(f"[{i}/{len(cfg.subjects)}] subject {test_subject}: resumed from checkpoint")
+            rows.append(_load_row(row_path))
+            continue
         others = [s for s in pool if s != test_subject]
         if not others:
             raise ValueError(f"cross-subject arm needs >=2 subjects in the pool; got {pool}")
+        logger.info(f"[{i}/{len(cfg.subjects)}] subject {test_subject}: training within + cross ...")
         within = train([test_subject], test_subject, train_cfg)
         cross = train(others, test_subject, train_cfg)
         row = {**_cells_from_result(within, "within"), **_cells_from_result(cross, "cross")}
+        row_path.write_text(json.dumps(row))                       # checkpoint before moving on
         rows.append(row)
-        logger.info(f"subject {test_subject}: within-avg-top1 {within['concept_avg'][1]*100:.1f}%  "
-              f"-> robust cross-single-top1 {cross['single_trial'][1]*100:.1f}%")
+        logger.info(f"[{i}/{len(cfg.subjects)}] subject {test_subject}: within-avg-top1 "
+              f"{within['concept_avg'][1]*100:.1f}% -> robust cross-single-top1 {cross['single_trial'][1]*100:.1f}%")
     return {"disjoint": verify_concept_disjoint(), **summarize(rows), "per_subject": rows}
 
 
