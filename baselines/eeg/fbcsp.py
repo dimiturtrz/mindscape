@@ -16,6 +16,10 @@ the band-power baseline). Give it a broadband recipe (e.g. 4–40 Hz) so the fil
 from __future__ import annotations
 
 import numpy as np
+from mne.decoding import CSP
+from scipy.signal import butter, sosfiltfilt
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.feature_selection import mutual_info_classif
 
 from baselines.base import Baseline
 
@@ -46,7 +50,6 @@ class Fbcsp(Baseline):
         """Butterworth SOS (second-order sections) per band, designed ONCE and cached — the canonical FBCSP
         filter (Ang 2012). scipy's `sosfiltfilt` applies it vectorized over the time axis; going straight to
         scipy (not `mne.filter.filter_data`) drops ~100x of per-call design/padding overhead."""
-        from scipy.signal import butter
         if not hasattr(self, "_sos_"):
             self._sos_ = [butter(self.order, (lo, hi), btype="band", fs=self.fs, output="sos")
                           for lo, hi in self._bands()]
@@ -54,17 +57,12 @@ class Fbcsp(Baseline):
 
     @staticmethod
     def _filter(X: np.ndarray, sos) -> np.ndarray:
-        from scipy.signal import sosfiltfilt
         return sosfiltfilt(sos, X, axis=-1)                       # zero-phase, vectorized over trials×channels
 
     def _csp(self):
-        from mne.decoding import CSP
         return CSP(n_components=self.n_components, reg="ledoit_wolf", log=True)
 
     def fit(self, X, y):
-        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-        from sklearn.feature_selection import mutual_info_classif
-
         X = np.asarray(X, dtype=np.float64)
         sos_bank = self._sos_bank()
         self.csps_, feats = [], []

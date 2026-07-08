@@ -31,6 +31,9 @@ import logging
 from pathlib import Path
 
 import numpy as np
+from joblib import Parallel, delayed
+from pyriemann.estimation import Covariances
+from sklearn.model_selection import StratifiedShuffleSplit
 
 from baselines.eeg import transfer
 from core import config, reference
@@ -38,7 +41,7 @@ from core.data import splits, store
 from core.data.eeg.base import EpochCfg
 from core.features import time_delay_embed
 from neuroscan import tracking
-from neuroscan.evaluation import metrics
+from neuroscan.evaluation import metrics, results
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +50,6 @@ _CALIBRATED = {"rpa", "mdwm"}
 
 
 def _covariances(X, augment, order, lag, estimator="oas"):
-    from pyriemann.estimation import Covariances
     if augment:
         X = time_delay_embed(X.astype(np.float64), order, lag)
     return Covariances(estimator=estimator).transform(X.astype(np.float64))
@@ -63,8 +65,6 @@ def _calibrated_fold(s, method, Ctr, ytr, Cte, yte, calib_frac, seed, mdwm_lambd
     """Calibrated: carve a stratified `calib_frac` of the held-out subject as the *only* labelled target data
     (the rest is the disjoint test set), hand it to the transfer method, score the disjoint remainder. Test
     labels never enter the fit — the split is the runner's honesty guarantee, the method just consumes it."""
-    from sklearn.model_selection import StratifiedShuffleSplit
-
     cal, ev = next(StratifiedShuffleSplit(1, train_size=calib_frac, random_state=seed).split(Cte, yte))
     pred = transfer.calibrated_predict(method, Ctr, ytr, Cte[cal], yte[cal], Cte[ev], mdwm_lambda)
     yev = yte[ev]
@@ -105,8 +105,6 @@ def main():
     ap.add_argument("--out", default=None)
     ap.add_argument("--no-record", action="store_true", help="skip updating the committed results.json snapshot")
     args = ap.parse_args()
-
-    from joblib import Parallel, delayed
 
     exp = config.load_experiment(args.exp, args.overrides)
     dataset, method = exp.dataset, exp.method
@@ -159,7 +157,6 @@ def main():
         tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
         tracking.per_group("acc_subject", {r["fold"]: r["acc"] for r in rows})
         tracking.artifact(out / "aggregate.json")
-    from neuroscan.evaluation import results
     if not args.no_record and results.record(out):
         logger.info(f"   recorded -> results.json ({out.name})")
     logger.info(f"-> {out}/aggregate.json")

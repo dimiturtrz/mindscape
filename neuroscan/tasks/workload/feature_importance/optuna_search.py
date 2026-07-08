@@ -24,6 +24,9 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import optuna
+from omegaconf import OmegaConf
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
 from core.config import REPO
 from core.data import store
@@ -40,8 +43,6 @@ _STABLE_JACCARD = 0.6   # top-family sets agree across seeds at/above this Jacca
 def _cv_score(F, fam, y, groups, weights, fold_seeds, k) -> float:
     """Mean accuracy of standardise→per-family-weight→shrinkage-LDA over StratifiedGroupKFold repeated for
     each seed in `fold_seeds`. Grouped by subject (whole subjects per fold); the scaler fits on train only."""
-    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-
     accs = []
     for tr, te in grouped_folds(F, y, groups, fold_seeds, k):
         sc = WeightedFamilyScaler(fam, weights).fit(F[tr])
@@ -56,8 +57,6 @@ def _storage(out: Path):
     """Optuna JournalStorage (file-backed) under the run dir — persists all trials for later querying. Uses
     the open()-based file lock, not the default symlink lock, so it works on Windows (symlink creation needs
     a privilege the client doesn't hold there)."""
-    import optuna
-
     out.mkdir(parents=True, exist_ok=True)
     path = str(out / "journal.log")
     backend = optuna.storages.journal.JournalFileBackend(path,
@@ -67,8 +66,6 @@ def _storage(out: Path):
 
 def _run_one_study(F, fam, y, groups, families, cfg, tpe_seed, storage):
     """One Optuna study (one TPE seed): returns (importances, top_weight_means, best_value, best_params)."""
-    import optuna
-
     def objective(trial):
         weights = {f: trial.suggest_float(f, cfg.weight_low, cfg.weight_high) for f in families}
         return _cv_score(F, fam, y, groups, weights, list(cfg.fold_seeds), cfg.k)
@@ -106,14 +103,11 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     for _n in ("mne", "moabb", "braindecode"):
         logging.getLogger(_n).setLevel(logging.WARNING)
-    from omegaconf import OmegaConf
-
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", default=None, help="study config (default: optuna.yaml beside this module)")
     ap.add_argument("--trials", type=int, default=None, help="override n_trials (the one common knob)")
     args = ap.parse_args()
 
-    import optuna
     optuna.logging.set_verbosity(optuna.logging.WARNING)                  # no per-trial spam
 
     cfg = OmegaConf.load(args.config or _CFG)

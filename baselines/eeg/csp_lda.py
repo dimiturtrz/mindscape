@@ -11,6 +11,9 @@ back-compat shims.
 from __future__ import annotations
 
 import numpy as np
+from mne.decoding import CSP
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.pipeline import Pipeline
 
 from baselines.base import Baseline
 
@@ -23,9 +26,6 @@ class CspLda(Baseline):
         self.n_components = n_components
 
     def _build(self):
-        from mne.decoding import CSP
-        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-        from sklearn.pipeline import Pipeline
         return Pipeline([
             ("csp", CSP(n_components=self.n_components, reg="ledoit_wolf", log=True)),
             ("lda", LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")),

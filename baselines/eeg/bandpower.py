@@ -15,6 +15,9 @@ sampled at `fs` (the epoch resample rate; the Shin EEG recipe is 100 Hz over a 4
 from __future__ import annotations
 
 import numpy as np
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 from baselines.base import Baseline
 from core.features import band_powers
@@ -29,9 +32,6 @@ class EegBandpower(Baseline):
         self.relative = relative
 
     def _build(self):
-        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-        from sklearn.pipeline import make_pipeline
-        from sklearn.preprocessing import StandardScaler
         return make_pipeline(StandardScaler(),
                              LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto"))
 

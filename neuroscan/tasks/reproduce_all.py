@@ -22,6 +22,7 @@ from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from neuroscan import models
 from neuroscan.evaluation import harness, results
+from neuroscan.models.decoders import MODELS
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,6 @@ def main():
         if missing:
             raise SystemExit(f"--only names not decode/fnirs experiments: {sorted(missing)}")
     runs = [r for r in runs if not (args.cross_only and r[3] == "within")]
-    from neuroscan.models.decoders import MODELS
     for name, dataset, method, regime, cfg, test_session in runs:
         meta = store.load(dataset, cfg)
         n_classes = int(meta["label_id"].max()) + 1

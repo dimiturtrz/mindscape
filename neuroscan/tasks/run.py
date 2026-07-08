@@ -25,7 +25,7 @@ from core import config, reference
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from neuroscan import models
-from neuroscan.evaluation import harness
+from neuroscan.evaluation import harness, modelcard, results
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,6 @@ def main():
 
     out = run_dir / "aggregate.json"
     out.write_text(json.dumps(res, indent=2))
-    from neuroscan.evaluation import modelcard, results
     modelcard.write(res, dataset, regime, run_dir / "CARD.md")
     if not args.no_record and results.record(run_dir):
         logger.info(f"   recorded -> results.json ({run_dir.name})")

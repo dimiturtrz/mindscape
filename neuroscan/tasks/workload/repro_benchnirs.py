@@ -27,13 +27,12 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     for _n in ("mne", "moabb", "braindecode"):
         logging.getLogger(_n).setLevel(logging.WARNING)
+    from benchnirs.learn import machine_learn  # noqa: PLC0415
+    from benchnirs.load import load_dataset  # noqa: PLC0415
+    from benchnirs.process import extract_features, process_epochs  # noqa: PLC0415
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--data", required=True, help="dir holding VP001-NIRS/cnt_nback.mat …")
     args = ap.parse_args()
-
-    from benchnirs.learn import machine_learn
-    from benchnirs.load import load_dataset
-    from benchnirs.process import extract_features, process_epochs
 
     epochs = load_dataset("shin_2018_nb", args.data, bandpass=[0.01, 0.5],
                           baseline=(-2, 0), roi_sides=True, tddr=True)         # their exact preprocessing

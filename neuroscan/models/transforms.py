@@ -6,6 +6,7 @@ testable + swappable. Standardizers share one interface: `fit(X) -> self`, `__ca
 from __future__ import annotations
 
 import numpy as np
+from braindecode.preprocessing import exponential_moving_standardize
 
 
 class ZScore:
@@ -30,7 +31,6 @@ class ExpMovingStd:
         return self
 
     def __call__(self, X):
-        from braindecode.preprocessing import exponential_moving_standardize
         ib = min(self.init_block_size, X.shape[2])
         return np.stack([exponential_moving_standardize(e, factor_new=self.factor_new, init_block_size=ib)
                          for e in X]).astype(np.float32)

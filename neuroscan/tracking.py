@@ -22,7 +22,11 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
+import joblib
+import torch
+
 from core.config import REPO
+from neuroscan.evaluation import results
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +40,7 @@ def _mlflow():
     if os.environ.get("MINDSCAPE_NO_MLFLOW"):
         return None
     try:
-        import mlflow
+        import mlflow  # noqa: PLC0415
     except ImportError:
         return None
     return mlflow
@@ -159,11 +163,9 @@ def save_model(clf, name: str, run_dir: str | Path | None = None) -> Path | None
         out_dir.mkdir(parents=True, exist_ok=True)
         net = getattr(clf, "net", None)
         if net is not None:                                  # torch decoder
-            import torch
             path = out_dir / f"{name}.pt"
             torch.save(net, path)
         else:                                                # sklearn pipeline (baseline)
-            import joblib
             path = out_dir / f"{name}.joblib"
             joblib.dump(clf, path)
     except Exception:
@@ -175,7 +177,6 @@ def save_model(clf, name: str, run_dir: str | Path | None = None) -> Path | None
 def backfill(experiment: str = "mindscape") -> None:
     """One-shot: log existing runs/<name>/aggregate.json as runs, so the UI has history.
     Skips runs already tracked (have .mlflow_run_id).  `python -m neuroscan.tracking`."""
-    from neuroscan.evaluation import results  # shared aggregate->metrics normalizer (both schemas)
     n = 0
     for aj in sorted((REPO / "runs").glob("**/aggregate.json")):
         rd = aj.parent

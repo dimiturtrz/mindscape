@@ -13,6 +13,7 @@ make_split holds out whole datasets/vendors; ours holds out subjects/sessions â€
 from __future__ import annotations
 
 import polars as pl
+from sklearn.model_selection import GroupKFold
 
 
 def _val_carve(rest: pl.DataFrame, val_frac: float, seed: int) -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -60,8 +61,6 @@ def grouped_kfold(meta: pl.DataFrame, k: int = 5):
     groups, each subject tested exactly once. This is the BenchNIRS 'generalised' protocol (sklearn
     GroupKFold); LOSO is the k = n_subjects limit. train = all non-test subjects, in full (no val carve;
     see leave_one_subject_out)."""
-    from sklearn.model_selection import GroupKFold
-
     subs = sorted(meta["subject"].unique().to_list())
     gkf = GroupKFold(n_splits=k)
     for i, (_tr, te) in enumerate(gkf.split(list(range(len(subs))), groups=subs)):

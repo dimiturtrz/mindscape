@@ -6,9 +6,10 @@ CSP/EEGNet methods, ~88% for transformer SOTA) is what the harness quarantines a
 """
 from __future__ import annotations
 
+from moabb.datasets import BNCI2014_001
+
 from core.data.eeg.base import MoabbMIAdapter
 
 
 def adapter() -> MoabbMIAdapter:
-    from moabb.datasets import BNCI2014_001
     return MoabbMIAdapter(name="bnci2014_001", dataset_cls=BNCI2014_001, n_classes=4)

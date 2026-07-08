@@ -11,6 +11,8 @@ from __future__ import annotations
 import logging
 
 import numpy as np
+from pyriemann.estimation import Covariances
+from sklearn.model_selection import StratifiedGroupKFold
 
 from baselines.eeg import transfer
 from core.data import store
@@ -24,7 +26,6 @@ _SEEDS, _K = [0, 1, 2], 5
 
 
 def _cov(X):
-    from pyriemann.estimation import Covariances
     return Covariances("oas").transform(X.astype(np.float64))
 
 
@@ -32,7 +33,6 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     for _n in ("mne", "moabb", "braindecode"):
         logging.getLogger(_n).setLevel(logging.WARNING)
-    from sklearn.model_selection import StratifiedGroupKFold
     me = store.load("shin2017_nback_eeg", _EEG_CFG)
     subs = sorted(me["subject"].unique().to_list())
     Cs, ys, gs = [], [], []

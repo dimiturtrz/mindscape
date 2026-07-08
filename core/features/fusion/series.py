@@ -7,6 +7,8 @@ rasterizes (camera) and the coupling diagnostics consume — one home for the en
 from __future__ import annotations
 
 import numpy as np
+from scipy.interpolate import interp1d
+from scipy.signal import butter, hilbert, sosfiltfilt
 
 from core.features.fnirs.chromophore import cbsi_neural
 from core.features.fusion.coupling import estimate_coupling
@@ -18,14 +20,12 @@ _BANDS = {"theta": _THETA, "alpha": _ALPHA, "beta": _BETA}
 def _band_env(X: np.ndarray, fs: float, band: tuple[float, float]) -> np.ndarray:
     """Band-power envelope per channel: bandpass → analytic-signal magnitude → `[n, ch, t]`. The slow envelope
     is what carries cognitive-state info, so it (not raw EEG) is the fast-layer feature."""
-    from scipy.signal import butter, hilbert, sosfiltfilt
     sos = butter(4, [band[0], band[1]], btype="band", fs=fs, output="sos")
     return np.abs(hilbert(sosfiltfilt(sos, X, axis=-1), axis=-1))
 
 
 def _resample_time(X: np.ndarray, t_src: np.ndarray, t_dst: np.ndarray) -> np.ndarray:
     """Linear-resample `X[n, ch, t]` from source time axis `t_src` to target `t_dst` (vectorized over axis -1)."""
-    from scipy.interpolate import interp1d
     return interp1d(t_src, X, axis=-1, bounds_error=False, fill_value=0.0)(t_dst).astype(X.dtype)
 
 

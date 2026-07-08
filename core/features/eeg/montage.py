@@ -2,13 +2,13 @@
 any EEG-alone spatial method reuse this)."""
 from __future__ import annotations
 
+import mne
 import numpy as np
 
 
 def eeg_positions(ch_names: list[str]) -> np.ndarray:
     """2D scalp positions for EEG channels via the MNE standard 10-05 montage, normalized to the unit disk.
     Returns `[n_ch, 2]` in the same head-disk convention as `fnirs_positions`."""
-    import mne
     m = mne.channels.make_standard_montage("standard_1005").get_positions()["ch_pos"]
     pos = np.array([m[c][:2] if c in m else (np.nan, np.nan) for c in ch_names], dtype=float)  # x,y (drop z)
     return _to_unit_disk(pos)

@@ -7,6 +7,8 @@ deliberately tiny — 702 blocks, 26 subjects — heavy pooling + dropout + weig
 from __future__ import annotations
 
 import numpy as np
+import torch
+import torch.nn as nn
 
 
 class BrainCameraNet:
@@ -23,7 +25,6 @@ class BrainCameraNet:
         self.seed = seed
 
     def _build(self, C):
-        import torch.nn as nn
         return nn.Sequential(
             nn.Conv3d(C, 16, kernel_size=3, padding=1), nn.BatchNorm3d(16), nn.ReLU(),
             nn.MaxPool3d((2, 2, 4)),                                    # H,W /2, T /4
@@ -33,7 +34,6 @@ class BrainCameraNet:
         )
 
     def fit(self, X, y):
-        import torch
         torch.manual_seed(self.seed)
         self.dev_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.net_ = self._build(X.shape[1]).to(self.dev_)
@@ -58,7 +58,6 @@ class BrainCameraNet:
         return np.arange(self.n_classes)
 
     def predict_proba(self, X):
-        import torch
         self.net_.eval()
         Xt = torch.as_tensor(X, dtype=torch.float32)
         out = []

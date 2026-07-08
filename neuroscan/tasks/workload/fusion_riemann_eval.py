@@ -15,6 +15,8 @@ from __future__ import annotations
 import logging
 
 import numpy as np
+from pyriemann.estimation import Covariances
+from sklearn.model_selection import StratifiedGroupKFold
 
 from baselines.eeg import transfer
 from core.data import store
@@ -35,7 +37,6 @@ _FNIRS_BASELINE_ACC = 0.595                        # EEG-only re-centered Rieman
 
 
 def _cov(X):
-    from pyriemann.estimation import Covariances
     return Covariances("oas").transform(X.astype(np.float64))
 
 
@@ -64,7 +65,6 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     for _n in ("mne", "moabb", "braindecode"):
         logging.getLogger(_n).setLevel(logging.WARNING)
-    from sklearn.model_selection import StratifiedGroupKFold
     C, y, g = _build_all()
     logger.info(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
     accs, kaps = [], []

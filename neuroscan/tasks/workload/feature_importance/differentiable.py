@@ -23,11 +23,14 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+from omegaconf import OmegaConf
+from sklearn.model_selection import GroupShuffleSplit
 
 from core.config import REPO
 from core.data import store
@@ -67,7 +70,6 @@ class WeightedLinear(torch.nn.Module):
 
 
 def _fit(Xtr, ytr, group_idx, n_groups, n_classes, lam, hp) -> WeightedLinear:
-    import math
     model = WeightedLinear(group_idx, n_groups, Xtr.shape[1], n_classes).to(_DEV)
     opt = torch.optim.Adam(model.parameters(), lr=hp["lr"], weight_decay=hp["weight_decay"])
     Xt = torch.as_tensor(Xtr, dtype=torch.float32, device=_DEV)
@@ -131,9 +133,6 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     for _n in ("mne", "moabb", "braindecode"):
         logging.getLogger(_n).setLevel(logging.WARNING)
-    from omegaconf import OmegaConf
-    from sklearn.model_selection import GroupShuffleSplit
-
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", default=None, help="study config (default: subset.yaml beside this module)")
     ap.add_argument("--grain", default=None, choices=["family", "channel"])

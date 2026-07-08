@@ -16,6 +16,7 @@ Two pieces:
 from __future__ import annotations
 
 import numpy as np
+from scipy.stats import kurtosis, skew
 
 from core.features.fnirs.amplitude import _time_axis
 
@@ -44,12 +45,10 @@ def _f_time_to_peak(X):
 
 
 def _f_skew(X):
-    from scipy.stats import skew
     return np.nan_to_num(skew(X, axis=2)).astype(np.float32)               # asymmetry (flat channel -> 0)
 
 
 def _f_kurtosis(X):
-    from scipy.stats import kurtosis
     return np.nan_to_num(kurtosis(X, axis=2)).astype(np.float32)          # peakedness (flat channel -> 0)
 
 

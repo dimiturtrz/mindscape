@@ -17,6 +17,10 @@ in the 2026-07-05 deep-dive). `fs`, `tmin`, `task_dur` set the epoch timing (Shi
 from __future__ import annotations
 
 import numpy as np
+from scipy.stats import gamma
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 from baselines.base import Baseline
 
@@ -25,7 +29,6 @@ def _canonical_hrf(fs: float, length_s: float = 32.0, peak: float = 6.0, under: 
                    p_disp: float = 1.0, u_disp: float = 1.0, ratio: float = 1 / 6) -> np.ndarray:
     """SPM-style double-gamma HRF sampled at `fs`, peak-normalized. `p_disp`/`u_disp` widen the gammas (used
     to form the dispersion-derivative basis)."""
-    from scipy.stats import gamma
     t = np.arange(0, length_s, 1.0 / fs)
     h = gamma.pdf(t, peak / p_disp, scale=p_disp) - ratio * gamma.pdf(t, under / u_disp, scale=u_disp)
     return h / np.abs(h).max()
@@ -74,9 +77,6 @@ class GlmBeta(Baseline):
         return B.reshape(n, ch * n_feat)
 
     def _build(self):
-        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-        from sklearn.pipeline import make_pipeline
-        from sklearn.preprocessing import StandardScaler
         return make_pipeline(StandardScaler(),
                              LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto"))
 

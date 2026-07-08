@@ -16,6 +16,9 @@ with channels = HbO then HbR (see core/data/fnirs/shin2017.py).
 from __future__ import annotations
 
 import numpy as np
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 from baselines.base import Baseline
 from core.features import amplitude_features
@@ -26,9 +29,6 @@ class FnirsLda(Baseline):
     The fitted pipeline lives on `self.pipe_`; features are `core.features.amplitude_features`."""
 
     def _build(self):
-        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-        from sklearn.pipeline import make_pipeline
-        from sklearn.preprocessing import StandardScaler
         return make_pipeline(StandardScaler(),
                              LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto"))
 

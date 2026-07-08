@@ -24,6 +24,8 @@ import logging
 from pathlib import Path
 
 import numpy as np
+from pyriemann.estimation import Covariances
+from sklearn.model_selection import GroupKFold
 
 from baselines.eeg import transfer
 from baselines.fusion import combine
@@ -79,7 +81,6 @@ def main():
     fn_fit, fn_score = models.get_method("fnirs_lda")
 
     def _cov(X):
-        from pyriemann.estimation import Covariances
         return Covariances("oas").transform(X.astype(np.float64))
 
     def eeg_probs(Xtr, ytr, gtr, Xte, gte):
@@ -178,7 +179,6 @@ def main():
 
 def _subject_folds(subs, k):
     """GroupKFold over the subject list (each subject in one test fold)."""
-    from sklearn.model_selection import GroupKFold
     subs = list(map(str, subs))
     gkf = GroupKFold(n_splits=k)
     for i, (tr, te) in enumerate(gkf.split(list(range(len(subs))), groups=subs)):

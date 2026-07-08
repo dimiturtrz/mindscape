@@ -6,6 +6,7 @@ a causal hemodynamic kernel. We FIT that kernel instead of hardcoding a 5 s shif
 from __future__ import annotations
 
 import numpy as np
+from scipy.signal import fftconvolve
 
 _HRF_WIDTH = (2.0, 5.0)      # physiological hemodynamic dispersion (s): HRF FWHM ~5 s -> std ~2-5 s. A width
                              # FLOOR stops the coupling fit railing to a degenerate spike on weak/short data.
@@ -32,7 +33,6 @@ def estimate_coupling(drive: np.ndarray, resp: np.ndarray, fs: float, *, lag_max
     a degenerate delta on weak/short data: physics > statistics). Returns `(lag, decay, beta)`: `lag` = kernel
     center-of-mass (s, the offset), `decay` = tail time-constant `b` (s, the smearing), `beta` = least-squares
     gain (EEG-envelope → CBSI unit bridge). Self-calibrates per subject — neurovascular latency varies."""
-    from scipy.signal import fftconvolve
     d = drive.astype(np.float64)
     r = resp.astype(np.float64)
     rz = (r - r.mean(1, keepdims=True)) / (r.std(1, keepdims=True) + 1e-9)
