@@ -33,9 +33,9 @@ across two tasks:
   two still fail on *different* blocks (oracle **0.75** vs best-single **0.58**), and once EEG is well-aligned
   its confidence turns informative, so output-space fusion goes from *hurting* to a marginal edge (product
   **+1.5 pp**) — a wash, not yet a win. The oracle headroom (**+17 pts**) is **real but mostly uncaptured**:
-  the complementarity exists, the fusion methods we've tried don't cash it. The graded 2-vs-3 sub-contrast *is*
+  the complementarity exists, the fusion methods we've tried don't capture it. The graded 2-vs-3 sub-contrast *is*
   at a physiological ceiling (fNIRS reads WM *engagement*, not *level*) — so *that* is capped — but capturing
-  the complementarity (boundary-aware / source-space fusion) is untested, not disproven. The honest finding is
+  the complementarity (boundary-aware / source-space fusion) is untested, not disproven. The measured finding is
   a real gap we haven't closed, not a settled null.
 
 Two through-lines under both tasks: the **evaluation regime is the product** — a split is a *criteria filter*
@@ -59,7 +59,7 @@ response building over the trial), and **Fusion** — the EEG+fNIRS **brain-came
 (raw EEG band-power + the fNIRS CBSI neural map → a locality-gated **joint firing pattern**; hemodynamic lag
 derived per subject, blood read forward to align to the EEG event). The single-modality views show the signal
 a decoder consumes *and whether it got it right* (robust cross-subject score); the fusion view shows the
-**physics** — honestly a visualization, not (yet) a decode win (the graded 2-vs-3 contrast is at a
+**physics** — a visualization, not (yet) a decode win (the graded 2-vs-3 contrast is at a
 physiological ceiling; what fusion does and doesn't capture is measured below). → **[neuroviz/](neuroviz/)**
 
 ## Mapping the field — a working frame for where these tasks sit
@@ -307,7 +307,7 @@ no selection optimism ([`recipes`](neuroscan/tasks/workload/feature_importance/r
 
 The **slope *trajectory*** (rise rate + early/late shape, 3 features) **ties the full 15-family bank and edges
 the standard triple** — while `mean` and `peak` alone barely clear chance (0.333). So two-thirds of the
-field-standard triple is dead weight; the real recipe is *shape, not magnitude*. The correction over the
+field-standard triple is redundant; the real recipe is *shape, not magnitude*. The correction over the
 search: slope-*alone* (0.446) sits a hair *under* the triple — it's the slope trajectory that carries it, not
 a single number. (Assume-wrong in action: the search *suggested* slope; the no-search CV *tempered* the claim.)
 
@@ -332,7 +332,7 @@ So the collapse isn't lazy — it's matched to a smooth signal, and the temporal
   fix) gave no gain — a slight drop on this single run — most likely because our per-epoch baseline-correction
   already removes the offset it targets. (One run, not a claim that z-scoring is useless.)
 
-### The graded-load ceiling — physiology, not a method gap (the honest finding)
+### The graded-load ceiling — physiology, not a method gap (the measured finding)
 We attacked the ~0.46 cross-subject 3-class number **four ways** — a 15-family feature bank, windowed temporal
 representations, CBSI physiological-noise cleaning, and a GLM-β HRF model — and **every one ties the
 mean+slope+peak baseline** (~<!--r:fnirs_lda_cross_subject_shin2017_nback.acc-->0.454<!--/r-->), which itself
@@ -352,7 +352,7 @@ where the hemodynamic response *is* the signal (engagement detection, motion-rob
 *level* cross-subject is a poor task for it. We circle back when better data — generation and
 collection — can change the physics we're currently stuck with.
 
-### Fusion — a strong + weak pair; complementarity is real, output-space fusion barely cashes it
+### Fusion — a strong + weak pair; complementarity is real, output-space fusion barely captures it
 Both decoders run on the **same aligned epochs** — EEG **re-centered Riemann** (the transfer fix, zero-shot
 per-subject) + fNIRS mean/slope/peak — under one **5-fold GroupKFold** so every role shares identical folds
 (fusion needs per-epoch EEG↔fNIRS pairing, which LOSO's single-subject test sets make too small to read):
@@ -370,7 +370,7 @@ the 5-fold number; the LOSO number in Table B is 0.60, a touch higher from more 
 this is a **strong + weak** pair. Late fusion (0.587) now **edges** the best single (+0.7 pp) rather than *losing* to
 it — but that margin is within fold noise, so read it as a **wash-to-slight-edge, not a clean win**. Feature
 fusion (0.564, concatenating the re-centered EEG tangent-space feature + fNIRS amplitude) lands just under the
-best single — a fair feature-level result, not a broken one. The interesting question is the **complementarity**
+best single — a fair feature-level result, not a broken one. The open question is the **complementarity**
 — the two modalities still **fail on different blocks**:
 
 | complementarity (same 5-fold) | value |
@@ -419,7 +419,7 @@ from the raw signals, not the probabilities:
 **<!--r:fusion_gate_cross_subject_kfold_shin2017_nback.gate-->0.573<!--/r-->** — merely *tying* z-scored-EEG-alone
 (<!--r:calibration_ablation_shin2017_nback_eeg.eeg_z_best-->0.581<!--/r-->) and capturing none of the oracle
 headroom (<!--r:calibration_ablation_shin2017_nback_eeg.oracle_z-->0.766<!--/r-->) either. So — measured — neither
-the combiners nor the gate cash the real complementarity on this strong+weak pair; boundary-aware routing and
+the combiners nor the gate capture the complementarity on this strong+weak pair; boundary-aware routing and
 source-space fusion are the open, untested routes.
 
 Two caveats. (1) The oracle is an **upper bound** — a perfect selector is unattainable; a real gate
@@ -438,7 +438,7 @@ gate in [`tasks/workload/fusion_gate.py`](neuroscan/tasks/workload/fusion_gate.p
 
 Third rung of the ladder: decode the *seen image* from EEG. A NICE-style encoder maps each EEG epoch to the
 viewed image's CLIP embedding (InfoNCE), then retrieves zero-shot among the 200 held-out THINGS test concepts
-(chance **0.5%**). The contribution here is **not** a leaderboard top-k — it's an honest audit of *how much the
+(chance **0.5%**). The contribution here is **not** a leaderboard top-k — it's a bias audit of *how much the
 field's usual numbers inflate*, plus the hardest generalization test the two THINGS-EEG datasets allow.
 
 **The inflation grid** ([`retrieval_audit.py`](neuroscan/tasks/visual/retrieval_audit.py)) — the same encoder,
@@ -465,7 +465,7 @@ confidence gap.
 hardest test: train on **THINGS-EEG1** (Grootswagers ds003825 — 50 subj, 63-ch, [adapter](core/data/eeg/things_eeg1.py)
 real-data validated), retrieve on **THINGS-EEG2** — different people, different rig, same 1,854 concepts; EEG2's
 test concepts held out of EEG1 ([bridge](neuroscan/evaluation/cross_dataset.py)) so it's cross-dataset *and*
-concept-zero-shot *and* cross-subject at once. **Result: a genuine negative.** The EEG1 encoder learns
+concept-zero-shot *and* cross-subject at once. **Result: a measured null.** The EEG1 encoder learns
 (within-EEG1 val 2.4%, ~5× chance) but transfers at chance (0.5% top-1), and **montage-aligning the 62 shared
 electrodes doesn't rescue it** (`common_channel_order`/`align_channels` — the rigs share all but Fz/Cz, in
 scrambled order). So it's not a channel-order artifact; the datasets are just too far apart (reference, 10 vs
