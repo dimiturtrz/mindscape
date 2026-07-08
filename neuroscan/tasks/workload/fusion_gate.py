@@ -64,10 +64,10 @@ def _zscore_per_subject(F, groups):
     """Standardize each feature within each subject (its own mean/std) — unsupervised, so it applies to a
     held-out test subject too. Removes the subject-specific offset that sinks cross-subject band-power."""
     out = np.empty_like(F)
-    for s in np.unique(groups):
-        m = groups == s
-        mu, sd = F[m].mean(0), F[m].std(0)
-        out[m] = (F[m] - mu) / (sd + 1e-6)
+    for subject in np.unique(groups):
+        mask = groups == subject
+        mu, sd = F[mask].mean(0), F[mask].std(0)
+        out[mask] = (F[mask] - mu) / (sd + 1e-6)
     return out
 
 

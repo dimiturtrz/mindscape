@@ -110,12 +110,12 @@ def main():
                       params={"method": args.method, "subject": str(sub)},
                       tags={"kind": "quantize"}, run_dir=rep_dir):
         accuracy, size, latency = rep["accuracy"], rep["size_mb"], rep["latency_ms_cpu"]
-        m = {"acc_torch_fp32": accuracy["torch_fp32"], "acc_onnx_fp32": accuracy["onnx_fp32"],
-             "size_fp32_mb": size["fp32"], "latency_fp32_ms": latency["fp32"], "parity_max_dlogit": gap}
+        metrics = {"acc_torch_fp32": accuracy["torch_fp32"], "acc_onnx_fp32": accuracy["onnx_fp32"],
+                   "size_fp32_mb": size["fp32"], "latency_fp32_ms": latency["fp32"], "parity_max_dlogit": gap}
         if "onnx_int8" in accuracy:
-            m.update({"acc_onnx_int8": accuracy["onnx_int8"], "size_int8_mb": size["int8"],
-                      "latency_int8_ms": latency["int8"]})
-        tracking.metrics(m)
+            metrics.update({"acc_onnx_int8": accuracy["onnx_int8"], "size_int8_mb": size["int8"],
+                            "latency_int8_ms": latency["int8"]})
+        tracking.metrics(metrics)
     logger.info(f"\n=== {args.method} edge quantization (subject {sub}) ===")
     logger.info(f"  parity max|Δlogit| {gap:.2e}  (gate < 1e-3) OK")
     a = rep["accuracy"]
