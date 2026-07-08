@@ -17,9 +17,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import open_clip
 import torch
-from PIL import Image
+
+try:                                    # the 'visual' extra — only needed to COMPUTE embeddings, not to load
+    import open_clip  # cached ones or import the module (retrieval runs on the .npz)
+    from PIL import Image
+except ImportError:                     # pragma: no cover
+    open_clip = Image = None
 
 from core.config import processed_dir, raw_dir
 
@@ -62,6 +66,8 @@ def _list_images(split: str) -> list[ImageItem]:
 
 
 def _load_clip(device: str):
+    if open_clip is None:
+        raise RuntimeError("computing CLIP targets needs the 'visual' extra: uv sync --extra visual")
     model, _, preprocess = open_clip.create_model_and_transforms(_CLIP_ARCH, pretrained=_CLIP_PRETRAINED)
     return model.eval().to(device), preprocess
 

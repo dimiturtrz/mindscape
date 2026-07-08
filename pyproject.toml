@@ -88,7 +88,8 @@ omit = [
     "core/decoder.py",   # typing.Protocol decoder contract (structural interface, no body)
     "core/data/registry.py",   # top-level dataset registry map (sibling core/data/*/registry.py already omitted)
     # GPU training entrypoints + torch models/trainers (device + data, not logic)
-    "neuroscan/tasks/visual/train_nice.py", "neuroscan/models/decoders.py", "neuroscan/models/eegnet.py",
+    "neuroscan/tasks/visual/train_nice.py", "neuroscan/tasks/visual/retrieval_audit.py",
+    "neuroscan/models/decoders.py", "neuroscan/models/eegnet.py",
     "neuroscan/models/profile.py",   # fvcore params+FLOPs (model on device)
     "neuroscan/tasks/workload/feature_importance/optuna_search.py",   # Optuna study runner (entrypoint)
     "neuroscan/tasks/workload/feature_importance/differentiable.py",  # torch/GPU differentiable feature-selection runner
