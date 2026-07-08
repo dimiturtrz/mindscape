@@ -62,7 +62,7 @@ def _markers(runs: dict, text: str) -> list[tuple[str, str, str, str]]:
     return [(m[0], m[1], m[2], _render(runs, m[1])) for m in _MARKER.finditer(text)]
 
 
-def sync(check: bool = False) -> int:
+def sync(*, check: bool = False) -> int:
     runs = json.loads(_RESULTS.read_text())["runs"]
     text = _README.read_text(encoding="utf-8")
     marks = _markers(runs, text)

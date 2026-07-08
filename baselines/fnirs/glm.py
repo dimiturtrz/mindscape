@@ -40,7 +40,7 @@ class GlmBeta(Baseline):
     of polynomial nuisance drift regressors."""
 
     def __init__(self, fs: float = 10.0, tmin: float = -2.0, task_dur: float = 20.0,
-                 derivatives: bool = True, drift_order: int = 1):
+                 *, derivatives: bool = True, drift_order: int = 1):
         self.fs = fs
         self.tmin = tmin
         self.task_dur = task_dur

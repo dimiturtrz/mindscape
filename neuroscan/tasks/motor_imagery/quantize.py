@@ -43,10 +43,7 @@ def _onnx_trial_proba(path, X_std, crop_len, n_test_crops):
     return out / (n_test_crops if crop_len else 1)
 
 
-def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+def _parse_args():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="bnci2014_001")
     ap.add_argument("--method", default="atcnet", choices=sorted(decoders.MODELS))
@@ -56,7 +53,42 @@ def main():
     ap.add_argument("--fmin", type=float, default=4.0)
     ap.add_argument("--fmax", type=float, default=40.0)
     ap.add_argument("--out", default="runs/quantize")
-    args = ap.parse_args()
+    return ap.parse_args()
+
+
+def _track_run(rep, method, sub, gap, rep_dir):
+    """Log the deployment triad (accuracy / size / latency) to MLflow (guarded)."""
+    with tracking.run("mindscape", f"quantize_{method}",
+                      params={"method": method, "subject": str(sub)},
+                      tags={"kind": "quantize"}, run_dir=rep_dir):
+        accuracy, size, latency = rep["accuracy"], rep["size_mb"], rep["latency_ms_cpu"]
+        record = {"acc_torch_fp32": accuracy["torch_fp32"], "acc_onnx_fp32": accuracy["onnx_fp32"],
+                  "size_fp32_mb": size["fp32"], "latency_fp32_ms": latency["fp32"], "parity_max_dlogit": gap}
+        if "onnx_int8" in accuracy:
+            record.update({"acc_onnx_int8": accuracy["onnx_int8"], "size_int8_mb": size["int8"],
+                           "latency_int8_ms": latency["int8"]})
+        tracking.metrics(record)
+
+
+def _report(rep, method, sub, gap, out):
+    """Print the fp32-vs-int8 accuracy / size / latency summary for one subject."""
+    logger.info(f"\n=== {method} edge quantization (subject {sub}) ===")
+    logger.info(f"  parity max|Δlogit| {gap:.2e}  (gate < 1e-3) OK")
+    a = rep["accuracy"]
+    logger.info(f"  accuracy  torch {a['torch_fp32']:.3f} | onnx-fp32 {a['onnx_fp32']:.3f}"
+          + (f" | onnx-int8 {a['onnx_int8']:.3f}" if "onnx_int8" in a else " | int8 N/A"))
+    logger.info(f"  size MB   fp32 {rep['size_mb']['fp32']}"
+          + (f" -> int8 {rep['size_mb']['int8']} ({rep['size_mb']['ratio']}x)" if "int8" in rep["size_mb"] else ""))
+    lat = rep["latency_ms_cpu"]
+    logger.info(f"  latency   fp32 {lat['fp32']} ms" + (f" -> int8 {lat['int8']} ms ({lat['speedup']}x)" if "int8" in lat else ""))
+    logger.info(f"-> {out}/{method}_sub{sub}.json")
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    args = _parse_args()
 
     meta = store.load(args.dataset, EpochCfg(resample=args.resample, fmin=args.fmin, fmax=args.fmax))
     sub = args.subject or sorted(meta["subject"].unique().to_list())[0]
@@ -106,26 +138,8 @@ def main():
     rep_dir = out / f"{args.method}_sub{sub}"
     rep_dir.mkdir(parents=True, exist_ok=True)
     (out / f"{args.method}_sub{sub}.json").write_text(json.dumps(rep, indent=2))
-    with tracking.run("mindscape", f"quantize_{args.method}",
-                      params={"method": args.method, "subject": str(sub)},
-                      tags={"kind": "quantize"}, run_dir=rep_dir):
-        accuracy, size, latency = rep["accuracy"], rep["size_mb"], rep["latency_ms_cpu"]
-        record = {"acc_torch_fp32": accuracy["torch_fp32"], "acc_onnx_fp32": accuracy["onnx_fp32"],
-                  "size_fp32_mb": size["fp32"], "latency_fp32_ms": latency["fp32"], "parity_max_dlogit": gap}
-        if "onnx_int8" in accuracy:
-            record.update({"acc_onnx_int8": accuracy["onnx_int8"], "size_int8_mb": size["int8"],
-                           "latency_int8_ms": latency["int8"]})
-        tracking.metrics(record)
-    logger.info(f"\n=== {args.method} edge quantization (subject {sub}) ===")
-    logger.info(f"  parity max|Δlogit| {gap:.2e}  (gate < 1e-3) OK")
-    a = rep["accuracy"]
-    logger.info(f"  accuracy  torch {a['torch_fp32']:.3f} | onnx-fp32 {a['onnx_fp32']:.3f}"
-          + (f" | onnx-int8 {a['onnx_int8']:.3f}" if "onnx_int8" in a else " | int8 N/A"))
-    logger.info(f"  size MB   fp32 {rep['size_mb']['fp32']}"
-          + (f" -> int8 {rep['size_mb']['int8']} ({rep['size_mb']['ratio']}x)" if "int8" in rep["size_mb"] else ""))
-    lat = rep["latency_ms_cpu"]
-    logger.info(f"  latency   fp32 {lat['fp32']} ms" + (f" -> int8 {lat['int8']} ms ({lat['speedup']}x)" if "int8" in lat else ""))
-    logger.info(f"-> {out}/{args.method}_sub{sub}.json")
+    _track_run(rep, args.method, sub, gap, rep_dir)
+    _report(rep, args.method, sub, gap, out)
 
 
 if __name__ == "__main__":

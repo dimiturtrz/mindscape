@@ -33,7 +33,7 @@ def _tangent_lr():
     return make_pipeline(TangentSpace(metric="riemann"), LogisticRegression(max_iter=500, C=1.0))
 
 
-def align_domains(Csrc, groups, Cte, scale: bool, target_groups=None):
+def align_domains(Csrc, groups, Cte, *, scale: bool, target_groups=None):
     """Re-center each source subject and the target to the identity independently (± dispersion re-scale) —
     the unsupervised, per-domain transforms. Re-centering is PER DOMAIN, so if the target holds more than one
     subject (e.g. a k-fold test fold) pass `target_groups` to re-center each on its OWN mean — pooling them
@@ -65,10 +65,10 @@ def recentered_tangent_features(C, groups) -> np.ndarray:
     return tangent_space(rc, np.eye(C.shape[-1]))           # tangent at I: the covariances are centred there
 
 
-def zero_shot_predict(Csrc, ysrc, groups, Cte, scale: bool, target_groups=None) -> np.ndarray:
+def zero_shot_predict(Csrc, ysrc, groups, Cte, *, scale: bool, target_groups=None) -> np.ndarray:
     """Zero-shot transfer: align source (per subject) + target (per subject if `target_groups` given, else as
     one domain), tangent-space + LR, return class probabilities `[n, C]` for ALL target trials (no labels)."""
-    Cs, Ct = align_domains(Csrc, groups, Cte, scale, target_groups)
+    Cs, Ct = align_domains(Csrc, groups, Cte, scale=scale, target_groups=target_groups)
     clf = _tangent_lr().fit(Cs, ysrc)
     return np.asarray(clf.predict_proba(Ct), dtype=float)
 

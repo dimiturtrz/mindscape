@@ -28,8 +28,8 @@ def profile(cls: str, n_chans=N_CHANS, n_times=N_TIMES, n_classes=N_CLASSES) -> 
     try:
         from fvcore.nn import FlopCountAnalysis  # noqa: PLC0415
         logging.getLogger("fvcore").setLevel(logging.ERROR)
-        flops = int(FlopCountAnalysis(net, dummy).unsupported_ops_warnings(False)
-                    .uncalled_modules_warnings(False).total())
+        flops = int(FlopCountAnalysis(net, dummy).unsupported_ops_warnings(enabled=False)
+                    .uncalled_modules_warnings(enabled=False).total())
     except Exception as e:
         logger.info(f"  ({cls}: FLOPs unavailable: {e})")
     return {"model": cls, "params": int(params), "flops": flops}

@@ -10,7 +10,7 @@ from scipy.signal import welch
 CANONICAL_BANDS = (("theta", 4.0, 7.0), ("alpha", 8.0, 13.0), ("beta", 13.0, 30.0))
 
 
-def band_powers(X: np.ndarray, fs: float, bands=CANONICAL_BANDS, relative: bool = False) -> np.ndarray:
+def band_powers(X: np.ndarray, fs: float, bands=CANONICAL_BANDS, *, relative: bool = False) -> np.ndarray:
     """Per-channel log band-power in each band -> `[n, ch*len(bands)]`. One Welch PSD over the time axis
     (vectorized across n and ch), then integrate each band.
 

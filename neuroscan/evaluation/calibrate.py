@@ -82,10 +82,7 @@ def ece_at(logits: np.ndarray, labels: np.ndarray, T: float = 1.0) -> float:
     return TemperatureScaler(T).ece(logits, labels)
 
 
-def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+def _parse_args():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="bnci2014_001")
     ap.add_argument("--method", default="atcnet", choices=sorted(decoders.MODELS))
@@ -94,15 +91,15 @@ def main():
     ap.add_argument("--fmin", type=float, default=4.0)
     ap.add_argument("--fmax", type=float, default=40.0)
     ap.add_argument("--out", default=None)
-    args = ap.parse_args()
+    return ap.parse_args()
 
-    meta = store.load(args.dataset, EpochCfg(resample=args.resample, fmin=args.fmin, fmax=args.fmax))
-    fit, _ = decoders.make(args.method)
 
+def _per_subject_rows(meta, fit, test_session):
+    """One temperature-scaling row per subject: fit T on the in-session val, report val + cross-session ECE."""
     rows = []
     for s in sorted(meta["subject"].unique().to_list()):
         # train+val from the train session (in-session), test = the eval session (cross-session)
-        train, val, test = splits.within_subject(meta, s, test_sessions=[args.test_session])
+        train, val, test = splits.within_subject(meta, s, test_sessions=[test_session])
         if val.is_empty() or test.is_empty():
             continue
         Xtr, ytr = store.gather(train)
@@ -118,10 +115,14 @@ def main():
         rows.append(r)
         logger.info(f"  s{r['subject']}  T {ts.T:.2f} | val ECE {r['val_ece_uncal']:.3f}->{r['val_ece_temp']:.3f} | "
               f"test ECE {r['test_ece_uncal']:.3f}->{r['test_ece_temp']:.3f}  (acc {r['test_acc']:.3f})")
+    return rows
 
+
+def _summarize(rows, method):
+    """Aggregate per-subject rows into the summary dict; returns (summary, val_fix, test_fix)."""
     m = {k: float(np.mean([r[k] for r in rows]))
          for k in ("T", "val_ece_uncal", "val_ece_temp", "test_ece_uncal", "test_ece_temp")}
-    summary = {"method": args.method, "regime": "within_calibration", "n": len(rows),
+    summary = {"method": method, "regime": "within_calibration", "n": len(rows),
                "T_mean": m["T"],
                "val_ece": {"uncal": m["val_ece_uncal"], "temp": m["val_ece_temp"]},
                "test_ece": {"uncal": m["test_ece_uncal"], "temp": m["test_ece_temp"]},
@@ -130,8 +131,12 @@ def main():
     val_fix = summary["val_ece"]["uncal"] - summary["val_ece"]["temp"]
     test_fix = summary["test_ece"]["uncal"] - summary["test_ece"]["temp"]
     summary["transfer_ratio"] = round(test_fix / val_fix, 3) if val_fix > _EPS else None
+    return summary, val_fix, test_fix
 
-    logger.info(f"\n=== {args.method} temperature scaling (in-session val -> cross-session test) ===")
+
+def _report(summary, method, val_fix, test_fix):
+    """Log the val->test ECE transfer and store the verdict on `summary`."""
+    logger.info(f"\n=== {method} temperature scaling (in-session val -> cross-session test) ===")
     logger.info(f"  val  ECE {summary['val_ece']['uncal']:.3f} -> {summary['val_ece']['temp']:.3f}  (fixed {val_fix:+.3f})")
     logger.info(f"  test ECE {summary['test_ece']['uncal']:.3f} -> {summary['test_ece']['temp']:.3f}  (fixed {test_fix:+.3f})")
     tr = summary["transfer_ratio"]
@@ -145,6 +150,20 @@ def main():
         verdict = "calibration transfers well (test fixed >= val) — model already low-ECE cross-session"
     logger.info(f"  transfer ratio {tr} — {verdict}")
     summary["verdict"] = verdict
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    args = _parse_args()
+
+    meta = store.load(args.dataset, EpochCfg(resample=args.resample, fmin=args.fmin, fmax=args.fmax))
+    fit, _ = decoders.make(args.method)
+
+    rows = _per_subject_rows(meta, fit, args.test_session)
+    summary, val_fix, test_fix = _summarize(rows, args.method)
+    _report(summary, args.method, val_fix, test_fix)
 
     out = Path(args.out) if args.out else Path("runs") / f"calibrate_{args.method}_{args.dataset}"
     out.mkdir(parents=True, exist_ok=True)

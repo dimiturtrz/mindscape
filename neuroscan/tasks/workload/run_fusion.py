@@ -55,53 +55,19 @@ def _gather_aligned(meta_e, meta_f, subs):
     return Xe, Xf, ye
 
 
-def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+def _parse_args():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--exp", default="nback_fusion", help="named fusion experiment in experiments.yaml")
     ap.add_argument("--set", dest="overrides", action="append", default=[], metavar="key=val",
                     help="ad-hoc override, e.g. --set regime=cross_subject --set params.plain_eeg=true")
     ap.add_argument("--out", default=None)
     ap.add_argument("--no-record", action="store_true")
-    args = ap.parse_args()
+    return ap.parse_args()
 
-    exp = config.load_experiment(args.exp, args.overrides)
-    regime = exp.regime
-    meta_e = store.load(_EEG, _EEG_CFG)
-    meta_f = store.load(_FNIRS, _FNIRS_CFG)
-    subs = sorted(set(meta_e["subject"].unique().to_list()) & set(meta_f["subject"].unique().to_list()))
-    n_classes = int(meta_e["label_id"].max()) + 1
-    recenter = not exp.params.get("plain_eeg", False)
-    logger.info(f"fusion cloud: {len(subs)} paired subjects · {n_classes} classes · chance {1/n_classes:.3f} · "
-          f"EEG {'re-centered' if recenter else 'plain'} Riemann")
 
-    eeg_fit, eeg_score = models.get_method("riemann")        # the plain-EEG fallback (fusion EEG is Riemann)
-    fn_fit, fn_score = models.get_method("fnirs_lda")
-
-    def _cov(X):
-        return Covariances("oas").transform(X.astype(np.float64))
-
-    def eeg_probs(Xtr, ytr, gtr, Xte, gte):
-        """EEG decoder as a probability fn. Default = zero-shot RE-CENTERED Riemann (recenter each subject —
-        train AND test — to the identity, unsupervised); needs the subject groups, so it can't be a plain
-        get_method decoder. The `nback_fusion_plain` config (params.plain_eeg) falls back to plain Riemann."""
-        if not recenter:
-            return eeg_score(eeg_fit(Xtr, ytr), Xte)
-        return transfer.zero_shot_predict(_cov(Xtr), ytr, gtr, _cov(Xte), scale=False, target_groups=gte)
-
-    def eeg_feats(X, g):
-        """EEG feature vector for feature-level fusion — the re-centered tangent-space rep, so its EEG side
-        matches the strong probs-side EEG (not a crude log-variance)."""
-        return transfer.recentered_tangent_features(_cov(X), g)
-
-    # fold generator over the shared subject set (same split drives both modalities)
-    if regime == "cross_subject_kfold":
-        fold_subs = [([str(x) for x in te]) for _, _, _, te in _subject_folds(subs, k=5)]
-    else:
-        fold_subs = [[str(s)] for s in subs]
-
+def _run_folds(fold_subs, meta_e, meta_f, subs, eeg_probs, eeg_feats, fn_fit, fn_score):
+    """Run every fold: unimodal + fused predictions per fold. Returns (rows, pooled) where `pooled` holds the
+    concatenated correct-masks and probability stacks used for the oracle + aggregation-sweep analysis."""
     rows = []
     CE, CF, Y = [], [], []                                   # pooled correct-masks for the oracle analysis
     PE, PF, STK, PEc, PFc = [], [], [], [], []               # pooled probs for the aggregation sweep
@@ -142,18 +108,14 @@ def main():
         logger.info(f"  fold{i}: eeg {rows[-1]['eeg']:.3f} | fnirs {rows[-1]['fnirs']:.3f} | "
               f"late {rows[-1]['late']:.3f} | feature {rows[-1]['feature']:.3f}")
 
-    mean = {k: float(np.mean([r[k] for r in rows])) for k in ("eeg", "fnirs", "late", "feature")}
-    # complementarity: is fusion fundamentally hopeless, or just naive averaging? The oracle (either
-    # modality correct) is the upper bound ANY fusion could reach; near-zero error correlation means the
-    # two modalities fail on independent blocks, so a per-trial selector has headroom the mean can't touch.
-    ce, cf = np.concatenate(CE), np.concatenate(CF)
-    comp = combine.complementarity(mean, ce, cf)             # oracle headroom + error-independence
-    y, Pe, Pf = np.concatenate(Y), np.concatenate(PE), np.concatenate(PF)
-    Stk, Pce, Pcf = np.concatenate(STK), np.concatenate(PEc), np.concatenate(PFc)
-    agg = combine.aggregation_sweep(Pe, Pf, Stk, Pce, Pcf, y, ce, cf)   # every output-space combiner
-    _acc_keys = combine.SWEEP_KEYS
-    comp["best_aggregator"] = float(max(agg[k] for k in _acc_keys))
-    comp["oracle_gap_captured"] = comp["best_aggregator"] - comp["best_single"]
+    pooled = {"ce": np.concatenate(CE), "cf": np.concatenate(CF), "y": np.concatenate(Y),
+              "Pe": np.concatenate(PE), "Pf": np.concatenate(PF), "Stk": np.concatenate(STK),
+              "Pce": np.concatenate(PEc), "Pcf": np.concatenate(PFc)}
+    return rows, pooled
+
+
+def _report(regime, n_classes, rows, mean, comp, agg, acc_keys):
+    """Print the per-role means, fusion-vs-unimodal deltas, oracle headroom, and the aggregation sweep."""
     logger.info(f"\n=== fusion · {regime} · shin n-back ({len(rows)} folds, chance {1/n_classes:.3f}) ===")
     for k in ("eeg", "fnirs", "late", "feature"):
         logger.info(f"  {k:>8}: {mean[k]:.3f}")
@@ -163,10 +125,67 @@ def main():
           f"| err-corr {comp['err_corr']:+.3f} | both-wrong {comp['both_wrong']:.3f}")
     logger.info("  aggregation sweep (all output-space combiners vs best-single "
           f"{best_uni:.3f}, oracle {comp['oracle_either']:.3f}):")
-    for k in _acc_keys:
+    for k in acc_keys:
         logger.info(f"    {k:>16} {agg[k]:.3f}  ({agg[k]-best_uni:+.3f})")
     logger.info(f"    conf-gap (correct-wrong max-prob): eeg {agg['eeg_conf_gap']:+.3f} | fnirs {agg['fnirs_conf_gap']:+.3f}"
           "  <- ~0 => confidence does not predict correctness => output-space fusion cannot select")
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    args = _parse_args()
+
+    exp = config.load_experiment(args.exp, args.overrides)
+    regime = exp.regime
+    meta_e = store.load(_EEG, _EEG_CFG)
+    meta_f = store.load(_FNIRS, _FNIRS_CFG)
+    subs = sorted(set(meta_e["subject"].unique().to_list()) & set(meta_f["subject"].unique().to_list()))
+    n_classes = int(meta_e["label_id"].max()) + 1
+    recenter = not exp.params.get("plain_eeg", False)
+    logger.info(f"fusion cloud: {len(subs)} paired subjects · {n_classes} classes · chance {1/n_classes:.3f} · "
+          f"EEG {'re-centered' if recenter else 'plain'} Riemann")
+
+    eeg_fit, eeg_score = models.get_method("riemann")        # the plain-EEG fallback (fusion EEG is Riemann)
+    fn_fit, fn_score = models.get_method("fnirs_lda")
+
+    def _cov(X):
+        return Covariances("oas").transform(X.astype(np.float64))
+
+    def eeg_probs(Xtr, ytr, gtr, Xte, gte):
+        """EEG decoder as a probability fn. Default = zero-shot RE-CENTERED Riemann (recenter each subject —
+        train AND test — to the identity, unsupervised); needs the subject groups, so it can't be a plain
+        get_method decoder. The `nback_fusion_plain` config (params.plain_eeg) falls back to plain Riemann."""
+        if not recenter:
+            return eeg_score(eeg_fit(Xtr, ytr), Xte)
+        return transfer.zero_shot_predict(_cov(Xtr), ytr, gtr, _cov(Xte), scale=False, target_groups=gte)
+
+    def eeg_feats(X, g):
+        """EEG feature vector for feature-level fusion — the re-centered tangent-space rep, so its EEG side
+        matches the strong probs-side EEG (not a crude log-variance)."""
+        return transfer.recentered_tangent_features(_cov(X), g)
+
+    # fold generator over the shared subject set (same split drives both modalities)
+    if regime == "cross_subject_kfold":
+        fold_subs = [([str(x) for x in te]) for _, _, _, te in _subject_folds(subs, k=5)]
+    else:
+        fold_subs = [[str(s)] for s in subs]
+
+    rows, pooled = _run_folds(fold_subs, meta_e, meta_f, subs, eeg_probs, eeg_feats, fn_fit, fn_score)
+
+    mean = {k: float(np.mean([r[k] for r in rows])) for k in ("eeg", "fnirs", "late", "feature")}
+    # complementarity: is fusion fundamentally hopeless, or just naive averaging? The oracle (either
+    # modality correct) is the upper bound ANY fusion could reach; near-zero error correlation means the
+    # two modalities fail on independent blocks, so a per-trial selector has headroom the mean can't touch.
+    ce, cf = pooled["ce"], pooled["cf"]
+    comp = combine.complementarity(mean, ce, cf)             # oracle headroom + error-independence
+    agg = combine.aggregation_sweep(pooled["Pe"], pooled["Pf"], pooled["Stk"], pooled["Pce"], pooled["Pcf"],
+                                    pooled["y"], ce, cf)      # every output-space combiner
+    acc_keys = combine.SWEEP_KEYS
+    comp["best_aggregator"] = float(max(agg[k] for k in acc_keys))
+    comp["oracle_gap_captured"] = comp["best_aggregator"] - comp["best_single"]
+    _report(regime, n_classes, rows, mean, comp, agg, acc_keys)
 
     run_dir = Path(args.out) if args.out else Path("runs") / f"fusion_{regime}_shin2017_nback"
     run_dir.mkdir(parents=True, exist_ok=True)
