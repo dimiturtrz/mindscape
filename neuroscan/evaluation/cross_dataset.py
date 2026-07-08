@@ -40,3 +40,24 @@ def name_to_bank_index(candidate_names: list[str]) -> dict[str, int]:
     inverse of the sorted-concept order EEG2's prototypes use, so an EEG1 concept name resolves to the right
     bank row."""
     return {name: index for index, name in enumerate(candidate_names)}
+
+
+def common_channel_order(names_a: list[str], names_b: list[str]) -> list[str]:
+    """The electrodes present in BOTH montages, in `names_a`'s order — the shared spatial layout a
+    cross-dataset encoder must use. THINGS-EEG1 and -EEG2 share 62 of 63 electrodes (EEG1 has Fz not Cz,
+    EEG2 has Cz not Fz) but in different channel ORDER, so without this the encoder's spatial filters land
+    on the wrong electrodes at eval — the confound that pins cross-dataset retrieval to chance."""
+    in_b = set(names_b)
+    return [name for name in names_a if name in in_b]
+
+
+def align_channels(eeg: np.ndarray, src_names: list[str], target_names: list[str]) -> np.ndarray:
+    """Reindex `eeg` [n, C, t] so its channel axis matches `target_names` BY NAME (drop channels not in the
+    target; error if the target names a channel absent from the source). Makes two datasets' differently-
+    ordered montages line up before an encoder trained on one is applied to the other."""
+    src_index = {name: i for i, name in enumerate(src_names)}
+    missing = [name for name in target_names if name not in src_index]
+    if missing:
+        raise ValueError(f"source channels missing {missing} — cannot align to target montage")
+    order = [src_index[name] for name in target_names]
+    return eeg[:, order, :]

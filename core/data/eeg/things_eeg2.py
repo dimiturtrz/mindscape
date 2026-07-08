@@ -129,6 +129,16 @@ def subjects() -> list[int]:
     return sorted(_index())
 
 
+def channels() -> list[str]:
+    """The 63 EEG channel names (drops the trailing 'stim'), read from a session file — constant across
+    subjects. Used to montage-align against THINGS-EEG1 for the cross-dataset test."""
+    index = _index()
+    session_path = next(iter(sorted(index[subjects()[0]].glob("ses-*/raw_eeg_test.npy"))))
+    session = np.load(session_path, allow_pickle=True).item()
+    return [str(name) for name, kind in zip(session["ch_names"], session["ch_types"], strict=True)
+            if str(kind) == "eeg"]
+
+
 # ── image-metadata mapping (global; the stim code is a 1-based index into these ordered lists) ──
 _META = None
 

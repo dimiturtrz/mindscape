@@ -64,6 +64,16 @@ def subjects() -> list[int]:
     return sorted(int(path.name[4:]) for path in root.glob("sub-*") if path.name[4:].isdigit())
 
 
+def channels() -> list[str]:
+    """The 63 EEG channel names (10-10 montage), read from a subject's BrainVision header — constant across
+    subjects. Used to montage-align against THINGS-EEG2 for the cross-dataset test (they share 62 electrodes,
+    EEG1 has Fz where EEG2 has Cz)."""
+    subject = subjects()[0]
+    raw = mne.io.read_raw_brainvision(
+        _subject_dir(subject) / "eeg" / f"sub-{subject:02d}_task-rsvp_eeg.vhdr", preload=False, verbose="ERROR")
+    return list(raw.ch_names[:_N_EEG])
+
+
 def _row_mask(events: pl.DataFrame, cfg: ThingsEeg1EpochCfg) -> np.ndarray:
     """Which events.tsv rows to epoch: drop fixation-colour targets and (by default) the held-out validation
     stimuli. Flags are optional columns — absent means the dataset doesn't distinguish that split, keep all."""
