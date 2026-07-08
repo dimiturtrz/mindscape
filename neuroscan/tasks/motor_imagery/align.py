@@ -14,7 +14,7 @@ on the deployability axis:
 
 The rotation (step 3) and MDWM are SUPERVISED — they need target labels. Those labels come from a DISJOINT
 calibration split of the held-out subject (the `calib_frac` param), fit there, evaluated on the REMAINING blocks
-only. Test labels are never touched — the same honesty as the per-subject-calibration ablation.
+only. Test labels are never touched — the same rigor as the per-subject-calibration ablation.
 
     python -m neuroscan.tasks.motor_imagery.align --exp mi_align_recenter        # zero-shot (the baseline fix)
     python -m neuroscan.tasks.motor_imagery.align --exp mi_align_rpa             # calibrated full RPA
@@ -79,7 +79,7 @@ def _zero_shot_fold(s, train: transfer.Domain, test: transfer.Domain, cfg: Align
 def _calibrated_fold(s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
     """Calibrated: carve a stratified `calib_frac` of the held-out subject as the *only* labelled target data
     (the rest is the disjoint test set), hand it to the transfer method, score the disjoint remainder. Test
-    labels never enter the fit — the split is the runner's honesty guarantee, the method just consumes it."""
+    labels never enter the fit — the split is the runner's leakage-free guarantee, the method just consumes it."""
     cal, ev = next(StratifiedShuffleSplit(1, train_size=cfg.calib_frac,
                                           random_state=cfg.seed).split(test.cov, test.labels))
     pred = transfer.calibrated_predict(cfg.method, train,

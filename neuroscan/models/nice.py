@@ -1,6 +1,6 @@
 """NICE-style EEG image encoder (Song et al., ICLR 2024) — the Stage-3 EEG->image baseline.
 
-The honest paradigm here is *retrieval*, not classification: learn an EEG encoder that maps an epoch to the
+The correct paradigm here is *retrieval*, not classification: learn an EEG encoder that maps an epoch to the
 CLIP image-embedding space, trained contrastively (InfoNCE) against the CLIP embedding of the image the
 subject was viewing. At test we do zero-shot retrieval over the 200 held-out concepts (disjoint from train):
 cosine-match the EEG embedding to the 200 candidate CLIP embeddings -> top-1/top-5 vs 0.5% chance. Generation

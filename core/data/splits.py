@@ -1,6 +1,6 @@
 """Train/val/test splits as criteria over the epoch cloud (data/store.py).
 
-The honesty story lives here. A split isn't a named thing — it's the cloud filtered on criteria, and
+The leakage-control story lives here. A split isn't a named thing — it's the cloud filtered on criteria, and
 the criteria self-document what was held out. The *evaluation regime* IS which criteria you filter on:
 
     within-subject   train+test one subject (random val carve)      -> the ceiling

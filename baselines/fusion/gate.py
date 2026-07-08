@@ -2,7 +2,7 @@
 their class-probabilities. Sized for n≈26 / ~700 blocks (d_model 16, dropout ≥ 0.5, weight decay, early
 stopping). This is the one fusion path that reads the raw INPUT features rather than the decisions, so it
 *could* capture the oracle headroom the output-space combiners can't — measured, it doesn't (see the runner
-`tasks/workload/fusion_gate.py`): it ties z-scored-EEG-alone. Kept as an honest negative."""
+`tasks/workload/fusion_gate.py`): it ties z-scored-EEG-alone. Kept as a measured null."""
 from __future__ import annotations
 
 import torch

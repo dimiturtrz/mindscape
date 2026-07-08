@@ -1,7 +1,7 @@
 """Brain-camera decoder — a tiny 3D-CNN over the fused `[C, H, W, T]` EEG+fNIRS surface-video.
 
-The honest test of the spatiotemporal fusion: does reading the co-registered geometry + time (which flat
-feature-concat destroyed) cash any of the oracle headroom the collapsed-feature fusions couldn't? Kept
+The robust test of the spatiotemporal fusion: does reading the co-registered geometry + time (which flat
+feature-concat destroyed) capture any of the oracle headroom the collapsed-feature fusions couldn't? Kept
 deliberately tiny — 702 blocks, 26 subjects — heavy pooling + dropout + weight decay, or it just memorizes.
 """
 from __future__ import annotations

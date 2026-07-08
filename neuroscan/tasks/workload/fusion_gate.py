@@ -10,7 +10,7 @@ embeddings and emits a per-trial mixing weight α, → α·p_eeg + (1−α)·p_f
 z-scoring, and — decisively — a nested split (inner val over TRAIN subjects for early stopping) under the
 same outer 5-fold GroupKFold as every other fusion number.
 
-RESULT — an honest NEGATIVE (kept as an artifact). The gate scores ~0.573 fold-mean, which looks like a
+RESULT — a measured null (kept as an artifact). The gate scores ~0.573 fold-mean, which looks like a
 +0.10 win over fNIRS-alone (0.474) but is NOT one: an ablation shows per-subject z-scoring alone lifts
 EEG-band-power → LDA to 0.581 (from 0.407 raw; the absolute band-power was subject-idiosyncratic), and the
 gate merely *ties* that best single modality (z-EEG 0.581, z-concat-LDA 0.578, late-z 0.575, gate 0.573). So

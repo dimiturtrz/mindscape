@@ -82,7 +82,7 @@ SWEEP_KEYS = ("mean", "product", "conf_weight", "maxconf_pick", "stacking", "cal
 
 
 def aggregation_sweep(pooled: PooledProbs) -> dict:
-    """Can any OUTPUT-space combiner cash the oracle headroom? Try every cheap→learned aggregator on the
+    """Can any OUTPUT-space combiner capture the oracle headroom? Try every cheap→learned aggregator on the
     pooled probs. They all fail here because confidence does not track correctness (see the conf_gap) — the
     reliability signal a selector needs is not in the probabilities at all."""
     eeg, fnirs, y = pooled.eeg, pooled.fnirs, pooled.y

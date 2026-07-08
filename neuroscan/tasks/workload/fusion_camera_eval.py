@@ -1,9 +1,9 @@
-"""Does the brain-camera spatiotemporal fusion cash the oracle headroom flat fusion couldn't?
+"""Does the brain-camera spatiotemporal fusion capture the oracle headroom flat fusion couldn't?
 
 Builds the fused [C,H,W,T] EEG+fNIRS surface-video per block, trains a tiny 3D-CNN, scores cross-subject
 (5-fold GroupKFold — matched to run_fusion so it's comparable). Reference (same protocol, run_fusion):
 best-single 0.580 · late 0.587 · feature 0.564 · ORACLE 0.752. Beat ~0.59 = the geometry+time representation
-cashed something flat fusion destroyed; ~0.58 = another honest null (but now on the RIGHT representation).
+captured something flat fusion destroyed; ~0.58 = another measured null (but now on the RIGHT representation).
 
     python -m neuroscan.tasks.workload.fusion_camera_eval
 """

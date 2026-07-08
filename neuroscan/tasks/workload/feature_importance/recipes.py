@@ -1,4 +1,4 @@
-"""Honest confirmation of the feature-search finding — compare a few FIXED fNIRS feature recipes under plain
+"""Leakage-free confirmation of the feature-search finding — compare a few FIXED fNIRS feature recipes under plain
 subject-grouped CV. No search here, so no selection optimism: each recipe is a fixed set of descriptor
 families → shrinkage-LDA, scored by repeated-seeded StratifiedGroupKFold (subject-grouped, no leakage). This
 is the clean test of "does slope alone match the mean+slope+peak baseline?" that the Optuna/torch studies

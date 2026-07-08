@@ -11,7 +11,7 @@ name — argv stays sparse. Pick one with `--exp`; tweak ad-hoc with `--set` (do
 
 Methods: csp_lda + riemann + riemann_acm (the classical baselines) and the braindecode decoders (eegnet,
 shallow_fbcsp, deep4, atcnet, eegconformer) — commodity → near-SOTA. The within/cross_subject contrast IS
-the headline: the gap between them is the honest out-of-distribution number. For the cross-subject *fix*
+the headline: the gap between them is the unbiased out-of-distribution number. For the cross-subject *fix*
 (Riemannian re-centering), see `motor_imagery/align.py`.
 """
 from __future__ import annotations

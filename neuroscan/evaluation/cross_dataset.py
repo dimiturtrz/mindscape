@@ -1,8 +1,8 @@
 """Cross-dataset EEG->image bridge — reconcile THINGS-EEG1 and THINGS-EEG2 for a zero-shot transfer test.
 
 Both datasets show the SAME 1,854 THINGS concepts, so an encoder trained on one can be evaluated on the other
-— the hardest honest generalization test (different people, different rig, same semantics). Two reconciliations
-make it honest, and both are pure set/label logic (no EEG, no GPU) so they're unit-tested here:
+— the hardest leakage-free generalization test (different people, different rig, same semantics). Two reconciliations
+make it leakage-free, and both are pure set/label logic (no EEG, no GPU) so they're unit-tested here:
 
   1. Concept identity is the THINGS NAME (EEG1 carries it inline; EEG2 derives it from its concept order). The
      retrieval target for a trial is that concept's shared CLIP prototype — looked up by name, so the two

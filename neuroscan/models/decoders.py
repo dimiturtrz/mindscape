@@ -2,10 +2,10 @@
 (ATCNet, EEGConformer). A "method" is a braindecode model name + training hparams; the trainer (AdamW +
 cosine LR, per-channel standardization, **sliding-window crop augmentation**, early stopping) is shared.
 
-Crop augmentation is the load-bearing trick behind published 2a results: each ~T/2 trial is cut into
+Crop augmentation is the critical trick behind published 2a results: each ~T/2 trial is cut into
 many overlapping sub-windows, turning ~288 trials into thousands of training samples; at test, the crops
 of a trial are predicted and their softmax averaged. Without it, deep nets lose to CSP+LDA on 2a's tiny
-per-subject sets. The model is still commodity — the contribution is the harness + honest comparison.
+per-subject sets. The model is still commodity — the contribution is the harness + robust comparison.
 
 Interface = the harness contract: `make(method) -> (fit_fn, score_fn)`. Each trained module is
 ONNX-exportable (the Stage-2 edge path rides on it). RTX 5090 + bf16 autocast: minutes from scratch.

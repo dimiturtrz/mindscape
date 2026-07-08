@@ -1,4 +1,4 @@
-"""Temperature scaling (Guo 2017) — post-hoc calibration, and the honest finding that it's domain-limited.
+"""Temperature scaling (Guo 2017) — post-hoc calibration, and the measured finding that it's domain-limited.
 
 Fit a single scalar T (logits -> logits/T) on a held-out IN-SESSION val set by minimizing NLL, model
 frozen; T>1 softens overconfidence. It does NOT change argmax, so accuracy is untouched — only the

@@ -1,7 +1,7 @@
 """Stratified diagnostics — break the aggregate number down by the axis that hides the failure.
 
 The siblings stratify by pathology/vendor/defect; mindscape stratifies by **subject** (and session):
-the cross-subject spread is exactly where an honest motor-imagery result separates from an inflated one.
+the cross-subject spread is exactly where a measured motor-imagery result separates from an inflated one.
 """
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 """Shin 2018 — the EEG half of the n-back workload task (same subjects/trials as the fNIRS n-back).
 
 Simultaneous EEG+fNIRS recording, so identical 0/2/3-back load blocks — decoding BOTH on this one task is
-the honest same-task modality comparison (Table B, alongside `core/data/fnirs/shin2017.py`) and the basis
+the robust same-task modality comparison (Table B, alongside `core/data/fnirs/shin2017.py`) and the basis
 for EEG+fNIRS fusion. Unlike fNIRS (workload lives in HbO amplitude, which covariance methods discard), EEG
 carries workload as band-power (frontal theta / parietal alpha) — covariance-based CSP/Riemann CAN read it.
 

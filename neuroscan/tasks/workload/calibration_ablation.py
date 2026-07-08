@@ -3,12 +3,12 @@
 n-back workload band-power is subject-idiosyncratic in ABSOLUTE scale, so a zero-calibration cross-subject
 decoder sits near the floor. Z-scoring each subject by its own feature statistics (unsupervised, no labels —
 the EEG analog of the Riemannian re-centering that closes the motor-imagery gap) removes that offset. This
-measures the effect honestly and bounds the transductive optimism:
+measures the effect rigorously and bounds the transductive optimism:
 
   - raw            : no per-subject normalization (the zero-calibration number)
   - transductive-z : each subject z-scored by ALL its own blocks' stats (uses the test blocks -> optimistic)
   - calib-half-z   : stats from a held-out CALIBRATION half of each test subject, scored on the other half
-                     (the honest, deployment-real number — a short unlabeled calibration set)
+                     (the unbiased, deployment-real number — a short unlabeled calibration set)
 
 Also reports the fusion picture on the z-scored features (EEG becomes the stronger modality; the oracle
 grows) so the numbers the README cites are reproducible + recorded, not hand-typed.
@@ -52,7 +52,7 @@ def _cv_raw_or_transductive(F, y, g, subs, zt):
 
 
 def _cv_calib_half(F, y, g, subs, rng):
-    """Honest per-subject calibration: train z-scored on train subjects; for each test subject, fit stats on
+    """Leakage-free per-subject calibration: train z-scored on train subjects; for each test subject, fit stats on
     a random half of its blocks and score the other half."""
     accs = []
     for tr, te in GroupKFold(_K).split(subs, groups=subs):
@@ -114,7 +114,7 @@ def main():
 
     for k, v in out.items():
         logger.info(f"  {k:14s} {v:.3f}")
-    logger.info(f"\n  EEG transfer: raw {out['eeg_raw']:.3f} -> calib-half {out['eeg_zcalib']:.3f} (honest) "
+    logger.info(f"\n  EEG transfer: raw {out['eeg_raw']:.3f} -> calib-half {out['eeg_zcalib']:.3f} (unbiased) "
           f"/ transductive {out['eeg_ztrans']:.3f} (upper bound)")
 
     run_dir = Path("runs") / "calibration_ablation_shin2017_nback_eeg"

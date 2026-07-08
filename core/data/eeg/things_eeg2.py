@@ -5,7 +5,7 @@ high SNR, which is why it's the field's reconstruction benchmark. Clean, disjoin
     train: 1,654 concepts x 10 exemplars x 4 reps
     test:  200 concepts x 1 exemplar x 80 reps   (concepts disjoint from train)
 Labels are THINGS concepts (a curated 1,854-concept hierarchy with human-similarity data) -> map cleanly to
-CLIP / semantic embeddings. See the dataset landscape + the honest split plan (image-disjoint + cross-subject
+CLIP / semantic embeddings. See the dataset landscape + the leakage-free split plan (image-disjoint + cross-subject
 LOSO; cross-dataset vs THINGS-EEG1 concept-level) in
 `research/deep_dives/2026-07-07_eeg_visual_semantic_decoding_datasets.md`.
 

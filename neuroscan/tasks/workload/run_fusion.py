@@ -2,7 +2,7 @@
 
 The Shin set records EEG and fNIRS SIMULTANEOUSLY, so per subject the 27 workload blocks are the same
 trials in both (verified: identical label sequence per subject). That lets us fuse them block-for-block.
-Both modalities are weak alone here (~0.42, chance 0.333, tiny data — 702 blocks), so the honest question
+Both modalities are weak alone here (~0.42, chance 0.333, tiny data — 702 blocks), so the rigorous question
 is whether the complementary weak signals add. Even a null ("no gain on data this small") is a real result.
 
 Two fusion levels, both kept dumb (tiny data → no room for a learned fusion model):

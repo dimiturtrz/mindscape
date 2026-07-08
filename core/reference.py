@@ -1,5 +1,5 @@
 """Published reference ceilings (reference.yaml) — surfaced next to our results so a number is always
-read against the literature, never in a vacuum. Cite, don't chase (honesty rule).
+read against the literature, never in a vacuum. Cite, don't chase (rigor rule).
 """
 from __future__ import annotations
 

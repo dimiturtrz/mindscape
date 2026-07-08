@@ -1,7 +1,7 @@
 """Train + evaluate the NICE EEG->image baseline on THINGS-EEG2.
 
 Pipeline: adapter epochs (our own preprocessing off the raw) -> NICE encoder -> InfoNCE against the viewed
-image's CLIP embedding -> zero-shot retrieval on the 200 held-out test concepts. The honest number is the
+image's CLIP embedding -> zero-shot retrieval on the 200 held-out test concepts. The unbiased number is the
 CROSS-SUBJECT single-trial top-k (train subjects != test subject); within-subject and repeat-averaged are
 reported alongside as the (inflated) references the field usually quotes.
 

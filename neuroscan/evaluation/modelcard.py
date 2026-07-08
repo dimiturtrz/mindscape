@@ -1,6 +1,6 @@
 """Auto model card — a per-run markdown summary (the siblings' modelcard pattern).
 
-Reads a harness aggregate dict and writes an honest one-page card: the headline numbers, the number
+Reads a harness aggregate dict and writes a rigorous one-page card: the headline numbers, the number
 against the published ceiling, the per-subject spread, and explicitly **where it fails** (worst subject).
 """
 from __future__ import annotations

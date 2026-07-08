@@ -1,4 +1,4 @@
-"""Reproduce the BenchNIRS 'generalised' (cross-subject) LDA baseline on the Shin n-back — the honest,
+"""Reproduce the BenchNIRS 'generalised' (cross-subject) LDA baseline on the Shin n-back — the leakage-free,
 matched reference our fnirs_lda is compared against.
 
 BenchNIRS (Benerradi et al. 2023, Front. Neuroergonomics 4:994969) is the field's rigorous fNIRS-ML
