@@ -62,10 +62,12 @@ def main():
     # classical baselines are CPU + fold-independent -> parallelize folds; GPU nets stay on one device
     n_jobs = -1 if method in {"csp_lda", "riemann", "riemann_acm", "fnirs_lda"} else 1
     logger.info(f"\n=== {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
-    res = harness.run(method, fit_fn, score_fn, folds, n_classes, regime=regime,
-                      params={"exp": args.exp, "method": method, "regime": regime,
-                              "dataset": dataset, "resample": cfg.resample},
-                      run_dir=run_dir, n_jobs=n_jobs)
+    method_obj = harness.Method(method, fit_fn, score_fn, n_classes, regime)
+    res = harness.run(method_obj, folds, n_jobs=n_jobs,
+                      tracking_cfg=harness.TrackConfig(
+                          params={"exp": args.exp, "method": method, "regime": regime,
+                                  "dataset": dataset, "resample": cfg.resample},
+                          run_dir=run_dir))
 
     out = run_dir / "aggregate.json"
     out.write_text(json.dumps(res, indent=2))

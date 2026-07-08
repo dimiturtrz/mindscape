@@ -19,18 +19,31 @@ from braindecode.preprocessing import (
     exponential_moving_standardize,
     preprocess,
 )
+from pydantic import BaseModel
 
 from core.config import configure_moabb_download
 
 
+class BraindecodePreConfig(BaseModel):
+    """The braindecode-canonical preprocessing knobs. `fmin`/`fmax` = bandpass; `trial_start_offset_s` = the
+    window's start offset relative to the trial cue; `factor_new`/`init_block_size` = the EMS running-stat
+    parameters; `ems` toggles continuous exponential-moving standardization."""
+    fmin: float = 4.0
+    fmax: float = 38.0
+    trial_start_offset_s: float = -0.5
+    factor_new: float = 1e-3
+    init_block_size: int = 1000
+    ems: bool = True
+
+
 def get_data(dataset_name: str = "BNCI2014_001", subjects: list[int] | None = None,
-             fmin: float = 4.0, fmax: float = 38.0, trial_start_offset_s: float = -0.5,
-             factor_new: float = 1e-3, init_block_size: int = 1000, *, ems: bool = True):
+             config: BraindecodePreConfig | None = None):
     """Return (X [n,ch,t] float32, y [n] int, meta polars{subject,session,run}).
 
-    `ems=True` applies continuous exponential-moving standardization here (braindecode default recipe);
+    `config.ems=True` applies continuous exponential-moving standardization here (braindecode default recipe);
     `ems=False` returns bandpassed microvolts only — use with the trainer's z-score (StandardScaler),
     which is what the published ATCNet pipeline actually does."""
+    cfg = config or BraindecodePreConfig()
     configure_moabb_download()
 
     ds = MOABBDataset(dataset_name=dataset_name, subject_ids=subjects)
@@ -38,14 +51,14 @@ def get_data(dataset_name: str = "BNCI2014_001", subjects: list[int] | None = No
     steps = [
         Preprocessor("pick_types", eeg=True, meg=False, stim=False),
         Preprocessor(lambda d: d * 1e6),                                  # V -> microvolts
-        Preprocessor("filter", l_freq=fmin, h_freq=fmax),
+        Preprocessor("filter", l_freq=cfg.fmin, h_freq=cfg.fmax),
     ]
-    if ems:
-        steps.append(Preprocessor(exponential_moving_standardize, factor_new=factor_new,
-                                  init_block_size=init_block_size))
+    if cfg.ems:
+        steps.append(Preprocessor(exponential_moving_standardize, factor_new=cfg.factor_new,
+                                  init_block_size=cfg.init_block_size))
     preprocess(ds, steps)
 
-    start = int(round(trial_start_offset_s * sfreq))
+    start = int(round(cfg.trial_start_offset_s * sfreq))
     windows = create_windows_from_events(ds, trial_start_offset_samples=start,
                                          trial_stop_offset_samples=0, preload=True)
 

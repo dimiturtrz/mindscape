@@ -69,9 +69,11 @@ def main():
         run_dir = Path("runs") / f"{method}_{regime}_{dataset}"
         run_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"\n=== {name} · {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
-        res = harness.run(method, fit_fn, score_fn, folds, n_classes, regime=regime,
-                          params={"exp": name, "method": method, "regime": regime, "dataset": dataset},
-                          run_dir=run_dir, n_jobs=n_jobs)
+        method_obj = harness.Method(method, fit_fn, score_fn, n_classes, regime)
+        res = harness.run(method_obj, folds, n_jobs=n_jobs,
+                          tracking_cfg=harness.TrackConfig(
+                              params={"exp": name, "method": method, "regime": regime, "dataset": dataset},
+                              run_dir=run_dir))
         (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
         results.record(run_dir)
         logger.info(f"  -> acc {res['fold_mean']['acc']:.3f}  kappa {res['fold_mean']['kappa']:.3f}  "

@@ -14,7 +14,7 @@ import logging
 import numpy as np
 from sklearn.model_selection import StratifiedGroupKFold
 
-from baselines.fusion.spatiotemporal import BrainCameraNet
+from baselines.fusion.spatiotemporal import BrainCameraConfig, BrainCameraNet
 from core.data import store
 from core.data.eeg import shin2017_nback_eeg as eegmod
 from core.data.eeg.base import EpochCfg
@@ -42,7 +42,8 @@ def _build_all():
         Xf, yf = store.gather(mf.filter(mf["subject"] == s))
         assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
         pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
-        Xs.append(bc.build_tensor(Xe, Xf, pos_e, pos_f, grid=_GRID, fps=_FPS, t_end=_TEND))
+        Xs.append(bc.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=_GRID,
+                                  series=bc.SeriesConfig(fps=_FPS, t_end=_TEND)))
         ys.append(ye)
         gs.append(np.array([s] * len(ye)))
     return np.concatenate(Xs), np.concatenate(ys), np.concatenate(gs)
@@ -58,7 +59,7 @@ def main():
     accs, kaps = [], []
     for seed in _SEEDS:
         for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(X, y, g):
-            clf = BrainCameraNet(n_classes=int(y.max()) + 1, seed=seed).fit(X[tr], y[tr])
+            clf = BrainCameraNet(BrainCameraConfig(n_classes=int(y.max()) + 1, seed=seed)).fit(X[tr], y[tr])
             pred = clf.predict_proba(X[te]).argmax(1)
             accs.append(metrics.accuracy(y[te], pred))
             kaps.append(metrics.kappa(y[te], pred))

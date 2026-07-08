@@ -13,6 +13,8 @@ covariance estimation, the calibration split, and the metrics; it just calls the
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 from pyriemann.tangentspace import TangentSpace, tangent_space
 from pyriemann.transfer import (
@@ -27,6 +29,16 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 
 from core.features import recenter_covariances, scale_to_identity
+
+
+@dataclass
+class Domain:
+    """One transfer domain's covariance matrices, with optional labels + per-trial subject groups. A source
+    domain carries `cov`+`labels`(+`groups`); a zero-shot target carries `cov`(+`groups`, one per subject) and
+    no labels; a calibration slice carries `cov`+`labels`; an eval set carries only `cov`."""
+    cov: np.ndarray
+    labels: np.ndarray | None = None
+    groups: np.ndarray | None = None
 
 
 def _tangent_lr():
@@ -65,23 +77,25 @@ def recentered_tangent_features(C, groups) -> np.ndarray:
     return tangent_space(rc, np.eye(C.shape[-1]))           # tangent at I: the covariances are centred there
 
 
-def zero_shot_predict(Csrc, ysrc, groups, Cte, *, scale: bool, target_groups=None) -> np.ndarray:
-    """Zero-shot transfer: align source (per subject) + target (per subject if `target_groups` given, else as
+def zero_shot_predict(source: Domain, target: Domain, *, scale: bool) -> np.ndarray:
+    """Zero-shot transfer: align source (per subject) + target (per subject if `target.groups` given, else as
     one domain), tangent-space + LR, return class probabilities `[n, C]` for ALL target trials (no labels)."""
-    Cs, Ct = align_domains(Csrc, groups, Cte, scale=scale, target_groups=target_groups)
-    clf = _tangent_lr().fit(Cs, ysrc)
+    Cs, Ct = align_domains(source.cov, source.groups, target.cov, scale=scale, target_groups=target.groups)
+    clf = _tangent_lr().fit(Cs, source.labels)
     return np.asarray(clf.predict_proba(Ct), dtype=float)
 
 
-def calibrated_predict(kind: str, Csrc, ysrc, Ccal, ycal, Cev, mdwm_lambda: float = 0.5) -> np.ndarray:
+def calibrated_predict(kind: str, source: Domain, calib: Domain, evaluation: Domain,
+                       mdwm_lambda: float = 0.5) -> np.ndarray:
     """Calibrated transfer: fit on source + a labelled target CALIBRATION slice, predict the disjoint target
     eval set. `kind='rpa'` = full RPA (center+scale+rotate) then tangent-space LR; `kind='mdwm'` = Minimum
     Distance to Weighted Mean (source↔target class-mean blend, weight `mdwm_lambda`). Returns int labels for
-    `Cev`. The caller guarantees Ccal and Cev are disjoint — no test labels enter here."""
-    Xf = np.concatenate([Csrc, Ccal])
-    yf = np.concatenate([ysrc, ycal]).astype(str)
-    dom = np.array(["source"] * len(ysrc) + ["target"] * len(ycal))
+    `evaluation.cov`. The caller guarantees calib and evaluation are disjoint — no test labels enter here."""
+    Xf = np.concatenate([source.cov, calib.cov])
+    yf = np.concatenate([source.labels, calib.labels]).astype(str)
+    dom = np.array(["source"] * len(source.labels) + ["target"] * len(calib.labels))
     Xenc, yenc = encode_domains(Xf, yf, dom)
+    Cev = evaluation.cov
     Xev, _ = encode_domains(Cev, np.zeros(len(Cev), int).astype(str), np.array(["target"] * len(Cev)))
 
     if kind == "mdwm":

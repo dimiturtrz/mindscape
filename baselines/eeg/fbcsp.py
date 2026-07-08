@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 from mne.decoding import CSP
+from pydantic import BaseModel
 from scipy.signal import butter, sosfiltfilt
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.feature_selection import mutual_info_classif
@@ -24,18 +25,25 @@ from sklearn.feature_selection import mutual_info_classif
 from baselines.base import Baseline
 
 
-class Fbcsp(Baseline):
-    """Filter-bank CSP + mutual-info selection + LDA. `fs` = epoch sample rate (Hz); the filter bank tiles
-    [`fmin`, `fmax`] into `band_width`-wide sub-bands, CSP keeps `n_components` per band, MI keeps the top
-    `k_features` across all bands. Fitted state (per-band filters, selected columns, LDA) lives on self."""
+class FbcspConfig(BaseModel):
+    """FBCSP hyperparameters. `fs` = epoch sample rate (Hz, needed to design the band filters); the filter
+    bank tiles [`fmin`, `fmax`] into `band_width`-wide sub-bands, `order` = Butterworth order, CSP keeps
+    `n_components` per band, MI keeps the top `k_features` across all bands."""
+    fs: float = 128.0
+    fmin: float = 4.0
+    fmax: float = 40.0
+    band_width: float = 4.0
+    order: int = 5
+    n_components: int = 4
+    k_features: int = 8
 
-    def __init__(self, fs: float = 128.0, fmin: float = 4.0, fmax: float = 40.0, band_width: float = 4.0,
-                 order: int = 5, n_components: int = 4, k_features: int = 8):
-        self.fs = fs
-        self.fmin, self.fmax, self.band_width = fmin, fmax, band_width
-        self.order = order
-        self.n_components = n_components
-        self.k_features = k_features
+
+class Fbcsp(Baseline):
+    """Filter-bank CSP + mutual-info selection + LDA (configured by `FbcspConfig`). Fitted state (per-band
+    filters, selected columns, LDA) lives on self."""
+
+    def __init__(self, config: FbcspConfig | None = None):
+        self.cfg = config or FbcspConfig()
 
     def _bands(self) -> list[tuple[float, float]]:
         """Non-overlapping fixed-width sub-bands tiling [fmin, fmax] at band_width (4–8, 8–12, … — the Ang
@@ -43,7 +51,7 @@ class Fbcsp(Baseline):
         uncovered — e.g. 4–30 Hz at width 4 tiles up to 24–28 and drops 28–30. That drop is deliberate here:
         it's a 2 Hz high-beta sliver, irrelevant to the theta/alpha workload signal, and covering it would add
         a ragged narrow band + force a re-eval of a baseline that already trails. 2a (4–40) is on-grid."""
-        edges = np.arange(self.fmin, self.fmax + 1e-6, self.band_width)
+        edges = np.arange(self.cfg.fmin, self.cfg.fmax + 1e-6, self.cfg.band_width)
         return [(float(lo), float(hi)) for lo, hi in zip(edges[:-1], edges[1:], strict=True)]
 
     def _sos_bank(self):
@@ -51,7 +59,7 @@ class Fbcsp(Baseline):
         filter (Ang 2012). scipy's `sosfiltfilt` applies it vectorized over the time axis; going straight to
         scipy (not `mne.filter.filter_data`) drops ~100x of per-call design/padding overhead."""
         if not hasattr(self, "_sos_"):
-            self._sos_ = [butter(self.order, (lo, hi), btype="band", fs=self.fs, output="sos")
+            self._sos_ = [butter(self.cfg.order, (lo, hi), btype="band", fs=self.cfg.fs, output="sos")
                           for lo, hi in self._bands()]
         return self._sos_
 
@@ -60,7 +68,7 @@ class Fbcsp(Baseline):
         return sosfiltfilt(sos, X, axis=-1)                       # zero-phase, vectorized over trials×channels
 
     def _csp(self):
-        return CSP(n_components=self.n_components, reg="ledoit_wolf", log=True)
+        return CSP(n_components=self.cfg.n_components, reg="ledoit_wolf", log=True)
 
     def fit(self, X, y):
         X = np.asarray(X, dtype=np.float64)
@@ -73,7 +81,7 @@ class Fbcsp(Baseline):
         F = np.concatenate(feats, axis=1)                                 # [n, n_bands*n_components]
 
         # MIBIF: keep the k most class-informative features across the whole bank (skip if we have fewer)
-        k = min(self.k_features, F.shape[1])
+        k = min(self.cfg.k_features, F.shape[1])
         mi = mutual_info_classif(F, y, random_state=0)
         self.sel_ = np.argsort(mi)[::-1][:k]
         self.lda_ = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto").fit(F[:, self.sel_], y)
@@ -88,9 +96,9 @@ class Fbcsp(Baseline):
         return self.lda_.predict_proba(self._features(X))
 
 
-def fit(X: np.ndarray, y: np.ndarray, **kw) -> Baseline:
+def fit(X: np.ndarray, y: np.ndarray, config: FbcspConfig | None = None) -> Baseline:
     """Back-compat shim — prefer `Fbcsp(...).fit(X, y)`."""
-    return Fbcsp(**kw).fit(X, y)
+    return Fbcsp(config).fit(X, y)
 
 
 def score(clf: Baseline, X: np.ndarray) -> np.ndarray:

@@ -48,7 +48,8 @@ def main():
     accs = []
     for seed in _SEEDS:
         for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(C, y, g):
-            pred = transfer.zero_shot_predict(C[tr], y[tr], g[tr], C[te], scale=False, target_groups=g[te]).argmax(1)
+            pred = transfer.zero_shot_predict(transfer.Domain(C[tr], y[tr], g[tr]),
+                                              transfer.Domain(C[te], groups=g[te]), scale=False).argmax(1)
             accs.append(metrics.accuracy(y[te], pred))
             for t, p in zip(y[te], pred, strict=True):
                 conf[t, p] += 1

@@ -32,6 +32,7 @@ from pathlib import Path
 
 import numpy as np
 from joblib import Parallel, delayed
+from pydantic import BaseModel
 from pyriemann.estimation import Covariances
 from sklearn.model_selection import StratifiedShuffleSplit
 
@@ -49,25 +50,42 @@ _ZERO_SHOT = {"recenter", "recenter_scale"}
 _CALIBRATED = {"rpa", "mdwm"}
 
 
+class AlignConfig(BaseModel):
+    """The transfer experiment's method + knobs. `method` = recenter|recenter_scale|rpa|mdwm; `calib_frac`/
+    `seed` = the calibrated split; `mdwm_lambda` = MDWM source↔target tradeoff; `augment`/`order`/`lag` = the
+    ACM time-delay-embedding of the covariances."""
+    method: str
+    calib_frac: float = 0.5
+    seed: int = 0
+    mdwm_lambda: float = 0.5
+    augment: bool = False
+    order: int = 4
+    lag: int = 8
+
+
 def _covariances(X, augment, order, lag, estimator="oas"):
     if augment:
         X = time_delay_embed(X.astype(np.float64), order, lag)
     return Covariances(estimator=estimator).transform(X.astype(np.float64))
 
 
-def _zero_shot_fold(s, Ctr, ytr, Cte, yte, groups, scale):
+def _zero_shot_fold(s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
     """Zero-shot: delegate the alignment + classifier to the transfer method, score ALL target."""
-    probs = transfer.zero_shot_predict(Ctr, ytr, groups, Cte, scale=scale)
-    return _row(s, yte, probs)
+    probs = transfer.zero_shot_predict(train, transfer.Domain(test.cov),
+                                       scale=(cfg.method == "recenter_scale"))
+    return _row(s, test.labels, probs)
 
 
-def _calibrated_fold(s, method, Ctr, ytr, Cte, yte, calib_frac, seed, mdwm_lambda=0.5):
+def _calibrated_fold(s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
     """Calibrated: carve a stratified `calib_frac` of the held-out subject as the *only* labelled target data
     (the rest is the disjoint test set), hand it to the transfer method, score the disjoint remainder. Test
     labels never enter the fit — the split is the runner's honesty guarantee, the method just consumes it."""
-    cal, ev = next(StratifiedShuffleSplit(1, train_size=calib_frac, random_state=seed).split(Cte, yte))
-    pred = transfer.calibrated_predict(method, Ctr, ytr, Cte[cal], yte[cal], Cte[ev], mdwm_lambda)
-    yev = yte[ev]
+    cal, ev = next(StratifiedShuffleSplit(1, train_size=cfg.calib_frac,
+                                          random_state=cfg.seed).split(test.cov, test.labels))
+    pred = transfer.calibrated_predict(cfg.method, train,
+                                       transfer.Domain(test.cov[cal], test.labels[cal]),
+                                       transfer.Domain(test.cov[ev]), cfg.mdwm_lambda)
+    yev = test.labels[ev]
     row = {"fold": str(s), "n": int(len(ev)), "n_calib": int(len(cal)),
            "acc": metrics.accuracy(yev, pred), "kappa": metrics.kappa(yev, pred), "ece": 0.0}
     return row, None, yev
@@ -80,16 +98,15 @@ def _row(s, yte, probs):
     return row, probs, yte
 
 
-def _run_fold(s, tr, te, method, calib_frac, seed, augment, order, lag, mdwm_lambda=0.5):
+def _run_fold(s, tr, te, cfg: AlignConfig):
     """One LOSO fold — module-level so joblib ships it to a worker (folds are independent)."""
     Xtr, ytr = store.gather(tr)
     Xte, yte = store.gather(te)
-    Ctr = _covariances(Xtr, augment, order, lag)
-    Cte = _covariances(Xte, augment, order, lag)
-    if method in _ZERO_SHOT:
-        return _zero_shot_fold(s, Ctr, ytr, Cte, yte, tr["subject"].to_numpy(),
-                               scale=(method == "recenter_scale"))
-    return _calibrated_fold(s, method, Ctr, ytr, Cte, yte, calib_frac, seed, mdwm_lambda)
+    train = transfer.Domain(_covariances(Xtr, cfg.augment, cfg.order, cfg.lag), ytr, tr["subject"].to_numpy())
+    test = transfer.Domain(_covariances(Xte, cfg.augment, cfg.order, cfg.lag), yte)
+    if cfg.method in _ZERO_SHOT:
+        return _zero_shot_fold(s, train, test, cfg)
+    return _calibrated_fold(s, train, test, cfg)
 
 
 def main():
@@ -110,10 +127,10 @@ def main():
     dataset, method = exp.dataset, exp.method
     p = exp.params
     calib_frac = p.get("calib_frac", 0.5)
-    seed = p.get("seed", 0)
-    mdwm_lambda = p.get("mdwm_lambda", 0.5)
     augment = p.get("augment", False)
-    order, lag = p.get("order", 4), p.get("lag", 8)
+    fold_cfg = AlignConfig(method=method, calib_frac=calib_frac, seed=p.get("seed", 0),
+                           mdwm_lambda=p.get("mdwm_lambda", 0.5), augment=augment,
+                           order=p.get("order", 4), lag=p.get("lag", 8))
 
     cfg = EpochCfg(**exp.recipe)
     meta = store.load(dataset, cfg)
@@ -126,8 +143,7 @@ def main():
     folds = list(splits.leave_one_subject_out(meta))
     logger.info(f"\n=== {name} · cross_subject · {dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
     out_folds = Parallel(n_jobs=args.jobs)(
-        delayed(_run_fold)(s, tr, te, method, calib_frac, seed, augment, order, lag, mdwm_lambda)
-        for s, tr, te in folds)
+        delayed(_run_fold)(s, tr, te, fold_cfg) for s, tr, te in folds)
 
     rows, P, Y = [], [], []
     for row, probs, yte in sorted(out_folds, key=lambda r: r[0]["fold"]):

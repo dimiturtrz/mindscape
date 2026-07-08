@@ -21,6 +21,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +31,7 @@ from sklearn.model_selection import GroupKFold
 
 from baselines.eeg import transfer
 from baselines.fusion import combine
+from baselines.fusion.base import FusionData, ModalityModels, PooledProbs
 from core import config
 from core.data import store
 from core.data.eeg.base import EpochCfg
@@ -38,21 +41,40 @@ from neuroscan.evaluation import metrics
 
 logger = logging.getLogger(__name__)
 
+
+@dataclass
+class _RunnerModels:
+    """The four modality callables the fold loop needs: the EEG probability + tangent-feature functions
+    (both re-centered, so both take subject groups) and the fNIRS fit/score."""
+    eeg_probs: Callable
+    eeg_feats: Callable
+    fnirs_fit: Callable
+    fnirs_score: Callable
+
+
+@dataclass
+class _Analysis:
+    """The two fusion diagnostics reported together: complementarity/oracle-headroom + the aggregation sweep."""
+    complementarity: dict
+    aggregation: dict
+
 _EEG, _FNIRS = "shin2017_nback_eeg", "shin2017_nback"
 # the recipes each modality decodes best at (from the unimodal runs)
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _FNIRS_CFG = FnirsCfg()
 
 
-def _gather_aligned(meta_e, meta_f, subs):
-    """Gather EEG + fNIRS epochs for `subs`, block-aligned. Returns (Xe, Xf, y) with a hard guard that the
-    two label sequences match (catches any silent misalignment before it can fake a fusion gain)."""
+def _gather_aligned(meta_e, meta_f, subs) -> FusionData:
+    """Gather EEG + fNIRS epochs for `subs`, block-aligned, as a FusionData (with per-block subject groups).
+    Hard guard that the two label sequences match — catches any silent misalignment before it can fake a
+    fusion gain."""
     q_e = meta_e.filter(meta_e["subject"].is_in([str(s) for s in subs]))
     q_f = meta_f.filter(meta_f["subject"].is_in([str(s) for s in subs]))
-    Xe, ye = store.gather(q_e)
-    Xf, yf = store.gather(q_f)
-    assert len(ye) == len(yf) and np.array_equal(ye, yf), "EEG/fNIRS blocks misaligned — fusion invalid"
-    return Xe, Xf, ye
+    eeg, y_eeg = store.gather(q_e)
+    fnirs, y_fnirs = store.gather(q_f)
+    assert len(y_eeg) == len(y_fnirs) and np.array_equal(y_eeg, y_fnirs), \
+        "EEG/fNIRS blocks misaligned — fusion invalid"
+    return FusionData(eeg=eeg, fnirs=fnirs, y=y_eeg, groups=q_e["subject"].to_numpy())
 
 
 def _parse_args():
@@ -65,68 +87,61 @@ def _parse_args():
     return ap.parse_args()
 
 
-def _run_folds(fold_subs, meta_e, meta_f, subs, eeg_probs, eeg_feats, fn_fit, fn_score):
-    """Run every fold: unimodal + fused predictions per fold. Returns (rows, pooled) where `pooled` holds the
-    concatenated correct-masks and probability stacks used for the oracle + aggregation-sweep analysis."""
+def _run_folds(fold_subs, meta_e, meta_f, subs, models: _RunnerModels):
+    """Run every fold: unimodal + fused predictions per fold. Returns (rows, PooledProbs) — the pooled probs
+    hold the concatenated correct-masks and probability stacks used for the oracle + aggregation-sweep."""
+    field_names = ("eeg", "fnirs", "stacking", "cal_eeg", "cal_fnirs", "y", "eeg_correct", "fnirs_correct")
+    pooled = {name: [] for name in field_names}
     rows = []
-    CE, CF, Y = [], [], []                                   # pooled correct-masks for the oracle analysis
-    PE, PF, STK, PEc, PFc = [], [], [], [], []               # pooled probs for the aggregation sweep
-    for i, te_subs in enumerate(fold_subs):
-        tr_subs = [s for s in map(str, subs) if s not in te_subs]
-        Xe_tr, Xf_tr, y_tr = _gather_aligned(meta_e, meta_f, tr_subs)
-        Xe_te, Xf_te, y_te = _gather_aligned(meta_e, meta_f, te_subs)
-        g_tr = meta_e.filter(meta_e["subject"].is_in(tr_subs))["subject"].to_numpy()  # train row -> subject
-        g_te = meta_e.filter(meta_e["subject"].is_in(te_subs))["subject"].to_numpy()  # test row -> subject
+    modality_models = ModalityModels(models.eeg_probs, models.fnirs_fit, models.fnirs_score)
+    for fold, test_subs in enumerate(fold_subs):
+        train_subs = [s for s in map(str, subs) if s not in test_subs]
+        train = _gather_aligned(meta_e, meta_f, train_subs)
+        test = _gather_aligned(meta_e, meta_f, test_subs)
 
         # unimodal decoders — EEG re-centered by default (per-subject, zero-shot), fNIRS the amplitude LDA
-        pe = eeg_probs(Xe_tr, y_tr, g_tr, Xe_te, g_te)
-        pf = fn_score(fn_fit(Xf_tr, y_tr), Xf_te)
-        # late fusion: average the two probability vectors
-        p_late = (pe + pf) / 2.0
+        eeg_probs = models.eeg_probs(train.eeg, train.y, train.groups, test.eeg, test.groups)
+        fnirs_probs = models.fnirs_score(models.fnirs_fit(train.fnirs, train.y), test.fnirs)
+        late = (eeg_probs + fnirs_probs) / 2.0
         # feature fusion: concat the re-centered tangent-space EEG feature + fNIRS features -> shrinkage-LDA
-        p_feat = combine.feature_fusion(eeg_feats(Xe_tr, g_tr), Xf_tr, y_tr, eeg_feats(Xe_te, g_te), Xf_te)
+        feature = combine.feature_fusion(models.eeg_feats(train.eeg, train.groups), train.fnirs, train.y,
+                                         models.eeg_feats(test.eeg, test.groups), test.fnirs)
         # smarter output-space aggregators (stacking meta-LDA + per-modality temperature), fit on inner
         # OOF probs from a GroupKFold over the TRAIN subjects so the meta/temperature never see test data
-        stk, pec, pfc = combine.smart_aggregators(eeg_probs, fn_fit, fn_score,
-                                                  Xe_tr, Xf_tr, y_tr, g_tr, pe, pf)
+        stacking, cal_eeg, cal_fnirs = combine.smart_aggregators(modality_models, train, eeg_probs, fnirs_probs)
 
-        CE.append(pe.argmax(1) == y_te)
-        CF.append(pf.argmax(1) == y_te)
-        Y.append(y_te)
-        PE.append(pe)
-        PF.append(pf)
-        STK.append(stk)
-        PEc.append(pec)
-        PFc.append(pfc)
+        for name, value in (("eeg", eeg_probs), ("fnirs", fnirs_probs), ("stacking", stacking),
+                            ("cal_eeg", cal_eeg), ("cal_fnirs", cal_fnirs), ("y", test.y),
+                            ("eeg_correct", eeg_probs.argmax(1) == test.y),
+                            ("fnirs_correct", fnirs_probs.argmax(1) == test.y)):
+            pooled[name].append(value)
         rows.append({
-            "fold": str(i), "n": int(len(y_te)),
-            "eeg": metrics.accuracy(y_te, pe.argmax(1)),
-            "fnirs": metrics.accuracy(y_te, pf.argmax(1)),
-            "late": metrics.accuracy(y_te, p_late.argmax(1)),
-            "feature": metrics.accuracy(y_te, p_feat.argmax(1)),
+            "fold": str(fold), "n": int(len(test.y)),
+            "eeg": metrics.accuracy(test.y, eeg_probs.argmax(1)),
+            "fnirs": metrics.accuracy(test.y, fnirs_probs.argmax(1)),
+            "late": metrics.accuracy(test.y, late.argmax(1)),
+            "feature": metrics.accuracy(test.y, feature.argmax(1)),
         })
-        logger.info(f"  fold{i}: eeg {rows[-1]['eeg']:.3f} | fnirs {rows[-1]['fnirs']:.3f} | "
+        logger.info(f"  fold{fold}: eeg {rows[-1]['eeg']:.3f} | fnirs {rows[-1]['fnirs']:.3f} | "
               f"late {rows[-1]['late']:.3f} | feature {rows[-1]['feature']:.3f}")
 
-    pooled = {"ce": np.concatenate(CE), "cf": np.concatenate(CF), "y": np.concatenate(Y),
-              "Pe": np.concatenate(PE), "Pf": np.concatenate(PF), "Stk": np.concatenate(STK),
-              "Pce": np.concatenate(PEc), "Pcf": np.concatenate(PFc)}
-    return rows, pooled
+    return rows, PooledProbs(**{name: np.concatenate(values) for name, values in pooled.items()})
 
 
-def _report(regime, n_classes, rows, mean, comp, agg, acc_keys):
+def _report(regime, n_classes, rows, mean, analysis: _Analysis):
     """Print the per-role means, fusion-vs-unimodal deltas, oracle headroom, and the aggregation sweep."""
+    comp, agg = analysis.complementarity, analysis.aggregation
     logger.info(f"\n=== fusion · {regime} · shin n-back ({len(rows)} folds, chance {1/n_classes:.3f}) ===")
-    for k in ("eeg", "fnirs", "late", "feature"):
-        logger.info(f"  {k:>8}: {mean[k]:.3f}")
+    for role in ("eeg", "fnirs", "late", "feature"):
+        logger.info(f"  {role:>8}: {mean[role]:.3f}")
     best_uni = comp["best_single"]
     logger.info(f"  fusion vs best-unimodal: late {mean['late']-best_uni:+.3f} | feature {mean['feature']-best_uni:+.3f}")
     logger.info(f"  ORACLE (either correct) {comp['oracle_either']:.3f}  (+{comp['oracle_either']-best_uni:.3f} headroom) "
           f"| err-corr {comp['err_corr']:+.3f} | both-wrong {comp['both_wrong']:.3f}")
     logger.info("  aggregation sweep (all output-space combiners vs best-single "
           f"{best_uni:.3f}, oracle {comp['oracle_either']:.3f}):")
-    for k in acc_keys:
-        logger.info(f"    {k:>16} {agg[k]:.3f}  ({agg[k]-best_uni:+.3f})")
+    for key in combine.SWEEP_KEYS:
+        logger.info(f"    {key:>16} {agg[key]:.3f}  ({agg[key]-best_uni:+.3f})")
     logger.info(f"    conf-gap (correct-wrong max-prob): eeg {agg['eeg_conf_gap']:+.3f} | fnirs {agg['fnirs_conf_gap']:+.3f}"
           "  <- ~0 => confidence does not predict correctness => output-space fusion cannot select")
 
@@ -159,7 +174,8 @@ def main():
         get_method decoder. The `nback_fusion_plain` config (params.plain_eeg) falls back to plain Riemann."""
         if not recenter:
             return eeg_score(eeg_fit(Xtr, ytr), Xte)
-        return transfer.zero_shot_predict(_cov(Xtr), ytr, gtr, _cov(Xte), scale=False, target_groups=gte)
+        return transfer.zero_shot_predict(transfer.Domain(_cov(Xtr), ytr, gtr),
+                                          transfer.Domain(_cov(Xte), groups=gte), scale=False)
 
     def eeg_feats(X, g):
         """EEG feature vector for feature-level fusion — the re-centered tangent-space rep, so its EEG side
@@ -172,20 +188,18 @@ def main():
     else:
         fold_subs = [[str(s)] for s in subs]
 
-    rows, pooled = _run_folds(fold_subs, meta_e, meta_f, subs, eeg_probs, eeg_feats, fn_fit, fn_score)
+    models_bundle = _RunnerModels(eeg_probs, eeg_feats, fn_fit, fn_score)
+    rows, pooled = _run_folds(fold_subs, meta_e, meta_f, subs, models_bundle)
 
     mean = {k: float(np.mean([r[k] for r in rows])) for k in ("eeg", "fnirs", "late", "feature")}
     # complementarity: is fusion fundamentally hopeless, or just naive averaging? The oracle (either
     # modality correct) is the upper bound ANY fusion could reach; near-zero error correlation means the
     # two modalities fail on independent blocks, so a per-trial selector has headroom the mean can't touch.
-    ce, cf = pooled["ce"], pooled["cf"]
-    comp = combine.complementarity(mean, ce, cf)             # oracle headroom + error-independence
-    agg = combine.aggregation_sweep(pooled["Pe"], pooled["Pf"], pooled["Stk"], pooled["Pce"], pooled["Pcf"],
-                                    pooled["y"], ce, cf)      # every output-space combiner
-    acc_keys = combine.SWEEP_KEYS
-    comp["best_aggregator"] = float(max(agg[k] for k in acc_keys))
+    comp = combine.complementarity(mean, pooled.eeg_correct, pooled.fnirs_correct)   # oracle + error-independence
+    agg = combine.aggregation_sweep(pooled)                  # every output-space combiner
+    comp["best_aggregator"] = float(max(agg[k] for k in combine.SWEEP_KEYS))
     comp["oracle_gap_captured"] = comp["best_aggregator"] - comp["best_single"]
-    _report(regime, n_classes, rows, mean, comp, agg, acc_keys)
+    _report(regime, n_classes, rows, mean, _Analysis(comp, agg))
 
     run_dir = Path(args.out) if args.out else Path("runs") / f"fusion_{regime}_shin2017_nback"
     run_dir.mkdir(parents=True, exist_ok=True)

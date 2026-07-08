@@ -24,6 +24,7 @@ import argparse
 import json
 import logging
 import math
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -69,12 +70,29 @@ class WeightedLinear(torch.nn.Module):
         return self.head(x * self.weights()[self.group_idx])
 
 
-def _fit(Xtr, ytr, group_idx, n_groups, n_classes, lam, hp) -> WeightedLinear:
-    model = WeightedLinear(group_idx, n_groups, Xtr.shape[1], n_classes).to(_DEV)
+@dataclass
+class GroupSpec:
+    """The feature-weighting structure the WeightedLinear model is built from: which weight-group each column
+    belongs to (`group_idx`), the number of groups, and the class count."""
+    group_idx: torch.Tensor
+    n_groups: int
+    n_classes: int
+
+
+@dataclass
+class _SearchData:
+    """The search-fold data: the feature bank `F`, class labels `y`, and per-block subject `groups`."""
+    F: np.ndarray
+    y: np.ndarray
+    groups: np.ndarray
+
+
+def _fit(Xtr, ytr, spec: GroupSpec, lam, hp) -> WeightedLinear:
+    model = WeightedLinear(spec.group_idx, spec.n_groups, Xtr.shape[1], spec.n_classes).to(_DEV)
     opt = torch.optim.Adam(model.parameters(), lr=hp["lr"], weight_decay=hp["weight_decay"])
     Xt = torch.as_tensor(Xtr, dtype=torch.float32, device=_DEV)
     yt = torch.as_tensor(ytr, dtype=torch.long, device=_DEV)
-    norm = math.log(max(n_groups, 2))                            # normalise entropy by log K so lambda is
+    norm = math.log(max(spec.n_groups, 2))                       # normalise entropy by log K so lambda is
     model.train()                                               # grain-invariant (same meaning at 15 or 1080 weights)
     for _ in range(hp["epochs"]):
         opt.zero_grad()
@@ -97,13 +115,13 @@ def _standardise(Xtr, Xte):
     return (Xtr - mu) / sd, (Xte - mu) / sd
 
 
-def _cv_acc(F_, group_idx, y, groups, n_groups, n_classes, lam, hp):
+def _cv_acc(data: _SearchData, spec: GroupSpec, lam, hp):
     """Mean CV accuracy at this lambda, over repeated seeded StratifiedGroupKFold (subject-grouped)."""
     accs = []
-    for tr, te in grouped_folds(F_, y, groups, hp["fold_seeds"], hp["k"]):
-        Xtr, Xte = _standardise(F_[tr], F_[te])
-        m = _fit(Xtr, y[tr], group_idx, n_groups, n_classes, lam, hp)
-        accs.append(float((_predict(m, Xte) == y[te]).mean()))
+    for tr, te in grouped_folds(data.F, data.y, data.groups, hp["fold_seeds"], hp["k"]):
+        Xtr, Xte = _standardise(data.F[tr], data.F[te])
+        m = _fit(Xtr, data.y[tr], spec, lam, hp)
+        accs.append(float((_predict(m, Xte) == data.y[te]).mean()))
     return float(np.mean(accs))
 
 
@@ -155,19 +173,21 @@ def main():
     gi_np = np.array([fam_to_id[f] for f in fam]) if grain == "family" else np.arange(Fb.shape[1])
     n_groups = len(families) if grain == "family" else Fb.shape[1]
     group_idx = torch.as_tensor(gi_np, dtype=torch.long, device=_DEV)
+    spec = GroupSpec(group_idx, n_groups, n_classes)
 
     search_idx, seal_idx = next(GroupShuffleSplit(1, test_size=cfg.holdout_frac,
                                                   random_state=cfg.holdout_seed).split(Fb, y, groups))
     Fs, ys, gs = Fb[search_idx], y[search_idx], groups[search_idx]
+    search = _SearchData(Fs, ys, gs)
     logger.info(f"fNIRS subset (torch/{_DEV.type}): {Fb.shape[0]} blocks · grain {grain} ({n_groups} weights) · "
           f"search {len(np.unique(gs))} / sealed {len(np.unique(groups[seal_idx]))} subj · "
           f"lambdas {list(cfg.lambdas)} (chance {1/n_classes:.3f})")
 
     sweep = []
     for lam in cfg.lambdas:
-        acc = _cv_acc(Fs, group_idx, ys, gs, n_groups, n_classes, float(lam), hp)
+        acc = _cv_acc(search, spec, float(lam), hp)
         Fs_std, _ = _standardise(Fs, Fs)                          # weights read from a full-search fit
-        w_full = _fit(Fs_std, ys, group_idx, n_groups, n_classes, float(lam), hp)
+        w_full = _fit(Fs_std, ys, spec, float(lam), hp)
         w = w_full.weights().detach().cpu().numpy()
         fw = _family_weights(w, gi_np, families, grain)
         sweep.append({"lam": float(lam), "acc": acc, "eff_n": _effective_n(w), "family_weights": fw})
@@ -178,7 +198,7 @@ def main():
     knee = _knee(sweep)
     # honest: refit at the knee lambda on ALL search subjects, score the sealed holdout
     Xtr, Xte = _standardise(Fs, Fb[seal_idx])
-    m = _fit(Xtr, ys, group_idx, n_groups, n_classes, knee["lam"], hp)
+    m = _fit(Xtr, ys, spec, knee["lam"], hp)
     sealed = float((_predict(m, Xte) == y[seal_idx]).mean())
     kept = {f: round(v, 3) for f, v in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1]) if v > _KEEP_WEIGHT_MIN}
     logger.info(f"\nknee λ={knee['lam']}: eff-#feat {knee['eff_n']:.2f} · search-acc {knee['acc']:.3f} (optimistic) "

@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -40,16 +41,26 @@ _CFG = Path(__file__).with_name("optuna.yaml")            # study config lives b
 _STABLE_JACCARD = 0.6   # top-family sets agree across seeds at/above this Jaccard -> trust the ranking
 
 
-def _cv_score(F, fam, y, groups, weights, fold_seeds, k) -> float:
+@dataclass
+class Bank:
+    """The fNIRS feature bank the search scores over: the `[n, cols]` features, each column's family label
+    `fam`, the class labels `y`, and the per-block subject `groups`. These four travel together everywhere."""
+    F: np.ndarray
+    fam: np.ndarray
+    y: np.ndarray
+    groups: np.ndarray
+
+
+def _cv_score(bank: Bank, weights, fold_seeds, k) -> float:
     """Mean accuracy of standardise→per-family-weight→shrinkage-LDA over StratifiedGroupKFold repeated for
     each seed in `fold_seeds`. Grouped by subject (whole subjects per fold); the scaler fits on train only."""
     accs = []
-    for tr, te in grouped_folds(F, y, groups, fold_seeds, k):
-        sc = WeightedFamilyScaler(fam, weights).fit(F[tr])
+    for tr, te in grouped_folds(bank.F, bank.y, bank.groups, fold_seeds, k):
+        sc = WeightedFamilyScaler(bank.fam, weights).fit(bank.F[tr])
         # fixed shrinkage (not "auto"/Ledoit-Wolf): ~10x cheaper on 1080 features and constant across trials,
         # so it doesn't confound the relative feature-weight comparison the search is after.
-        lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage=0.4).fit(sc.transform(F[tr]), y[tr])
-        accs.append(float((lda.predict(sc.transform(F[te])) == y[te]).mean()))
+        lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage=0.4).fit(sc.transform(bank.F[tr]), bank.y[tr])
+        accs.append(float((lda.predict(sc.transform(bank.F[te])) == bank.y[te]).mean()))
     return float(np.mean(accs))
 
 
@@ -64,11 +75,11 @@ def _storage(out: Path):
     return optuna.storages.JournalStorage(backend)
 
 
-def _run_one_study(F, fam, y, groups, families, cfg, tpe_seed, storage):
+def _run_one_study(bank: Bank, families, cfg, tpe_seed, storage):
     """One Optuna study (one TPE seed): returns (importances, top_weight_means, best_value, best_params)."""
     def objective(trial):
         weights = {f: trial.suggest_float(f, cfg.weight_low, cfg.weight_high) for f in families}
-        return _cv_score(F, fam, y, groups, weights, list(cfg.fold_seeds), cfg.k)
+        return _cv_score(bank, weights, list(cfg.fold_seeds), cfg.k)
 
     study = optuna.create_study(direction="maximize", storage=storage, load_if_exists=True,
                                 study_name=f"fnirs_importance_seed{tpe_seed}",
@@ -118,6 +129,7 @@ def main():
     X, y = store.gather(meta)
     groups = meta["subject"].to_numpy()
     F, fam = extract_bank(X)
+    bank = Bank(F, fam, y, groups)
     families = family_names()
     out = REPO / cfg.out
     storage = _storage(out)
@@ -127,7 +139,7 @@ def main():
 
     per_seed_imp, per_seed_topw, peaks, bests = [], [], [], []
     for s in cfg.tpe_seeds:
-        imp, topw, best, bparams = _run_one_study(F, fam, y, groups, families, cfg, int(s), storage)
+        imp, topw, best, bparams = _run_one_study(bank, families, cfg, int(s), storage)
         per_seed_imp.append(imp)
         per_seed_topw.append(topw)
         peaks.append(best)

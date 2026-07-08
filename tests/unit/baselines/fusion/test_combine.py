@@ -2,6 +2,7 @@
 import numpy as np
 
 from baselines.fusion import combine
+from baselines.fusion.base import PooledProbs
 
 
 def test_complementarity_oracle_and_error_structure():
@@ -22,7 +23,8 @@ def test_aggregation_sweep_mean_and_confgap():
     Pf = np.array([[.6, .4], [.6, .4], [.8, .2], [.2, .8]])   # right on 0,2,3
     ce = Pe.argmax(1) == y
     cf = Pf.argmax(1) == y
-    agg = combine.aggregation_sweep(Pe, Pf, Pe, Pe, Pf, y, ce, cf)
+    agg = combine.aggregation_sweep(PooledProbs(eeg=Pe, fnirs=Pf, stacking=Pe, cal_eeg=Pe, cal_fnirs=Pf,
+                                                y=y, eeg_correct=ce, fnirs_correct=cf))
     assert set(combine.SWEEP_KEYS) <= set(agg)                # every sweep key present
     assert 0.0 <= agg["mean"] <= 1.0
     # conf_gap = mean max-prob(correct) - mean max-prob(wrong); finite, sign as computed

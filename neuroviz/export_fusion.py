@@ -53,7 +53,8 @@ def main():
         # EEG = re-centered Riemann (per-subject, zero-shot) — the strong workload modality; fNIRS = amplitude LDA
         Ce = Covariances("oas").transform(Xe.astype(np.float64))
         Cet = Covariances("oas").transform(Xet.astype(np.float64))
-        pe = transfer.zero_shot_predict(Ce, y, ge, Cet, scale=False, target_groups=gt).argmax(1)
+        pe = transfer.zero_shot_predict(transfer.Domain(Ce, y, ge),
+                                        transfer.Domain(Cet, groups=gt), scale=False).argmax(1)
         pf = fs(ff(Xf, y), Xft).argmax(1)
         for i in range(len(yt)):
             blocks.append({"subject": str(gt[i]), "truth": int(yt[i]),

@@ -54,7 +54,8 @@ def _build_all(band="sum"):
         if _CSD:
             Xe = bc.csd_transform(Xe, ch_e, 100.0)                     # spatial deblur before fusion
         pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
-        joint, _ = bc.fused_node_series(Xe, Xf, pos_e, pos_f, band=band, fps=_FPS, t_end=_TEND)
+        joint, _ = bc.fused_node_series(bc.PairedModalities(Xe, Xf, pos_e, pos_f), band=band,
+                                        series=bc.SeriesConfig(fps=_FPS, t_end=_TEND))
         Cs.append(_cov(joint))
         ys.append(ye)
         gs.append(np.array([s] * len(ye)))
@@ -71,7 +72,8 @@ def main():
     for seed in _SEEDS:
         for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(C, y, g):
             # winning EEG method: per-subject re-center (train AND test, unsupervised) -> tangent -> LR
-            proba = transfer.zero_shot_predict(C[tr], y[tr], g[tr], C[te], scale=False, target_groups=g[te])
+            proba = transfer.zero_shot_predict(transfer.Domain(C[tr], y[tr], g[tr]),
+                                               transfer.Domain(C[te], groups=g[te]), scale=False)
             pred = proba.argmax(1)
             accs.append(metrics.accuracy(y[te], pred))
             kaps.append(metrics.kappa(y[te], pred))

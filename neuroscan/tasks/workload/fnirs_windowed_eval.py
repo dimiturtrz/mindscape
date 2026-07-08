@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import logging
 
-from baselines.fnirs.windowed import WindowedFnirs
+from baselines.fnirs.windowed import WindowedConfig, WindowedFnirs
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
-from neuroscan.tasks.workload._eval import cv_score
+from neuroscan.tasks.workload._eval import CvConfig, CvData, cv_score
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +34,10 @@ _ARMS: list[tuple[str, object]] = [("collapse (baseline)", None)]
 for _win, _hop, _tag in [(11.0, 11.0, "vcoarse 2w"), (7.0, 7.0, "coarse 3w"),
                          (6.0, 3.0, "med 6/3"), (4.0, 1.0, "fine 4/1")]:
     _ARMS.append((f"windowed concat · {_tag}",
-                  lambda w=_win, h=_hop: WindowedFnirs(win_s=w, hop_s=h, fs=_FS, aggregate="concat")))
+                  lambda w=_win, h=_hop: WindowedFnirs(WindowedConfig(win_s=w, hop_s=h, fs=_FS, aggregate="concat"))))
 for _agg in ("mean", "max", "lse"):
     _ARMS.append((f"windowed {_agg} · med 6/3",
-                  lambda a=_agg: WindowedFnirs(win_s=6.0, hop_s=3.0, fs=_FS, aggregate=a)))
+                  lambda a=_agg: WindowedFnirs(WindowedConfig(win_s=6.0, hop_s=3.0, fs=_FS, aggregate=a))))
 
 
 def main():
@@ -51,10 +51,11 @@ def main():
     logger.info(f"fNIRS windowed-aggregation sweep vs collapse · Shin n-back · {len(y)} blocks · "
           f"{meta['subject'].n_unique()} subj · 3x5-fold · chance {chance:.3f}\n")
     logger.info(f"  {'arm':<26}{'within':>9}{'±sd':>7}   {'cross':>9}{'±sd':>7}{'  Δcross':>9}")
+    data = CvData(X, y, groups)
     base_cross = None
     for name, build in _ARMS:
-        wa, ws, _ = cv_score(build, X, y, groups, grouped=False)
-        ca, cs, _ = cv_score(build, X, y, groups, grouped=True)
+        wa, ws, _ = cv_score(build, data, CvConfig(grouped=False))
+        ca, cs, _ = cv_score(build, data, CvConfig(grouped=True))
         if base_cross is None:
             base_cross = ca
         dc = "" if build is None else f"{ca - base_cross:+.3f}"

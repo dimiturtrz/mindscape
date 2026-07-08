@@ -22,8 +22,8 @@ def test_metrics_outside_run_is_safe():
 def test_save_model_sklearn_writes_joblib(tmp_path):
     # a sklearn estimator (the baseline kind, no `.net`) -> <name>.joblib in run_dir/models/
     import joblib
-    from sklearn.linear_model import LogisticRegression
     import numpy as np
+    from sklearn.linear_model import LogisticRegression
 
     clf = LogisticRegression().fit(np.eye(4), [0, 1, 0, 1])
     path = tracking.save_model(clf, "model_csp_1", run_dir=tmp_path)

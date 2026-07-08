@@ -7,6 +7,8 @@ it). `core/data/eeg/*` and `core/data/fnirs/*` both depend on this; it depends o
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 from scipy.signal import butter, filtfilt
 
@@ -22,8 +24,16 @@ def bandpass(X: np.ndarray, l_freq: float, h_freq: float, fs: float, order: int 
     return filtfilt(b, a, X, axis=-1)
 
 
-def block_epochs(cont: np.ndarray, onsets: np.ndarray, y: np.ndarray, fs: float,
-                 tmin: float, tmax: float, baseline_s: float = 0.0
+@dataclass
+class BlockedRecording:
+    """A continuous [ch, T] recording plus the per-block onset samples and labels that carve it into epochs —
+    the three things `block_epochs` always needs together."""
+    cont: np.ndarray
+    onsets: np.ndarray
+    labels: np.ndarray
+
+
+def block_epochs(rec: BlockedRecording, fs: float, tmin: float, tmax: float, baseline_s: float = 0.0
                  ) -> tuple[np.ndarray, np.ndarray]:
     """Cut a continuous [ch, T] recording into epochs [onset+tmin, onset+tmax) at each onset (samples).
 
@@ -31,10 +41,11 @@ def block_epochs(cont: np.ndarray, onsets: np.ndarray, y: np.ndarray, fs: float,
     methods it's left 0 — the covariance is mean-invariant). Epochs whose window falls off the recording
     edge are dropped. Returns (X [n, ch, t] float32, y [n]). Vectorized: one fancy-index, no per-epoch loop.
     """
+    cont = rec.cont
     a, b = int(round(tmin * fs)), int(round(tmax * fs))
     nb = int(round(baseline_s * fs))
     T = cont.shape[1]
-    onsets, y = np.asarray(onsets), np.asarray(y)
+    onsets, y = np.asarray(rec.onsets), np.asarray(rec.labels)
     valid = (onsets + a >= 0) & (onsets + b <= T)                      # window fully on the recording
     if not valid.any():
         return np.empty((0, cont.shape[0], b - a), np.float32), np.empty(0, np.int64)

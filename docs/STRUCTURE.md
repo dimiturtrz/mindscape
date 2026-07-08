@@ -81,7 +81,7 @@ _Diagrams are kept coarse (layer + contract) on purpose — they map to folders 
 |---|---|
 | `core/config.py` | one data root (`paths.yaml` / `MINDSCAPE_DATA`), everything derived; cross-platform path translation; points MOABB's cache at `<root>/raw`. Also the **named-experiment registry** — `load_experiment(name)` over `experiments.yaml` (config-as-data; entrypoints take `--exp` not a flag per knob) |
 | `core/data/store.py` | the **epoch cloud** — consolidates a dataset into a recipe-keyed cache (`processed/<ds>/<key>/` = per-subject npz + a meta CSV + a `channels.json` when the adapter exposes `channels()`, so the cache is self-describing / one-format), `gather()` pulls a split's epochs back in row order, `channels()` returns the montage names |
-| `core/data/splits.py` | **split-as-criteria** — a split is the cloud *filtered* (`make_split(meta, test_subjects, test_sessions, …)`), not a named thing; within / cross-subject (LOSO) / cross-session are all the same function with different criteria |
+| `core/data/splits.py` | **split-as-criteria** — a split is the cloud *filtered* (`make_split(meta, SplitSpec(test_subjects=…, test_sessions=…))`), not a named thing; within / cross-subject (LOSO) / cross-session are all the same function with different criteria |
 | `core/data/eeg/base.py` | the canonical schema + `DatasetAdapter` protocol + a reusable MOABB motor-imagery adapter |
 | `core/data/eeg/registry.py` | name → adapter; "add a dataset = one file + one line" |
 | `core/data/eeg/braindecode_pre.py` | the braindecode-canonical preprocessing path (continuous-signal EMS → windows) for faithful reproductions |
@@ -125,9 +125,9 @@ The honesty story is one design choice. A split isn't a named, fixed thing; it's
 on criteria that live on the run config, so a run **self-documents what it held out**:
 
 ```python
-make_split(meta, test_subjects=())            # within-subject ceiling (random val carve)
-make_split(meta, test_subjects=["A03"])       # cross-subject — leave-one-subject-out (the OOD gap)
-make_split(meta, test_sessions=["1test"])     # cross-session drift
+make_split(meta)                                         # within-subject ceiling (random val carve)
+make_split(meta, SplitSpec(test_subjects=["A03"]))       # cross-subject — leave-one-subject-out (the OOD gap)
+make_split(meta, SplitSpec(test_sessions=["1test"]))     # cross-session drift
 ```
 
 Same `(fit_fn, score_fn)` contract across all three regimes; only the criteria change. No new harness per
