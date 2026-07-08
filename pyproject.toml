@@ -30,10 +30,12 @@ dependencies = [
 dev = ["pytest", "pytest-cov", "fvcore"]   # fvcore: params + FLOPs profiling (neuroscan/models/profile.py)
 export = ["onnx", "onnxruntime", "onnxscript"]   # ONNX export + parity check (Stage 2; core/export_onnx.py)
 data = ["osfclient", "openneuro-py"]   # dataset fetch (Stage-3 EEG->image: OSF / OpenNeuro); not a runtime dep
+devtools = ["grimp", "networkx"]   # one-shot import-graph diagnostic (bd 2r9; devtools/graph.py)
 all = ["pytest", "onnx", "onnxruntime"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]   # so `devtools` imports under pytest (top-level package, not under a src root)
 
 # Code-quality ratchet (bd mindscape-y63): one family fixed-to-zero per PR, then graduated into the CI
 # enforced --select. `select` here is the ADVISORY target (the full curated backlog); CI's enforced step
@@ -128,6 +130,26 @@ exclude_lines = [
     "^\\s*\\.\\.\\.$",
     "@(abc\\.)?abstractmethod",
 ]
+
+# Architecture as a static import-graph contract (bd o92; enforced in CI via `lint-imports`). Three tiers,
+# imports point DOWN only: core (clean kernel) < neuroscan (trainer) < neuroviz (viewer). The viewer reusing
+# neuroscan's model registry (neuroviz -> neuroscan.models.get_method) is an INTENDED downward edge, so —
+# unlike the sibling cardiac-seg — there is no "viewer forbids trainer" contract here. What we forbid is
+# UPWARD drift: the kernel importing its consumers, or the trainer importing the viewer.
+[tool.importlinter]
+root_packages = ["core", "neuroscan", "neuroviz"]
+
+[[tool.importlinter.contracts]]
+name = "core is an independent kernel (imports neither neuroscan nor neuroviz)"
+type = "forbidden"
+source_modules = ["core"]
+forbidden_modules = ["neuroscan", "neuroviz"]
+
+[[tool.importlinter.contracts]]
+name = "neuroscan (trainer) never imports neuroviz (viewer)"
+type = "forbidden"
+source_modules = ["neuroscan"]
+forbidden_modules = ["neuroviz"]
 
 # torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there so uv resolves the cu130 wheel
 # (RTX 5090) instead of the CPU build. `explicit` = only packages pinned in [tool.uv.sources] use it.

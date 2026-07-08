@@ -80,3 +80,16 @@ selected. Working rules:
 - **No blind `except`** — a specific exception, or let it crash.
 - **Minimal comments** — self-documenting names.
 - Keep **CLAUDE.md ↔ AGENTS.md in sync**.
+
+### Architecture layers — import-linter contract (bd o92)
+
+Three tiers, imports point **down only**: `core` (clean kernel) < `neuroscan` (trainer) < `neuroviz`
+(viewer). Enforced statically in CI (`uvx --from import-linter lint-imports`, contracts in
+`[tool.importlinter]`). What's forbidden is **upward drift**: `core` importing `neuroscan`/`neuroviz`, or
+`neuroscan` importing `neuroviz`. The viewer reusing the trainer's model registry
+(`neuroviz → neuroscan.models.get_method`) is an **intended downward edge** — allowed, not drift. Adding an
+upward import breaks CI; if a layer genuinely needs a symbol from above, the symbol is in the wrong layer —
+push it down (into `core`), don't invert the arrow.
+
+`devtools/graph.py` (bd 2r9, `[devtools]` extra) is the explorer view of the same graph — fan-in/out /
+bottleneck / betweenness / cycles via grimp+networkx. One-shot, not a gate: `python -m devtools.graph`.

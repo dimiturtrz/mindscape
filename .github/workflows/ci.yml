@@ -58,6 +58,11 @@ jobs:
       # entry-point/no-fan-in FPs) as GitHub annotations, never blocks.
       - name: Dead code — enforced (vulture conf>=80)
         run: uvx vulture@2.16 --min-confidence 80
+      # Architecture as an import-graph contract (bd o92): imports point DOWN only across
+      # core < neuroscan < neuroviz. Blocks on any upward edge (kernel/trainer importing a consumer).
+      # grimp parses ASTs statically — no project install needed. Contracts live in [tool.importlinter].
+      - name: Import layers — enforced (import-linter)
+        run: uvx --from import-linter lint-imports
       - name: Dead code — advisory (vulture conf>=60, warns)
         if: always()
         run: |
