@@ -407,28 +407,20 @@ confidence-based combiners (product, max-pick) can *partially* tell which modali
 **output-space fusion works to the extent the modalities are well-calibrated**, and it fails when confidence
 is noise (the weak-modality regime).
 
-But the gains are within noise and a long way under the oracle (0.752). The intuitive fix — **lift the weak
-modality** (fNIRS cross-subject DA → a *strong + strong* pair) — turns out to be closed: fNIRS graded workload
-is at a **physiological ceiling** (see "The graded-load ceiling" above), so there is nothing to lift. The only
-remaining route is an input-level gate that reads reliability from the raw signals, not the probabilities — and
-we tried it (below); it also cashes ~none. The current result: *re-centering makes fusion stop hurting and
-marginally help, complementarity is large but mostly uncaptured, and — measured — the combiners we've tried
-don't cash it on this strong+weak pair (boundary-aware / source-space routes untested).*
-
-**A second, independent EEG fix — and the input-gate we tried.** Re-centering the *covariance* is one route;
-the *band-power* features have their own. Workload band-power is subject-idiosyncratic in absolute scale, so
-per-subject unsupervised calibration (z-score each subject's own features — the feature-space analog of
-re-centering) recovers it from <!--r:calibration_ablation_shin2017_nback_eeg.eeg_raw-->0.407<!--/r--> raw to
-**<!--r:calibration_ablation_shin2017_nback_eeg.eeg_zcalib-->0.511<!--/r-->** (held-out calibration-half — no leakage)
-/ **<!--r:calibration_ablation_shin2017_nback_eeg.eeg_ztrans-->0.581<!--/r-->** (transductive) — a second,
-independent way to reach the same ~0.58 EEG strength. We also built the **input-level gate** (path 2 above —
-per-modality encoders + a per-trial mixing gate, nested GroupKFold) on those features:
-**<!--r:fusion_gate_cross_subject_kfold_shin2017_nback.gate-->0.573<!--/r-->**, *tying* z-scored-EEG-alone
-(<!--r:calibration_ablation_shin2017_nback_eeg.eeg_z_best-->0.581<!--/r-->) — it captured none of that oracle
-headroom (<!--r:calibration_ablation_shin2017_nback_eeg.oracle_z-->0.766<!--/r-->) either. So even reading the
-raw inputs, the gate doesn't cash it *on this strong+weak pair* — and, per the ceiling section, a stronger
-fNIRS isn't available to make it strong+strong on the graded contrast. Capturing the complementarity that *does*
-exist (boundary-aware routing, source-space fusion) is the open method — not something we've measured shut.
+But the gains are within fold noise and far under the oracle (0.752). The intuitive fix — **lift the weak
+modality** to a *strong+strong* pair — is closed: fNIRS graded workload is at a **physiological ceiling** (above),
+so there's nothing to lift. A *second, independent* EEG fix confirms the ~0.58 strength from the feature side —
+per-subject unsupervised z-scoring of the subject-idiosyncratic band-power recovers EEG from
+<!--r:calibration_ablation_shin2017_nback_eeg.eeg_raw-->0.407<!--/r--> to
+**<!--r:calibration_ablation_shin2017_nback_eeg.eeg_zcalib-->0.511<!--/r-->** (held-out calibration-half, no leakage)
+/ **<!--r:calibration_ablation_shin2017_nback_eeg.eeg_ztrans-->0.581<!--/r-->** (transductive). We also built the
+**input-level gate** (per-modality encoders + a per-trial mixing gate, nested GroupKFold) that reads reliability
+from the raw signals, not the probabilities:
+**<!--r:fusion_gate_cross_subject_kfold_shin2017_nback.gate-->0.573<!--/r-->** — merely *tying* z-scored-EEG-alone
+(<!--r:calibration_ablation_shin2017_nback_eeg.eeg_z_best-->0.581<!--/r-->) and capturing none of the oracle
+headroom (<!--r:calibration_ablation_shin2017_nback_eeg.oracle_z-->0.766<!--/r-->) either. So — measured — neither
+the combiners nor the gate cash the real complementarity on this strong+weak pair; boundary-aware routing and
+source-space fusion are the open, untested routes.
 
 Two caveats. (1) The oracle is an **upper bound** — a perfect selector is unattainable; a real gate
 captures only a fraction. It proves headroom *exists*, not that we can claim it. (2) The literature offers no
@@ -470,18 +462,15 @@ deployable question the top-k can't: when the retrieval is confident, is it righ
 confidence gap.
 
 **Cross-dataset zero-shot** ([`cross_dataset_eval.py`](neuroscan/tasks/visual/cross_dataset_eval.py)) — the
-hardest honest test: train on **THINGS-EEG1** (Grootswagers, ds003825 — 50 subjects, 63-ch BrainVision @10 Hz
-RSVP, [adapter](core/data/eeg/things_eeg1.py) real-data validated) and retrieve on **THINGS-EEG2** — different
-people, different rig, same 1,854 THINGS concepts. EEG2's 200 test concepts are held out of EEG1 training
-([bridge](neuroscan/evaluation/cross_dataset.py)) so it stays cross-dataset *and* concept-zero-shot *and*
-cross-subject at once; retrieval reuses EEG2's shared CLIP bank. **Result: a genuine negative — naive
-cross-dataset transfer fails.** The EEG1 encoder learns (within-EEG1 val 2.4%, ~5× chance) but retrieves on
-EEG2 at chance (0.5% top-1), and **montage-aligning the 62 shared electrodes does not rescue it** — the two
-rigs share all but Fz/Cz but in scrambled channel order, and fixing that (`common_channel_order`/`align_channels`)
-leaves the result at chance. So the failure isn't a channel-order artifact; the datasets are simply too far
-apart (different rig + reference, 10 Hz vs 5 Hz RSVP, EEG1's weaker single-shot SNR). *Honest caveat: reference
-and filtering aren't harmonized either, so this is "naive transfer fails," not "transfer is impossible" — a
-common-reference re-projection is the untested next step.*
+hardest test: train on **THINGS-EEG1** (Grootswagers ds003825 — 50 subj, 63-ch, [adapter](core/data/eeg/things_eeg1.py)
+real-data validated), retrieve on **THINGS-EEG2** — different people, different rig, same 1,854 concepts; EEG2's
+test concepts held out of EEG1 ([bridge](neuroscan/evaluation/cross_dataset.py)) so it's cross-dataset *and*
+concept-zero-shot *and* cross-subject at once. **Result: a genuine negative.** The EEG1 encoder learns
+(within-EEG1 val 2.4%, ~5× chance) but transfers at chance (0.5% top-1), and **montage-aligning the 62 shared
+electrodes doesn't rescue it** (`common_channel_order`/`align_channels` — the rigs share all but Fz/Cz, in
+scrambled order). So it's not a channel-order artifact; the datasets are just too far apart (reference, 10 vs
+5 Hz RSVP, EEG1's weaker single-shot SNR). *Caveat: reference/filtering aren't harmonized either, so this is
+"naive transfer fails," not "impossible" — a common-reference re-projection is the untested next step.*
 
 → **[neuroscan/tasks/visual/](neuroscan/tasks/visual/)**
 
