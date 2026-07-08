@@ -5,14 +5,15 @@ Shares the THINGS concept set with THINGS-EEG2, so the two enable a cross-DATASE
 in the BIDS `events.tsv` (`object` = the THINGS concept NAME), so identity is the name — which is exactly the
 bridge to EEG2 (its concepts are a subset of EEG1's 1,854). See research/deep_dives for the full layout.
 
-Raw: 64-ch BrainVision @ 1000 Hz, 10 Hz RSVP (SOA 100 ms), one session/run per subject, 50 subjects. We epoch
+Raw: 63-ch BrainVision @ 1000 Hz, 10 Hz RSVP (SOA 100 ms), one session/run per subject, 50 subjects. We epoch
 off the raw with OUR preprocessing (per-channel z-score, optional band-pass, resample) for EEG2 parity, so the
 representation is comparable across datasets.
 
     <data>/raw/things_eeg1/sub-01/eeg/sub-01_task-rsvp_{eeg.vhdr,events.tsv}
 
-Discrepancies vs EEG2 the cross-dataset test must reconcile: 64 vs 63 channels + montage/reference, 10 Hz
-single-shot (low per-image SNR) vs 5 Hz with test-set repeats, and image-file identity is concept-level only.
+Channel count is 63 (verified off a real subject), matching EEG2 — so the cross-dataset test has no channel-
+count mismatch to reconcile (montage/reference alignment is still a D-layer concern). Other discrepancies:
+10 Hz single-shot (low per-image SNR) vs EEG2's 5 Hz with test-set repeats; image-file identity is concept-level.
 """
 from __future__ import annotations
 
@@ -30,7 +31,7 @@ from core.data.signal import bandpass
 logger = logging.getLogger(__name__)
 
 _ROOT = "things_eeg1"
-_N_EEG = 64
+_N_EEG = 63            # all channels are EEG (verified) — no trailing stim channel; events come from events.tsv
 _FS_RAW = 1000.0
 # events.tsv columns we rely on (BIDS + the dataset's own extension): stimulus onset, THINGS concept name,
 # image filename, and the two trial flags used to subset (held-out validation stimuli / fixation-colour target).
@@ -114,7 +115,7 @@ def _subject_epochs(subject: int, cfg: ThingsEeg1EpochCfg):
 
 def get_epochs(subjects_: list[int] | None = None, config: ThingsEeg1EpochCfg | None = None
                ) -> tuple[np.ndarray, np.ndarray, np.ndarray, pl.DataFrame]:
-    """Epoch THINGS-EEG1 for the EEG->image task off the raw. Returns (eeg [n,64,t] float32, concept_name [n]
+    """Epoch THINGS-EEG1 for the EEG->image task off the raw. Returns (eeg [n,63,t] float32, concept_name [n]
     str, img_file [n] str, meta {subject}). concept_name is the THINGS name — the cross-dataset bridge to EEG2
     (map name -> the shared CLIP target the same way clip_targets does)."""
     cfg = config or ThingsEeg1EpochCfg()

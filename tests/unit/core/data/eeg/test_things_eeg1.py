@@ -15,7 +15,7 @@ def _events(onsets_s, concepts, files, istarget=None, isteststim=None):
     return pl.DataFrame(cols)
 
 
-def _ramp_eeg(ch=64, t=3000):
+def _ramp_eeg(ch=63, t=3000):
     # each channel = its own scaled sample-index ramp, so an extracted window is exactly identifiable
     return (np.arange(t, dtype=float)[None, :] * (1 + np.arange(ch)[:, None])) * 1e-5   # volts-scale
 
@@ -25,7 +25,7 @@ def test_epochs_window_extraction_and_labels():
     ev = _events([0.1, 0.5, 1.0], ["aardvark", "antelope", "axe"], ["a.jpg", "b.jpg", "c.jpg"])
     cfg = ThingsEeg1EpochCfg(tmin=0.0, tmax=0.2, resample=0)      # 0.2s @1000Hz = 200 samples, no resample
     epochs, concept, files = epochs_from_events(eeg, 1000.0, ev, cfg)
-    assert epochs.shape == (3, 64, 200)
+    assert epochs.shape == (3, 63, 200)
     assert list(concept) == ["aardvark", "antelope", "axe"] and list(files) == ["a.jpg", "b.jpg", "c.jpg"]
     # per-channel z-score: ~0 mean, ~unit std within each epoch-channel
     assert np.allclose(epochs.mean(axis=2), 0, atol=1e-4) and np.allclose(epochs.std(axis=2), 1, atol=1e-2)
@@ -68,4 +68,4 @@ def test_resample_changes_time_length():
     eeg = _ramp_eeg()
     ev = _events([0.5], ["a"], ["1"])
     epochs, _, _ = epochs_from_events(eeg, 1000.0, ev, ThingsEeg1EpochCfg(tmax=0.2, resample=250.0))
-    assert epochs.shape == (1, 64, 50)                          # 200 @1000Hz -> 50 @250Hz
+    assert epochs.shape == (1, 63, 50)                          # 200 @1000Hz -> 50 @250Hz
