@@ -11,7 +11,6 @@ from neuroscan.evaluation import harness
 
 
 def _fake_fold(name, n_per_class=20, n_ch=4, n_t=8, seed=0):
-    rng = np.random.default_rng(seed)
     # a meta frame whose rows just need 'subject'/'epoch'/'path' columns for gather (which we stub)
     df = pl.DataFrame({"subject": [name] * (4 * n_per_class)})
     return name, df, df

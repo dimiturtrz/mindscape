@@ -32,9 +32,9 @@ jobs:
         if: always()
         run: uv run coverage report || true
       # Enforced floor (bd mindscape-y63 coverage-ratchet): the logic cores under tasks/ are extracted +
-      # tested, so the gate now BLOCKS below 80% (logic %). Raise the floor as coverage climbs.
-      - name: Coverage floor — enforced (>=80, blocks)
-        run: uv run coverage report --fail-under=80
+      # tested, so the gate BLOCKS below 90% (logic %). Raise the floor as coverage climbs.
+      - name: Coverage floor — enforced (>=90, blocks)
+        run: uv run coverage report --fail-under=90
 
   # Static-analysis ratchet (bd mindscape-y63): the two axes that don't need the test env — ruff (style/bugs)
   # + vulture (dead code). ENFORCED steps block on the graduated ruff families + vulture conf>=80; ADVISORY

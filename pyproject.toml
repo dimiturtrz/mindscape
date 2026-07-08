@@ -70,7 +70,7 @@ ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer"
 # module to DODGE pure logic — extract the core and test it (e.g. `_eval.cv_score`, `combine`, `base`), then
 # omit the shell. Logic files stay IN; low coverage there is honest signal to close (bd mindscape-y63
 # coverage-ratchet), not noise to hide. The logic cores under `tasks/` are now extracted + tested, so the
-# gate is ENFORCED: CI blocks below 80% (logic %) via `coverage report --fail-under=80` (ratchet the floor
+# gate is ENFORCED: CI blocks below 90% (logic %) via `coverage report --fail-under=90` (ratchet the floor
 # up as coverage climbs); the advisory report step stays for the per-file missing-line view.
 [tool.coverage.run]
 source = ["core", "neuroscan", "baselines"]
@@ -78,15 +78,24 @@ omit = [
     # top-level CLI entrypoints (argparse + dispatch)
     "neuroscan/tasks/run.py", "neuroscan/tasks/reproduce_all.py",
     "neuroscan/tasks/motor_imagery/reproduce_atcnet.py",
-    # dependency glue: onnx quantize / CLIP download / mlflow tracking
+    "neuroscan/tasks/motor_imagery/align.py",   # MI transfer RUNNER (its logic is baselines/eeg/transfer.py, 100% tested)
+    # dependency glue: onnx quantize / CLIP download / mlflow tracking / ONNX export
     "neuroscan/tasks/motor_imagery/quantize.py", "neuroscan/tasks/visual/clip_targets.py",
     "neuroscan/tracking.py",
+    "core/export_onnx.py",   # ONNX export (onnx dep; trained-decoder glue)
+    # interface / registry maps (no logic)
+    "core/decoder.py",   # typing.Protocol decoder contract (structural interface, no body)
+    "core/data/registry.py",   # top-level dataset registry map (sibling core/data/*/registry.py already omitted)
     # GPU training entrypoints + torch models/trainers (device + data, not logic)
     "neuroscan/tasks/visual/train_nice.py", "neuroscan/models/decoders.py", "neuroscan/models/eegnet.py",
+    "neuroscan/models/profile.py",   # fvcore params+FLOPs (model on device)
+    "neuroscan/tasks/workload/feature_importance/optuna_search.py",   # Optuna study runner (entrypoint)
+    "neuroscan/tasks/workload/feature_importance/differentiable.py",  # torch/GPU differentiable feature-selection runner
     "baselines/fusion/gate.py", "baselines/fusion/spatiotemporal.py", "core/data/eeg/braindecode_pre.py",
     # data adapters: filesystem read / OSF+OpenNeuro download
     "core/data/*/registry.py", "core/data/eeg/things_eeg2.py", "core/data/fnirs/shin2017.py",
     "core/data/eeg/shin2017_nback_eeg.py",   # BBCI .mat disk read (its pure epoching lives in core.data.signal)
+    "core/features/fnirs/montage.py",   # fnirs_positions loads .mat (disk); pure _to_unit_disk tested in features/eeg/montage
     # workload/fusion runners: load -> fit -> record orchestration (their logic lives in combine/base/_eval,
     # and the per-subject z-score in core.features.zscore_per_subject)
     "neuroscan/tasks/workload/run_fnirs.py", "neuroscan/tasks/workload/run_fusion.py",
@@ -96,7 +105,10 @@ omit = [
     "neuroscan/tasks/workload/fnirs_glm_eval.py", "neuroscan/tasks/workload/fnirs_clean_ablation.py",
     "neuroscan/tasks/workload/coupling_probe.py", "neuroscan/tasks/workload/workload_confusion.py",
     "neuroscan/tasks/workload/repro_benchnirs.py",
+    "neuroscan/tasks/workload/feature_importance/recipes.py",   # fixed-recipe CV RUNNER (pure _cv logic tested; rest is store.load/disk record)
 ]
+
+# Coverage floor is ENFORCED at 90% (logic %) in CI (coverage report --fail-under=90). Ratchet up as it climbs.
 
 [tool.coverage.report]
 show_missing = true
