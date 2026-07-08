@@ -25,7 +25,7 @@ from core.config import configure_moabb_download
 
 def get_data(dataset_name: str = "BNCI2014_001", subjects: list[int] | None = None,
              fmin: float = 4.0, fmax: float = 38.0, trial_start_offset_s: float = -0.5,
-             factor_new: float = 1e-3, init_block_size: int = 1000, ems: bool = True):
+             factor_new: float = 1e-3, init_block_size: int = 1000, *, ems: bool = True):
     """Return (X [n,ch,t] float32, y [n] int, meta polars{subject,session,run}).
 
     `ems=True` applies continuous exponential-moving standardization here (braindecode default recipe);

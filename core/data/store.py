@@ -47,7 +47,7 @@ def _rows_for_subject(name: str, sub: int, npz: Path, label_names: dict[int, str
              "epoch": i, "file": npz.name} for i in range(len(y))]
 
 
-def build(name: str, cfg: EpochCfg, rebuild: bool = False) -> Path:
+def build(name: str, cfg: EpochCfg, *, rebuild: bool = False) -> Path:
     """Consolidate one dataset into processed/<name>/<epochkey>/ (per-subject npz + meta.csv).
 
     Process-if-missing: epochs each subject only if its npz is absent; re-emits meta.csv each call.

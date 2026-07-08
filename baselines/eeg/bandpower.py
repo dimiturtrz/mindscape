@@ -27,7 +27,7 @@ class EegBandpower(Baseline):
     """θ/α/β per-channel log-band-power -> StandardScaler -> shrinkage-LDA. The workload-native EEG decode,
     counterpart to FnirsLda on the hemodynamic side. `fs` = the epoch sample rate (Hz)."""
 
-    def __init__(self, fs: float = 100.0, relative: bool = False):
+    def __init__(self, fs: float = 100.0, *, relative: bool = False):
         self.fs = fs
         self.relative = relative
 

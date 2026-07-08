@@ -98,7 +98,7 @@ def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str 
 
 
 def run(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str = "",
-        params: dict | None = None, run_dir=None, save_models: bool = True, n_jobs: int = 1) -> dict:
+        params: dict | None = None, run_dir=None, *, save_models: bool = True, n_jobs: int = 1) -> dict:
     """aggregate + log to MLflow (guarded). `run_dir` (a runs/<name>/ dir) enables resume + artifacts.
     `save_models` persists each fold's trained model. `n_jobs` parallelizes folds (see aggregate)."""
     models: list = [] if save_models else None

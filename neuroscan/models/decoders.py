@@ -139,7 +139,7 @@ class BraindecodeClf:
             self.net.load_state_dict(best_state)
         return self
 
-    def _trial_outputs(self, X, softmax: bool):
+    def _trial_outputs(self, X, *, softmax: bool):
         """Per-trial outputs (probabilities if softmax else logits), crop-averaged when cropping."""
         Xs = self.std(X)
         self.net.eval()

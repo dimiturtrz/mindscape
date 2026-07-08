@@ -57,7 +57,7 @@ def _covariances(X, augment, order, lag, estimator="oas"):
 
 def _zero_shot_fold(s, Ctr, ytr, Cte, yte, groups, scale):
     """Zero-shot: delegate the alignment + classifier to the transfer method, score ALL target."""
-    probs = transfer.zero_shot_predict(Ctr, ytr, groups, Cte, scale)
+    probs = transfer.zero_shot_predict(Ctr, ytr, groups, Cte, scale=scale)
     return _row(s, yte, probs)
 
 

@@ -53,7 +53,7 @@ class WindowedFnirs(Baseline):
     # cross-subject cost, where finer windows overfit transfer and the pooled modes underperformed collapse.
     def __init__(self, win_s: float = 7.0, hop_s: float = 7.0, fs: float = 10.0,
                  families: tuple[str, ...] = _DEFAULT_FAMILIES, aggregate: str = "concat",
-                 add_position: bool = True):
+                 *, add_position: bool = True):
         if aggregate not in _AGGREGATES:
             raise ValueError(f"aggregate must be one of {_AGGREGATES}, got {aggregate!r}")
         self.win_s = win_s
