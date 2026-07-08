@@ -30,7 +30,8 @@ from pathlib import Path
 import numpy as np
 from sklearn.model_selection import GroupKFold
 
-from baselines.fusion.gate import GatedFusion
+from baselines.fusion.base import FusionData
+from baselines.fusion.gate import GateConfig, GatedFusion
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
@@ -103,8 +104,8 @@ def main():
         m_va = np.isin(groups, va_subs)
         m_te = np.isin(groups, te_subs)
 
-        clf = GatedFusion(Fe.shape[1], Ff.shape[1], n_classes)
-        clf.fit(Fe[m_fit], Ff[m_fit], y[m_fit], Fe[m_va], Ff[m_va], y[m_va])
+        clf = GatedFusion(GateConfig(eeg_dim=Fe.shape[1], fnirs_dim=Ff.shape[1], n_classes=n_classes))
+        clf.fit(FusionData(Fe[m_fit], Ff[m_fit], y[m_fit]), FusionData(Fe[m_va], Ff[m_va], y[m_va]))
         p, a = clf.predict(Fe[m_te], Ff[m_te])
         P.append(p)
         A.append(a)

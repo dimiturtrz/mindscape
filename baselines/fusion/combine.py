@@ -11,6 +11,7 @@ from sklearn.model_selection import GroupKFold
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from baselines.fusion.base import FusionData, ModalityModels, PooledProbs
 from core.features import amplitude_features
 from neuroscan.evaluation.calibrate import TemperatureScaler
 
@@ -26,21 +27,24 @@ def feature_fusion(Fe_tr, Xf_tr, y_tr, Fe_te, Xf_te) -> np.ndarray:
     return clf.predict_proba(fte)
 
 
-def smart_aggregators(eeg_probs, fn_fit, fn_score, Xe_tr, Xf_tr, y_tr, g_tr, pe, pf):
+def smart_aggregators(models: ModalityModels, train: FusionData,
+                      eeg_test_probs: np.ndarray, fnirs_test_probs: np.ndarray):
     """The learned/calibrated output-space combiners, fit WITHOUT touching test data: an inner GroupKFold(3)
     over the train subjects yields out-of-fold base probs, on which we fit (a) a stacking meta-LDA over the
-    concatenated [eeg, fnirs] probs and (b) a per-modality temperature. `eeg_probs(Xtr, ytr, gtr, Xte, gte)`
-    is the EEG decoder as a probability function (so re-centering — which needs the subject groups — flows
-    into the OOF too). Returns (stacking probs, calibrated eeg probs, calibrated fnirs probs); falls back to
-    the raw probs if a train subject group is too small to inner-split."""
-    n, C = pe.shape
-    oof_e, oof_f = np.zeros((n, C)), np.zeros((n, C))
+    concatenated [eeg, fnirs] probs and (b) a per-modality temperature. The EEG decoder is passed as a
+    probability function (`models.eeg_probs`) so re-centering — which needs the subject groups — flows into
+    the OOF too. Returns (stacking probs, calibrated eeg probs, calibrated fnirs probs); falls back to the
+    raw probs if a train subject group is too small to inner-split."""
+    n, n_classes = eeg_test_probs.shape
+    oof_eeg, oof_fnirs = np.zeros((n, n_classes)), np.zeros((n, n_classes))
     try:
-        for itr, iva in GroupKFold(n_splits=3).split(np.arange(n), groups=g_tr):
-            oof_e[iva] = eeg_probs(Xe_tr[itr], y_tr[itr], g_tr[itr], Xe_tr[iva], g_tr[iva])
-            oof_f[iva] = fn_score(fn_fit(Xf_tr[itr], y_tr[itr]), Xf_tr[iva])
+        for train_idx, val_idx in GroupKFold(n_splits=3).split(np.arange(n), groups=train.groups):
+            oof_eeg[val_idx] = models.eeg_probs(train.eeg[train_idx], train.y[train_idx],
+                                                train.groups[train_idx], train.eeg[val_idx], train.groups[val_idx])
+            oof_fnirs[val_idx] = models.fnirs_score(models.fnirs_fit(train.fnirs[train_idx], train.y[train_idx]),
+                                                    train.fnirs[val_idx])
     except ValueError:                                       # too few groups for an inner split
-        return (pe + pf) / 2.0, pe, pf
+        return (eeg_test_probs + fnirs_test_probs) / 2.0, eeg_test_probs, fnirs_test_probs
 
     def _logit(p):
         return np.log(p + 1e-12)
@@ -51,11 +55,12 @@ def smart_aggregators(eeg_probs, fn_fit, fn_score, Xe_tr, Xf_tr, y_tr, g_tr, pe,
         return e / e.sum(1, keepdims=True)
 
     meta = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto").fit(
-        np.concatenate([oof_e, oof_f], axis=1), y_tr)
-    stk = meta.predict_proba(np.concatenate([pe, pf], axis=1))
-    Te = TemperatureScaler().fit(_logit(oof_e), y_tr).T
-    Tf = TemperatureScaler().fit(_logit(oof_f), y_tr).T
-    return stk, _softmax(_logit(pe) / Te), _softmax(_logit(pf) / Tf)
+        np.concatenate([oof_eeg, oof_fnirs], axis=1), train.y)
+    stacking = meta.predict_proba(np.concatenate([eeg_test_probs, fnirs_test_probs], axis=1))
+    temp_eeg = TemperatureScaler().fit(_logit(oof_eeg), train.y).T
+    temp_fnirs = TemperatureScaler().fit(_logit(oof_fnirs), train.y).T
+    return (stacking, _softmax(_logit(eeg_test_probs) / temp_eeg),
+            _softmax(_logit(fnirs_test_probs) / temp_fnirs))
 
 
 def complementarity(mean: dict, ce: np.ndarray, cf: np.ndarray) -> dict:
@@ -76,22 +81,28 @@ def complementarity(mean: dict, ce: np.ndarray, cf: np.ndarray) -> dict:
 SWEEP_KEYS = ("mean", "product", "conf_weight", "maxconf_pick", "stacking", "cal_mean", "cal_conf_weight")
 
 
-def aggregation_sweep(Pe, Pf, Stk, Pce, Pcf, y, ce, cf) -> dict:
+def aggregation_sweep(pooled: PooledProbs) -> dict:
     """Can any OUTPUT-space combiner cash the oracle headroom? Try every cheap→learned aggregator on the
     pooled probs. They all fail here because confidence does not track correctness (see the conf_gap) — the
     reliability signal a selector needs is not in the probabilities at all."""
+    eeg, fnirs, y = pooled.eeg, pooled.fnirs, pooled.y
+    cal_eeg, cal_fnirs = pooled.cal_eeg, pooled.cal_fnirs
+    eeg_correct, fnirs_correct = pooled.eeg_correct, pooled.fnirs_correct
+
     def acc(P):
         return float((P.argmax(1) == y).mean())
-    we, wf = Pe.max(1, keepdims=True), Pf.max(1, keepdims=True)
+
+    conf_eeg, conf_fnirs = eeg.max(1, keepdims=True), fnirs.max(1, keepdims=True)
     return {
-        "mean": acc((Pe + Pf) / 2), "product": acc(Pe * Pf),
-        "conf_weight": acc(we * Pe + wf * Pf),
-        "maxconf_pick": float((np.where(we >= wf, Pe.argmax(1, keepdims=True),
-                                        Pf.argmax(1, keepdims=True)).ravel() == y).mean()),
-        "stacking": acc(Stk),
-        "cal_mean": acc((Pce + Pcf) / 2),
-        "cal_conf_weight": acc(Pce.max(1, keepdims=True) * Pce + Pcf.max(1, keepdims=True) * Pcf),
+        "mean": acc((eeg + fnirs) / 2), "product": acc(eeg * fnirs),
+        "conf_weight": acc(conf_eeg * eeg + conf_fnirs * fnirs),
+        "maxconf_pick": float((np.where(conf_eeg >= conf_fnirs, eeg.argmax(1, keepdims=True),
+                                        fnirs.argmax(1, keepdims=True)).ravel() == y).mean()),
+        "stacking": acc(pooled.stacking),
+        "cal_mean": acc((cal_eeg + cal_fnirs) / 2),
+        "cal_conf_weight": acc(cal_eeg.max(1, keepdims=True) * cal_eeg
+                               + cal_fnirs.max(1, keepdims=True) * cal_fnirs),
         # does confidence predict correctness? gap = mean max-prob(correct) - max-prob(wrong), per modality
-        "eeg_conf_gap": float(Pe.max(1)[ce].mean() - Pe.max(1)[~ce].mean()),
-        "fnirs_conf_gap": float(Pf.max(1)[cf].mean() - Pf.max(1)[~cf].mean()),
+        "eeg_conf_gap": float(eeg.max(1)[eeg_correct].mean() - eeg.max(1)[~eeg_correct].mean()),
+        "fnirs_conf_gap": float(fnirs.max(1)[fnirs_correct].mean() - fnirs.max(1)[~fnirs_correct].mean()),
     }

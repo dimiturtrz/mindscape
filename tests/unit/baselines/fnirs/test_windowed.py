@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from baselines.fnirs.features import FnirsLda
-from baselines.fnirs.windowed import WindowedFnirs, _AGGREGATES
+from baselines.fnirs.windowed import _AGGREGATES, WindowedFnirs
 
 
 def _ordered_shape_data(seed=0):

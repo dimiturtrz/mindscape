@@ -4,7 +4,6 @@ Equivalence-class coverage of the genuinely-new math: CBSI common-mode cancellat
 data-derived hemodynamic coupling (does `estimate_coupling` recover a PLANTED lag?), and the tensor contract.
 """
 import numpy as np
-import pytest
 
 from core.features import fusion as bc
 

@@ -3,8 +3,8 @@ Pure/synthetic — no dataset download needed."""
 import numpy as np
 
 from baselines.fnirs import features as fnirs_features
-from core.features import amplitude_features
 from core.data.fnirs.base import FnirsCfg, bandpass, epoch_blocks
+from core.features import amplitude_features
 
 
 def test_cfg_key_is_recipe_unique():

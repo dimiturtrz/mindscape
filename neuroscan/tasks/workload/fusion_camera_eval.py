@@ -14,7 +14,7 @@ import logging
 import numpy as np
 from sklearn.model_selection import StratifiedGroupKFold
 
-from baselines.fusion.spatiotemporal import BrainCameraNet
+from baselines.fusion.spatiotemporal import BrainCameraConfig, BrainCameraNet
 from core.data import store
 from core.data.eeg import shin2017_nback_eeg as eegmod
 from core.data.eeg.base import EpochCfg
@@ -58,7 +58,7 @@ def main():
     accs, kaps = [], []
     for seed in _SEEDS:
         for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(X, y, g):
-            clf = BrainCameraNet(n_classes=int(y.max()) + 1, seed=seed).fit(X[tr], y[tr])
+            clf = BrainCameraNet(BrainCameraConfig(n_classes=int(y.max()) + 1, seed=seed)).fit(X[tr], y[tr])
             pred = clf.predict_proba(X[te]).argmax(1)
             accs.append(metrics.accuracy(y[te], pred))
             kaps.append(metrics.kappa(y[te], pred))
