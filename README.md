@@ -442,6 +442,49 @@ Full audit + citations: [`research/`](research/deep_dives/2026-07-01_eeg_fnirs_f
 ablation in [`tasks/workload/calibration_ablation.py`](neuroscan/tasks/workload/calibration_ablation.py), the
 gate in [`tasks/workload/fusion_gate.py`](neuroscan/tasks/workload/fusion_gate.py).
 
+## Task · Perception (EEG→image on THINGS) — the over-reporting audit
+
+Third rung of the ladder: decode the *seen image* from EEG. A NICE-style encoder maps each EEG epoch to the
+viewed image's CLIP embedding (InfoNCE), then retrieves zero-shot among the 200 held-out THINGS test concepts
+(chance **0.5%**). The contribution here is **not** a leaderboard top-k — it's an honest audit of *how much the
+field's usual numbers inflate*, plus the hardest generalization test the two THINGS-EEG datasets allow.
+
+**The inflation grid** ([`retrieval_audit.py`](neuroscan/tasks/visual/retrieval_audit.py)) — the same encoder,
+scored four ways. The commonly-quoted cell (within-subject, concept-averaged) vs the defensible one
+(cross-subject, single-trial):
+
+| top-1 (top-5) | single-trial | concept-averaged |
+|---|---|---|
+| **within-subject** | 4.0% (14.5%) | **14.8% (39.5%)** ← usually quoted |
+| **cross-subject** | **1.9% (7.6%)** ← robust | 4.8% (14.3%) |
+
+*(measured, 2-subject mean; chance 0.5%.)* Two independent leaks stack: seeing the test *person*
+(within→cross, 4.0→1.9%) and averaging test *repeats* (single→avg, 1.9→4.8%) — together an **8.0× gap**
+(14.8% vs 1.9%, +12.9 pts) between the commonly-quoted headline and the defensible number. Same
+subject-generalization story as motor imagery, now in perception.
+
+**Zero-shot is verified, not assumed** — the train/test concept sets are checked to be disjoint on concept
+*names* (1,654 train / 200 test / **0 overlap**; comparing split-local indices would have falsely flagged all
+200). **Confidence calibration** ([`evaluation/retrieval.py`](neuroscan/evaluation/retrieval.py)) asks the
+deployable question the top-k can't: when the retrieval is confident, is it right? — ECE + a hit-vs-miss
+confidence gap.
+
+**Cross-dataset zero-shot** ([`cross_dataset_eval.py`](neuroscan/tasks/visual/cross_dataset_eval.py)) — the
+hardest honest test: train on **THINGS-EEG1** (Grootswagers, ds003825 — 50 subjects, 63-ch BrainVision @10 Hz
+RSVP, [adapter](core/data/eeg/things_eeg1.py) real-data validated) and retrieve on **THINGS-EEG2** — different
+people, different rig, same 1,854 THINGS concepts. EEG2's 200 test concepts are held out of EEG1 training
+([bridge](neuroscan/evaluation/cross_dataset.py)) so it stays cross-dataset *and* concept-zero-shot *and*
+cross-subject at once; retrieval reuses EEG2's shared CLIP bank. **Result: a genuine negative — naive
+cross-dataset transfer fails.** The EEG1 encoder learns (within-EEG1 val 2.4%, ~5× chance) but retrieves on
+EEG2 at chance (0.5% top-1), and **montage-aligning the 62 shared electrodes does not rescue it** — the two
+rigs share all but Fz/Cz but in scrambled channel order, and fixing that (`common_channel_order`/`align_channels`)
+leaves the result at chance. So the failure isn't a channel-order artifact; the datasets are simply too far
+apart (different rig + reference, 10 Hz vs 5 Hz RSVP, EEG1's weaker single-shot SNR). *Honest caveat: reference
+and filtering aren't harmonized either, so this is "naive transfer fails," not "transfer is impossible" — a
+common-reference re-projection is the untested next step.*
+
+→ **[neuroscan/tasks/visual/](neuroscan/tasks/visual/)**
+
 ## Limits (measured, not assumed)
 Competent on a public benchmark, **not** a finished system:
 - **Reproduction is partial.** Best within-subject ~0.62 vs published 0.81; clean subjects reproduce

@@ -1,0 +1,34 @@
+"""Batch-construction cores for contrastive retrieval — pure index/CLIP math."""
+import numpy as np
+
+from neuroscan.tasks.visual.sampling import clip_neighbor_groups, stratified_batches
+
+
+def test_stratified_batches_span_distinct_concepts():
+    # 4 concepts x 5 trials each; batch of 4 should hit ~4 distinct concepts (round-robin), not repeat one
+    concept_ids = np.repeat(np.arange(4), 5)
+    batches = stratified_batches(concept_ids, batch_size=4, rng=np.random.default_rng(0))
+    assert sum(len(b) for b in batches) == 20                    # every trial used exactly once
+    assert np.array_equal(np.sort(np.concatenate(batches)), np.arange(20))
+    # the first full batches span 4 distinct concepts (balanced), vs uniform which could draw all-same
+    first = batches[0]
+    assert len({int(concept_ids[i]) for i in first}) == 4
+
+
+def test_stratified_uneven_concepts_still_covers_all():
+    concept_ids = np.array([0, 0, 0, 1, 2])                      # imbalanced
+    batches = stratified_batches(concept_ids, batch_size=2, rng=np.random.default_rng(1))
+    assert np.array_equal(np.sort(np.concatenate(batches)), np.arange(5))
+
+
+def test_clip_neighbor_groups_nearest_excluding_self():
+    # concept 0 closest to 2 then 1; concept 1 closest to 0; diagonal (self) must be excluded
+    cos = np.array([[1.0, 0.3, 0.9],
+                    [0.3, 1.0, 0.1],
+                    [0.9, 0.1, 1.0]])
+    groups = clip_neighbor_groups(cos, k=1)
+    assert groups[0] == [2]                                      # 0.9 > 0.3, self excluded
+    assert groups[2] == [0]
+    assert 1 not in groups[1][:0]                                # self never appears
+    g2 = clip_neighbor_groups(cos, k=2)
+    assert g2[0] == [2, 1]                                       # ranked by cosine, self dropped
