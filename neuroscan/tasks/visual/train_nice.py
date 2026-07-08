@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 
 import numpy as np
 import torch
@@ -30,6 +31,8 @@ from torch.utils.data import DataLoader, Dataset
 from core.data.eeg import things_eeg2 as things
 from neuroscan.models.nice import NiceConfig, NiceEncoder, clip_infonce, retrieval_topk
 from neuroscan.tasks.visual import clip_targets
+
+logger = logging.getLogger(__name__)
 
 _EVAL_BATCH = 512   # batch >=2048 trips a cuDNN illegal-access on this conv shape (Blackwell / cu130)
 
@@ -116,19 +119,19 @@ def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dic
     np.random.seed(cfg.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     regime = "within" if train_subjects == [test_subject] else "cross"
-    print(f"regime={regime}  train={train_subjects}  test={test_subject}  device={device}")
+    logger.info(f"regime={regime}  train={train_subjects}  test={test_subject}  device={device}")
 
     train_eeg, train_concept, train_targets = _load_split(train_subjects, "training", cfg.resample)
     test_eeg, test_concept, _ = _load_split([test_subject], "test", cfg.resample)
     test_bank = clip_targets.concept_prototypes("test")
-    print(f"train {train_eeg.shape} -> CLIP {train_targets.shape} | "
+    logger.info(f"train {train_eeg.shape} -> CLIP {train_targets.shape} | "
           f"test {test_eeg.shape} ({int(test_concept.max())+1} concepts)")
 
     fit_mask, val_mask, val_labels, val_bank = _val_split(
         train_concept, train_targets, cfg.seed, cfg.val_fraction)
     fit_indices = np.where(fit_mask)[0]            # view, not a copy — fit is the bulk of the epoch pile
     val_eeg = train_eeg[val_mask]                  # small (one split fraction), copy is fine
-    print(f"early-stop val: {len(val_bank)} held-out train concepts, {int(val_mask.sum())} epochs")
+    logger.info(f"early-stop val: {len(val_bank)} held-out train concepts, {int(val_mask.sum())} epochs")
 
     encoder = NiceEncoder(NiceConfig(n_channels=train_eeg.shape[1], n_times=train_eeg.shape[2],
                                      embed_dim=train_targets.shape[1])).to(device)
@@ -159,11 +162,11 @@ def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dic
             since_improved += 1
         if epoch % 5 == 0 or epoch == cfg.epochs - 1:
             test = evaluate(encoder, test_eeg, test_concept, test_bank, device)
-            print(f"ep {epoch:3d}  loss {total_loss/len(loader):.3f}  val-top1 {val_top1*100:.2f}%  "
+            logger.info(f"ep {epoch:3d}  loss {total_loss/len(loader):.3f}  val-top1 {val_top1*100:.2f}%  "
                   f"test single {test['single_trial'][1]*100:.2f}%/{test['single_trial'][5]*100:.2f}%  "
                   f"avg {test['concept_avg'][1]*100:.2f}%/{test['concept_avg'][5]*100:.2f}%")
         if since_improved >= cfg.patience:
-            print(f"early stop at ep {epoch} (best val = ep {best_epoch})")
+            logger.info(f"early stop at ep {epoch} (best val = ep {best_epoch})")
             break
 
     encoder.load_state_dict(best_state)                            # report TEST at the best-VAL checkpoint
@@ -174,6 +177,9 @@ def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dic
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--train", type=int, nargs="+", default=[1], help="training subject id(s)")
     ap.add_argument("--test", type=int, default=1, help="held-out test subject id")
@@ -189,7 +195,7 @@ def main():
     cfg = TrainConfig(epochs=args.epochs, batch=args.batch, lr=args.lr,
                       resample=args.resample, seed=args.seed, patience=args.patience)
     result = train(args.train, args.test, cfg)
-    print(json.dumps(result, indent=2))
+    logger.info(json.dumps(result, indent=2))
     if args.out:
         with open(args.out, "w") as f:
             json.dump(result, f, indent=2)

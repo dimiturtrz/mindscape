@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -21,8 +22,13 @@ from neuroscan import tracking
 from neuroscan.evaluation import metrics
 from neuroscan.models import decoders
 
+logger = logging.getLogger(__name__)
+
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--method", default="atcnet", choices=sorted(decoders.MODELS))
     ap.add_argument("--subjects", type=int, nargs="*", default=None)
@@ -38,9 +44,9 @@ def main():
     # zscore: bandpassed uV from preprocessing + trainer z-score (== Altaheri StandardScaler).
     # none:   continuous EMS applied in preprocessing, trainer passes through.
     use_ems = args.standardize == "none"
-    print(f"preprocessing ({'continuous EMS' if use_ems else 'bandpass uV + z-score'}) {args.method} ...")
+    logger.info(f"preprocessing ({'continuous EMS' if use_ems else 'bandpass uV + z-score'}) {args.method} ...")
     X, y, meta = braindecode_pre.get_data("BNCI2014_001", subjects=args.subjects, ems=use_ems)
-    print(f"X {X.shape} · sessions {sorted(meta['session'].unique().to_list())}")
+    logger.info(f"X {X.shape} · sessions {sorted(meta['session'].unique().to_list())}")
 
     fit, _ = decoders.make(args.method)
     rows, models = [], []
@@ -62,12 +68,12 @@ def main():
              "acc_std": float(np.std(accs)), "seeds": args.seeds, "n": int(te.sum())}
         rows.append(r)
         spread = f"  (per-seed {min(accs):.3f}-{max(accs):.3f})" if args.seeds > 1 else ""
-        print(f"  s{r['subject']}  acc {r['acc']:.3f}  kappa {r['kappa']:.3f}{spread}")
+        logger.info(f"  s{r['subject']}  acc {r['acc']:.3f}  kappa {r['kappa']:.3f}{spread}")
 
     acc = float(np.mean([r["acc"] for r in rows]))
     kap = float(np.mean([r["kappa"] for r in rows]))
-    print(f"\n=== {args.method} reproduction (braindecode EMS, {args.epochs}ep) ===")
-    print(f"  MEAN acc {acc:.3f}  kappa {kap:.3f}   (published ~0.81 / 0.76)")
+    logger.info(f"\n=== {args.method} reproduction (braindecode EMS, {args.epochs}ep) ===")
+    logger.info(f"  MEAN acc {acc:.3f}  kappa {kap:.3f}   (published ~0.81 / 0.76)")
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -84,7 +90,7 @@ def main():
         tracking.artifact(out / f"{args.method}.json")
         for subj, clf in models:                          # persist the trained net per subject
             tracking.save_model(clf, f"model_{args.method}_s{subj}", run_dir=out)
-    print(f"-> {out}/{args.method}.json")
+    logger.info(f"-> {out}/{args.method}.json")
 
 
 if __name__ == "__main__":

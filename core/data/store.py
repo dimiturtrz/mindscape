@@ -13,6 +13,7 @@ Splits are queries over it (see data/splits.py); `gather` pulls the actual X/y f
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +22,8 @@ import polars as pl
 from core.config import processed_dir
 from core.data.eeg.base import EpochCfg
 from core.data.registry import get_adapter
+
+logger = logging.getLogger(__name__)
 
 META_FIELDS = ["dataset", "subject", "session", "run", "label_id", "label", "epoch", "file"]
 _SCHEMA = {
@@ -123,12 +126,15 @@ def gather(df: pl.DataFrame) -> tuple[np.ndarray, np.ndarray]:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     import argparse
 
     ap = argparse.ArgumentParser(description="consolidate a dataset into processed/<ds>/<epochkey>/")
     ap.add_argument("--name", default="bnci2014_001")
     args = ap.parse_args()
     df = load(args.name, EpochCfg())
-    print(f"\n=== cloud: {len(df)} epochs over {df['subject'].n_unique()} subjects ===")
-    print(df.group_by("dataset", "label").agg(pl.len().alias("n")).sort("dataset", "label"))
-    print(df.group_by("subject").agg(pl.len().alias("n")).sort("subject"))
+    logger.info(f"\n=== cloud: {len(df)} epochs over {df['subject'].n_unique()} subjects ===")
+    logger.info(df.group_by("dataset", "label").agg(pl.len().alias("n")).sort("dataset", "label"))
+    logger.info(df.group_by("subject").agg(pl.len().alias("n")).sort("subject"))

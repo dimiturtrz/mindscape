@@ -13,10 +13,14 @@ Two regimes, because they answer different questions:
 """
 from __future__ import annotations
 
+import logging
+
 from baselines.fnirs.windowed import WindowedFnirs
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
 from neuroscan.tasks.workload._eval import cv_score
+
+logger = logging.getLogger(__name__)
 
 _FS = 10.0
 _DATASET = "shin2017_nback"
@@ -37,13 +41,16 @@ for _agg in ("mean", "max", "lse"):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     meta = store.load(_DATASET, FnirsCfg())
     X, y = store.gather(meta)
     groups = meta["subject"].to_numpy()
     chance = 1.0 / (int(y.max()) + 1)
-    print(f"fNIRS windowed-aggregation sweep vs collapse · Shin n-back · {len(y)} blocks · "
+    logger.info(f"fNIRS windowed-aggregation sweep vs collapse · Shin n-back · {len(y)} blocks · "
           f"{meta['subject'].n_unique()} subj · 3x5-fold · chance {chance:.3f}\n")
-    print(f"  {'arm':<26}{'within':>9}{'±sd':>7}   {'cross':>9}{'±sd':>7}{'  Δcross':>9}")
+    logger.info(f"  {'arm':<26}{'within':>9}{'±sd':>7}   {'cross':>9}{'±sd':>7}{'  Δcross':>9}")
     base_cross = None
     for name, build in _ARMS:
         wa, ws, _ = cv_score(build, X, y, groups, grouped=False)
@@ -51,8 +58,8 @@ def main():
         if base_cross is None:
             base_cross = ca
         dc = "" if build is None else f"{ca - base_cross:+.3f}"
-        print(f"  {name:<26}{wa:>9.3f}{ws:>7.3f}   {ca:>9.3f}{cs:>7.3f}{dc:>9}")
-    print("\n  Δcross = cross-subject acc minus the collapse baseline. >0 for ANY aggregation = keeping time\n"
+        logger.info(f"  {name:<26}{wa:>9.3f}{ws:>7.3f}   {ca:>9.3f}{cs:>7.3f}{dc:>9}")
+    logger.info("\n  Δcross = cross-subject acc minus the collapse baseline. >0 for ANY aggregation = keeping time\n"
           "  survives transfer; all ≤0 = the collapse is genuinely adequate for this signal (then: DA, not features).")
 
 

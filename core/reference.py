@@ -3,9 +3,13 @@ read against the literature, never in a vacuum. Cite, don't chase (honesty rule)
 """
 from __future__ import annotations
 
+import logging
+
 from omegaconf import OmegaConf
 
 from core.config import REPO
+
+logger = logging.getLogger(__name__)
 
 _REF = REPO / "reference.yaml"
 
@@ -30,6 +34,9 @@ def compare(our_acc: float, dataset: str, regime: str, method: str | None = None
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     import argparse
     ap = argparse.ArgumentParser(description="print reference ceilings")
     ap.add_argument("--dataset", default="bnci2014_001")
@@ -37,4 +44,4 @@ if __name__ == "__main__":
     a = ap.parse_args()
     for m, v in ceilings(a.dataset, a.regime).items():
         k = f" kappa {v['kappa']:.2f}" if "kappa" in v else ""
-        print(f"  {m:16} acc {v['acc']:.2f}{k}   [{v['source']}]")
+        logger.info(f"  {m:16} acc {v['acc']:.2f}{k}   [{v['source']}]")

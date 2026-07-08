@@ -16,11 +16,17 @@ Expected: MEAN ≈ 0.39 (we measured 0.392 on our copy — matches the paper's 0
 `fnirs_lda` under the matched regime: `run_fnirs --exp nback_fnirs_cross_kfold`.
 """
 import argparse
+import logging
 
 import numpy as np
 
+logger = logging.getLogger(__name__)
+
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--data", required=True, help="dir holding VP001-NIRS/cnt_nback.mat …")
     args = ap.parse_args()
@@ -35,8 +41,8 @@ def main():
     feats = extract_features(nirs, ["mean", "std", "slope"])                   # their features (ROI-averaged)
     lda, _, _ = machine_learn("lda", feats, labels, groups, output_folder="./out_benchnirs_lda",
                               random_state=42)                                 # 5-fold GroupKFold, plain LDA
-    print(f"BenchNIRS LDA per-fold: {np.round(lda, 4)}")
-    print(f"MEAN {np.mean(lda):.4f} (sd {np.std(lda):.4f}) | chance 0.333 | paper 0.389")
+    logger.info(f"BenchNIRS LDA per-fold: {np.round(lda, 4)}")
+    logger.info(f"MEAN {np.mean(lda):.4f} (sd {np.std(lda):.4f}) | chance 0.333 | paper 0.389")
 
 
 if __name__ == "__main__":

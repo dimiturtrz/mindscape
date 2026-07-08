@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -33,6 +34,8 @@ from core.data import store
 from core.data.fnirs.base import FnirsCfg
 from core.features import extract_bank, family_names
 from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
+
+logger = logging.getLogger(__name__)
 
 _DEV = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _CFG = Path(__file__).with_name("subset.yaml")            # study config lives beside the code (config-as-data)
@@ -121,6 +124,9 @@ def _family_weights(w, group_idx_np, families, grain):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     from omegaconf import OmegaConf
     from sklearn.model_selection import GroupShuffleSplit
 
@@ -150,7 +156,7 @@ def main():
     search_idx, seal_idx = next(GroupShuffleSplit(1, test_size=cfg.holdout_frac,
                                                   random_state=cfg.holdout_seed).split(Fb, y, groups))
     Fs, ys, gs = Fb[search_idx], y[search_idx], groups[search_idx]
-    print(f"fNIRS subset (torch/{_DEV.type}): {Fb.shape[0]} blocks · grain {grain} ({n_groups} weights) · "
+    logger.info(f"fNIRS subset (torch/{_DEV.type}): {Fb.shape[0]} blocks · grain {grain} ({n_groups} weights) · "
           f"search {len(np.unique(gs))} / sealed {len(np.unique(groups[seal_idx]))} subj · "
           f"lambdas {list(cfg.lambdas)} (chance {1/n_classes:.3f})")
 
@@ -163,7 +169,7 @@ def main():
         fw = _family_weights(w, gi_np, families, grain)
         sweep.append({"lam": float(lam), "acc": acc, "eff_n": _effective_n(w), "family_weights": fw})
         top = sorted(fw.items(), key=lambda kv: -kv[1])[:4]
-        print(f"  λ={float(lam):<5} acc {acc:.3f} · eff-#feat {sweep[-1]['eff_n']:.2f} · "
+        logger.info(f"  λ={float(lam):<5} acc {acc:.3f} · eff-#feat {sweep[-1]['eff_n']:.2f} · "
               f"top {[(f, round(v, 2)) for f, v in top]}")
 
     knee = _knee(sweep)
@@ -172,15 +178,15 @@ def main():
     m = _fit(Xtr, ys, group_idx, n_groups, n_classes, knee["lam"], hp)
     sealed = float((_predict(m, Xte) == y[seal_idx]).mean())
     kept = {f: round(v, 3) for f, v in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1]) if v > 0.05}
-    print(f"\nknee λ={knee['lam']}: eff-#feat {knee['eff_n']:.2f} · search-acc {knee['acc']:.3f} (optimistic) "
+    logger.info(f"\nknee λ={knee['lam']}: eff-#feat {knee['eff_n']:.2f} · search-acc {knee['acc']:.3f} (optimistic) "
           f"· SEALED-acc {sealed:.3f} (honest)")
-    print(f"knee subset (family weight>0.05): {kept}")
+    logger.info(f"knee subset (family weight>0.05): {kept}")
 
     out = REPO / cfg.out; out.mkdir(parents=True, exist_ok=True)
     (out / f"subset_{grain}.json").write_text(json.dumps(
         {"dataset": str(cfg.dataset), "grain": grain, "sweep": sweep,
          "knee": knee, "sealed_acc": sealed, "kept": kept}, indent=2))
-    print(f"-> {out}/subset_{grain}.json")
+    logger.info(f"-> {out}/subset_{grain}.json")
 
 
 if __name__ == "__main__":

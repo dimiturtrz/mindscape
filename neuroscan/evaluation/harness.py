@@ -13,11 +13,15 @@ Reports BOTH fold-mean (per-subject equal weight) and pooled (per-epoch) — the
 """
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 
 from core.data import splits, store
 from neuroscan import tracking
 from neuroscan.evaluation import diagnostics, metrics
+
+logger = logging.getLogger(__name__)
 
 
 def folds_for(meta, regime: str, test_sessions=()):
@@ -75,7 +79,7 @@ def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str 
         if models_out is not None:
             models_out.append((name, clf))
         per.append(row)
-        print(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  ece {row['ece']:.3f}  (n={row['n']})")
+        logger.info(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  ece {row['ece']:.3f}  (n={row['n']})")
         P.append(probs); Y.append(yte); G.append(np.full(len(yte), name))
 
     probs, y, _ = np.concatenate(P), np.concatenate(Y), np.concatenate(G)
@@ -85,7 +89,7 @@ def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str 
               "ece": metrics.ece_from_probs(probs, y),
               "confusion": metrics.confusion(y, pred, n_classes).tolist()}
     sp = diagnostics.spread(per, "acc")
-    print(f"  {'MEAN':>6}  acc {fold_mean['acc']:.3f}  kappa {fold_mean['kappa']:.3f}  "
+    logger.info(f"  {'MEAN':>6}  acc {fold_mean['acc']:.3f}  kappa {fold_mean['kappa']:.3f}  "
           f"ece {fold_mean['ece']:.3f}   (spread {sp['min']:.3f}-{sp['max']:.3f}, std {sp['std']:.3f})")
     return {"method": method, "regime": regime, "n_classes": n_classes, "n_folds": len(per),
             "per_fold": per, "fold_mean": fold_mean, "pooled": pooled, "acc_spread": sp}

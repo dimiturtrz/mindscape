@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -38,6 +39,8 @@ from core.data.eeg.base import EpochCfg
 from core.features import time_delay_embed
 from neuroscan import tracking
 from neuroscan.evaluation import metrics
+
+logger = logging.getLogger(__name__)
 
 _ZERO_SHOT = {"recenter", "recenter_scale"}
 _CALIBRATED = {"rpa", "mdwm"}
@@ -90,6 +93,9 @@ def _run_fold(s, tr, te, method, calib_frac, seed, augment, order, lag, mdwm_lam
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--exp", default="mi_align_recenter",
                     help="named transfer experiment in experiments.yaml (task: align)")
@@ -116,11 +122,11 @@ def main():
     cov = "acm" if augment else "ts"
     regime = "calibrated" if method in _CALIBRATED else "zero_shot"
     name = f"riemann_{method}_{cov}"                # …_ts / …_acm always (keeps riemann_recenter_ts markers)
-    print(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · recipe {cfg.key()} · "
+    logger.info(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · recipe {cfg.key()} · "
           f"{method} ({regime}, cov={cov})" + (f" · calib {calib_frac:.0%}" if regime == "calibrated" else ""))
 
     folds = list(splits.leave_one_subject_out(meta))
-    print(f"\n=== {name} · cross_subject · {dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
+    logger.info(f"\n=== {name} · cross_subject · {dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
     out_folds = Parallel(n_jobs=args.jobs)(
         delayed(_run_fold)(s, tr, te, method, calib_frac, seed, augment, order, lag, mdwm_lambda)
         for s, tr, te in folds)
@@ -131,13 +137,13 @@ def main():
         if probs is not None:
             P.append(probs)
         cal = f" calib={row['n_calib']}" if "n_calib" in row else ""
-        print(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  (n={row['n']}{cal})")
+        logger.info(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  (n={row['n']}{cal})")
 
     acc = float(np.mean([r["acc"] for r in rows]))
     kap = float(np.mean([r["kappa"] for r in rows]))
-    print(f"  {'MEAN':>6}  acc {acc:.3f}  kappa {kap:.3f}   [{regime}]")
-    print("  vs reference: " + reference.compare(acc, dataset, "cross_subject", "riemann"))
-    print("  (un-recentered riemann LOSO ~0.36; recenter ~0.50 — read the ladder against those)")
+    logger.info(f"  {'MEAN':>6}  acc {acc:.3f}  kappa {kap:.3f}   [{regime}]")
+    logger.info("  vs reference: " + reference.compare(acc, dataset, "cross_subject", "riemann"))
+    logger.info("  (un-recentered riemann LOSO ~0.36; recenter ~0.50 — read the ladder against those)")
 
     out = Path(args.out) if args.out else Path("runs") / f"{name}_{dataset}"
     out.mkdir(parents=True, exist_ok=True)
@@ -154,8 +160,8 @@ def main():
         tracking.artifact(out / "aggregate.json")
     from neuroscan.evaluation import results
     if not args.no_record and results.record(out):
-        print(f"   recorded -> results.json ({out.name})")
-    print(f"-> {out}/aggregate.json")
+        logger.info(f"   recorded -> results.json ({out.name})")
+    logger.info(f"-> {out}/aggregate.json")
 
 
 if __name__ == "__main__":

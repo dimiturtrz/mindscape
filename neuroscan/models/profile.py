@@ -8,6 +8,10 @@ measured rather than asserted.
 """
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 N_CHANS, N_TIMES, N_CLASSES = 22, 1125, 4
 
 
@@ -27,7 +31,7 @@ def profile(cls: str, n_chans=N_CHANS, n_times=N_TIMES, n_classes=N_CLASSES) -> 
         flops = int(FlopCountAnalysis(net, dummy).unsupported_ops_warnings(False)
                     .uncalled_modules_warnings(False).total())
     except Exception as e:
-        print(f"  ({cls}: FLOPs unavailable: {e})")
+        logger.info(f"  ({cls}: FLOPs unavailable: {e})")
     return {"model": cls, "params": int(params), "flops": flops}
 
 
@@ -41,12 +45,15 @@ def _fmt(n):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     from neuroscan.models.decoders import MODELS
     rows = [profile(cfg["cls"]) for cfg in MODELS.values()]
-    print(f"\n=== params + FLOPs (input {N_CHANS}ch x {N_TIMES} samples, batch 1) ===")
-    print(f"{'model':16} {'params':>10} {'FLOPs':>10}")
+    logger.info(f"\n=== params + FLOPs (input {N_CHANS}ch x {N_TIMES} samples, batch 1) ===")
+    logger.info(f"{'model':16} {'params':>10} {'FLOPs':>10}")
     for r in rows:
-        print(f"{r['model']:16} {_fmt(r['params']):>10} {_fmt(r['flops']):>10}")
+        logger.info(f"{r['model']:16} {_fmt(r['params']):>10} {_fmt(r['flops']):>10}")
     return rows
 
 

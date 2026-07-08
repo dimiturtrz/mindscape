@@ -24,6 +24,7 @@ NOT yet registered.
 from __future__ import annotations
 
 import json
+import logging
 import urllib.request
 import zipfile
 
@@ -31,6 +32,8 @@ import numpy as np
 import polars as pl
 
 from core.config import raw_dir
+
+logger = logging.getLogger(__name__)
 
 _ROOT = "things_eeg2"
 _N_EEG = 63                # 63 EEG + 1 trailing 'stim' trigger channel (raw_eeg_data is [64, T] @ 1000 Hz)
@@ -81,16 +84,16 @@ def download(*, raw: bool = True) -> None:
     for name, url in sorted(_provider_files(_RAW_NODE, _RAW_PROVIDER)):
         sub = name.replace(".zip", "")
         if (rawdir / sub).is_dir():
-            print(f"[things_eeg2] {sub} already present — skip")
+            logger.info(f"[things_eeg2] {sub} already present — skip")
             continue
         zpath = rawdir / name
-        print(f"[things_eeg2] downloading {name} ...")
+        logger.info(f"[things_eeg2] downloading {name} ...")
         _stream(url, zpath)
-        print(f"[things_eeg2] extracting {name} ...")
+        logger.info(f"[things_eeg2] extracting {name} ...")
         with zipfile.ZipFile(zpath) as z:
             z.extractall(rawdir)
         zpath.unlink()
-        print(f"[things_eeg2] {sub} done")
+        logger.info(f"[things_eeg2] {sub} done")
 
     # --- image set (osfstorage, ~0.66 GB) ---
     imgdir = base / "images"
@@ -99,12 +102,12 @@ def download(*, raw: bool = True) -> None:
         dest = imgdir / name
         if dest.exists():
             continue
-        print(f"[things_eeg2] image file {name} ...")
+        logger.info(f"[things_eeg2] image file {name} ...")
         _stream(url, dest)
         if name.endswith(".zip"):
             with zipfile.ZipFile(dest) as z:
                 z.extractall(imgdir)
-    print(f"[things_eeg2] all done -> {base}")
+    logger.info(f"[things_eeg2] all done -> {base}")
 
 
 def _index() -> dict[int, object]:

@@ -11,12 +11,15 @@ NICE target); embeddings are L2-normalized (cosine == dot).
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
 from core.config import processed_dir, raw_dir
+
+logger = logging.getLogger(__name__)
 
 _ROOT = "things_eeg2"
 _CLIP_ARCH, _CLIP_PRETRAINED = "ViT-B-32", "laion2b_s34b_b79k"   # open_clip model (NICE uses a CLIP ViT)
@@ -86,12 +89,12 @@ def compute(split: str, *, device: str | None = None, batch: int = 256, force: b
             encoded = model.encode_image(pixels).float()
             encoded = encoded / encoded.norm(dim=-1, keepdim=True)
         embeddings[start:start + len(chunk)] = encoded.cpu().numpy()
-        print(f"[clip:{split}] {start + len(chunk)}/{len(items)}")
+        logger.info(f"[clip:{split}] {start + len(chunk)}/{len(items)}")
     np.savez(cache_path,
              emb=embeddings,
              concept=np.asarray([item.concept for item in items], np.int64),
              paths=np.asarray([str(item.path) for item in items]))
-    print(f"[clip:{split}] cached -> {cache_path}")
+    logger.info(f"[clip:{split}] cached -> {cache_path}")
     return cache_path
 
 
@@ -121,6 +124,9 @@ def concept_prototypes(split: str) -> np.ndarray:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     import sys
 
     compute(sys.argv[1] if len(sys.argv) > 1 else "test")

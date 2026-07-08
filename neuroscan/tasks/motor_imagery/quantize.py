@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +23,8 @@ from core.data.eeg.base import EpochCfg
 from neuroscan import tracking
 from neuroscan.evaluation import metrics
 from neuroscan.models import decoders
+
+logger = logging.getLogger(__name__)
 
 
 def _onnx_trial_proba(path, X_std, crop_len, n_test_crops):
@@ -39,6 +42,9 @@ def _onnx_trial_proba(path, X_std, crop_len, n_test_crops):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="bnci2014_001")
     ap.add_argument("--method", default="atcnet", choices=sorted(decoders.MODELS))
@@ -55,7 +61,7 @@ def main():
     one = meta.filter(pl.col("subject") == str(sub))
     Xtr, ytr = store.gather(one.filter(pl.col("session") != args.test_session))
     Xte, yte = store.gather(one.filter(pl.col("session") == args.test_session))
-    print(f"subject {sub}: train {Xtr.shape} -> test {Xte.shape}")
+    logger.info(f"subject {sub}: train {Xtr.shape} -> test {Xte.shape}")
 
     fit, _ = decoders.make(args.method)
     clf = fit(Xtr, ytr)
@@ -107,16 +113,16 @@ def main():
         if "onnx_int8" in a:
             m.update({"acc_onnx_int8": a["onnx_int8"], "size_int8_mb": s["int8"], "latency_int8_ms": l["int8"]})
         tracking.metrics(m)
-    print(f"\n=== {args.method} edge quantization (subject {sub}) ===")
-    print(f"  parity max|Δlogit| {gap:.2e}  (gate < 1e-3) OK")
+    logger.info(f"\n=== {args.method} edge quantization (subject {sub}) ===")
+    logger.info(f"  parity max|Δlogit| {gap:.2e}  (gate < 1e-3) OK")
     a = rep["accuracy"]
-    print(f"  accuracy  torch {a['torch_fp32']:.3f} | onnx-fp32 {a['onnx_fp32']:.3f}"
+    logger.info(f"  accuracy  torch {a['torch_fp32']:.3f} | onnx-fp32 {a['onnx_fp32']:.3f}"
           + (f" | onnx-int8 {a['onnx_int8']:.3f}" if "onnx_int8" in a else " | int8 N/A"))
-    print(f"  size MB   fp32 {rep['size_mb']['fp32']}"
+    logger.info(f"  size MB   fp32 {rep['size_mb']['fp32']}"
           + (f" -> int8 {rep['size_mb']['int8']} ({rep['size_mb']['ratio']}x)" if "int8" in rep["size_mb"] else ""))
     lat = rep["latency_ms_cpu"]
-    print(f"  latency   fp32 {lat['fp32']} ms" + (f" -> int8 {lat['int8']} ms ({lat['speedup']}x)" if "int8" in lat else ""))
-    print(f"-> {out}/{args.method}_sub{sub}.json")
+    logger.info(f"  latency   fp32 {lat['fp32']} ms" + (f" -> int8 {lat['int8']} ms ({lat['speedup']}x)" if "int8" in lat else ""))
+    logger.info(f"-> {out}/{args.method}_sub{sub}.json")
 
 
 if __name__ == "__main__":

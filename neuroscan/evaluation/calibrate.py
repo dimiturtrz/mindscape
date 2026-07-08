@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +24,8 @@ from core.data.eeg.base import EpochCfg
 from neuroscan import tracking
 from neuroscan.evaluation import metrics
 from neuroscan.models import decoders
+
+logger = logging.getLogger(__name__)
 
 
 class TemperatureScaler:
@@ -77,6 +80,9 @@ def ece_at(logits: np.ndarray, labels: np.ndarray, T: float = 1.0) -> float:
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="bnci2014_001")
     ap.add_argument("--method", default="atcnet", choices=sorted(decoders.MODELS))
@@ -107,7 +113,7 @@ def main():
              "test_ece_uncal": ts.ece(lt, yte, T=1.0), "test_ece_temp": ts.ece(lt, yte),
              "test_acc": metrics.accuracy(yte, lt.argmax(1))}
         rows.append(r)
-        print(f"  s{r['subject']}  T {ts.T:.2f} | val ECE {r['val_ece_uncal']:.3f}->{r['val_ece_temp']:.3f} | "
+        logger.info(f"  s{r['subject']}  T {ts.T:.2f} | val ECE {r['val_ece_uncal']:.3f}->{r['val_ece_temp']:.3f} | "
               f"test ECE {r['test_ece_uncal']:.3f}->{r['test_ece_temp']:.3f}  (acc {r['test_acc']:.3f})")
 
     m = {k: float(np.mean([r[k] for r in rows]))
@@ -122,9 +128,9 @@ def main():
     test_fix = summary["test_ece"]["uncal"] - summary["test_ece"]["temp"]
     summary["transfer_ratio"] = round(test_fix / val_fix, 3) if val_fix > 1e-6 else None
 
-    print(f"\n=== {args.method} temperature scaling (in-session val -> cross-session test) ===")
-    print(f"  val  ECE {summary['val_ece']['uncal']:.3f} -> {summary['val_ece']['temp']:.3f}  (fixed {val_fix:+.3f})")
-    print(f"  test ECE {summary['test_ece']['uncal']:.3f} -> {summary['test_ece']['temp']:.3f}  (fixed {test_fix:+.3f})")
+    logger.info(f"\n=== {args.method} temperature scaling (in-session val -> cross-session test) ===")
+    logger.info(f"  val  ECE {summary['val_ece']['uncal']:.3f} -> {summary['val_ece']['temp']:.3f}  (fixed {val_fix:+.3f})")
+    logger.info(f"  test ECE {summary['test_ece']['uncal']:.3f} -> {summary['test_ece']['temp']:.3f}  (fixed {test_fix:+.3f})")
     tr = summary["transfer_ratio"]
     if tr is None:
         verdict = "val already calibrated — nothing to transfer"
@@ -134,7 +140,7 @@ def main():
         verdict = "calibration transfers partially across the session shift"
     else:
         verdict = "calibration transfers well (test fixed >= val) — model already low-ECE cross-session"
-    print(f"  transfer ratio {tr} — {verdict}")
+    logger.info(f"  transfer ratio {tr} — {verdict}")
     summary["verdict"] = verdict
 
     out = Path(args.out) if args.out else Path("runs") / f"calibrate_{args.method}_{args.dataset}"
@@ -146,7 +152,7 @@ def main():
                           "val_ece_uncal": summary["val_ece"]["uncal"], "val_ece_temp": summary["val_ece"]["temp"],
                           "test_ece_uncal": summary["test_ece"]["uncal"], "test_ece_temp": summary["test_ece"]["temp"]})
         tracking.artifact(out / "calibration.json")
-    print(f"-> {out}/calibration.json")
+    logger.info(f"-> {out}/calibration.json")
 
 
 if __name__ == "__main__":
