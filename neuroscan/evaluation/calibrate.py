@@ -17,9 +17,8 @@ import json
 from pathlib import Path
 
 import numpy as np
-import polars as pl
 
-from core.data import store, splits
+from core.data import splits, store
 from core.data.eeg.base import EpochCfg
 from neuroscan import tracking
 from neuroscan.evaluation import metrics
@@ -108,7 +107,7 @@ def main():
              "test_ece_uncal": ts.ece(lt, yte, T=1.0), "test_ece_temp": ts.ece(lt, yte),
              "test_acc": metrics.accuracy(yte, lt.argmax(1))}
         rows.append(r)
-        print(f"  s{r['subject']}  T {T:.2f} | val ECE {r['val_ece_uncal']:.3f}->{r['val_ece_temp']:.3f} | "
+        print(f"  s{r['subject']}  T {ts.T:.2f} | val ECE {r['val_ece_uncal']:.3f}->{r['val_ece_temp']:.3f} | "
               f"test ECE {r['test_ece_uncal']:.3f}->{r['test_ece_temp']:.3f}  (acc {r['test_acc']:.3f})")
 
     m = {k: float(np.mean([r[k] for r in rows]))

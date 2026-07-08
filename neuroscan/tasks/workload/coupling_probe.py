@@ -65,7 +65,7 @@ def main():
 
     lag, decay, beta = bc.estimate_coupling(D, R, _FPS)
     print(f"\nPOOLED gamma fit: lag {lag:.1f}s · decay {decay:.2f}s · β {beta:.2g}")
-    per = np.array([bc.estimate_coupling(dv, rp, _FPS)[0] for dv, rp in zip(drives, resps)])
+    per = np.array([bc.estimate_coupling(dv, rp, _FPS)[0] for dv, rp in zip(drives, resps, strict=True)])
     print(f"per-subject lag: mean {per.mean():.1f}s · std {per.std():.1f}s · range [{per.min():.1f}, {per.max():.1f}] "
           f"-> {'STABLE' if per.std() < 2 else 'UNSTABLE (pool instead)'}")
 

@@ -24,7 +24,7 @@ def ece(conf: np.ndarray, correct: np.ndarray, n_bins: int = 15) -> tuple[float,
     conf, correct = np.asarray(conf, float), np.asarray(correct, float)
     edges = np.linspace(0, 1, n_bins + 1)
     e, bins = 0.0, []
-    for lo, hi in zip(edges[:-1], edges[1:]):
+    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
         m = (conf > lo) & (conf <= hi)
         if m.sum() == 0:
             continue

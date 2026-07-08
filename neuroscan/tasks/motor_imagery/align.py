@@ -31,11 +31,11 @@ from pathlib import Path
 
 import numpy as np
 
+from baselines.eeg import transfer
 from core import config, reference
 from core.data import splits, store
 from core.data.eeg.base import EpochCfg
 from core.features import time_delay_embed
-from baselines.eeg import transfer
 from neuroscan import tracking
 from neuroscan.evaluation import metrics
 

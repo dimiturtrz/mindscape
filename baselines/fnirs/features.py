@@ -15,6 +15,8 @@ with channels = HbO then HbR (see core/data/fnirs/shin2017.py).
 """
 from __future__ import annotations
 
+import numpy as np
+
 from baselines.base import Baseline
 from core.features import amplitude_features
 

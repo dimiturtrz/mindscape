@@ -18,6 +18,7 @@ import polars as pl
 from core.config import raw_dir
 from core.data.fnirs.base import CANONICAL_NBACK, FnirsCfg, bandpass, epoch_blocks
 
+
 class Shin2017NirsAdapter:
     """fNIRS n-back workload adapter over the Shin-2017 `.mat`. Implements the DatasetAdapter contract."""
 

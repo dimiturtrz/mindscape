@@ -14,6 +14,8 @@ sampled at `fs` (the epoch resample rate; the Shin EEG recipe is 100 Hz over a 4
 """
 from __future__ import annotations
 
+import numpy as np
+
 from baselines.base import Baseline
 from core.features import band_powers
 

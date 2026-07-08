@@ -26,13 +26,13 @@ def _proba(clf, X):
 
 def _baseline_classes() -> dict:
     """name -> Baseline class (lazy import so pyriemann/mne load only when a baseline is actually used)."""
-    from baselines.eeg.csp_lda import CspLda
     from baselines.eeg.bandpower import EegBandpower
+    from baselines.eeg.csp_lda import CspLda
     from baselines.eeg.fbcsp import Fbcsp
-    from baselines.fnirs.features import FnirsLda
-    from baselines.fnirs.windowed import WindowedFnirs
-    from baselines.fnirs.glm import GlmBeta
     from baselines.eeg.riemann import Acm, Fgmdm, Mdm, TangentSpace
+    from baselines.fnirs.features import FnirsLda
+    from baselines.fnirs.glm import GlmBeta
+    from baselines.fnirs.windowed import WindowedFnirs
     return {"csp_lda": CspLda, "riemann": TangentSpace, "riemann_acm": Acm, "riemann_mdm": Mdm,
             "riemann_fgmdm": Fgmdm, "fbcsp": Fbcsp, "fnirs_lda": FnirsLda, "fnirs_windowed": WindowedFnirs,
             "fnirs_glm": GlmBeta, "eeg_bandpower": EegBandpower}

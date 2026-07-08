@@ -29,10 +29,10 @@ from pathlib import Path
 import numpy as np
 
 from baselines.fusion.gate import GatedFusion
-from core.features import amplitude_features, band_powers
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
+from core.features import amplitude_features, band_powers
 from neuroscan.evaluation import metrics
 
 _EEG, _FNIRS = "shin2017_nback_eeg", "shin2017_nback"
@@ -108,7 +108,7 @@ def main():
     gate = float((P_all.argmax(1) == y_all).mean())
     fold_mean = float(np.mean([r["gate_acc"] for r in rows]))
     std = float(np.std([r["gate_acc"] for r in rows]))
-    print(f"\n=== gated fusion · 5-fold GroupKFold · shin n-back ===")
+    print("\n=== gated fusion · 5-fold GroupKFold · shin n-back ===")
     print(f"  gate pooled {gate:.3f} | fold-mean {fold_mean:.3f} ± {std:.3f}")
     print(f"  NOTE: this ~{fold_mean:.2f} is NOT a fusion win — it ties z-scored-EEG-alone (~0.581) and "
           "z-concat-LDA (~0.578).")

@@ -27,8 +27,8 @@ from sklearn.model_selection import GroupKFold
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
-from neuroscan.evaluation import metrics, results
 from core.features import amplitude_features, band_powers
+from neuroscan.evaluation import metrics, results
 
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _K = 5

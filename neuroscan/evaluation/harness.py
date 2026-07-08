@@ -78,7 +78,7 @@ def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str 
         print(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  ece {row['ece']:.3f}  (n={row['n']})")
         P.append(probs); Y.append(yte); G.append(np.full(len(yte), name))
 
-    probs, y, g = np.concatenate(P), np.concatenate(Y), np.concatenate(G)
+    probs, y, _ = np.concatenate(P), np.concatenate(Y), np.concatenate(G)
     pred = probs.argmax(1)
     fold_mean = {k: float(np.mean([r[k] for r in per])) for k in ("acc", "kappa", "ece")}
     pooled = {"acc": metrics.accuracy(y, pred), "kappa": metrics.kappa(y, pred),

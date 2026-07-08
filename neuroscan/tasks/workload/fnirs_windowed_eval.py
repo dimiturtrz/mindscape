@@ -13,8 +13,6 @@ Two regimes, because they answer different questions:
 """
 from __future__ import annotations
 
-import numpy as np
-
 from baselines.fnirs.windowed import WindowedFnirs
 from core.data import store
 from core.data.fnirs.base import FnirsCfg

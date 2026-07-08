@@ -32,7 +32,7 @@ DEFAULTS = {"n_train_crops": 16, "n_test_crops": 8, "log_every": 100, "val_frac"
 
 # standardizers + crops live in transforms.py (independently testable). Re-exported with the legacy
 # private names so callers (e.g. tasks/motor_imagery/quantize.py) keep working.
-from neuroscan.models.transforms import crops as _crops          # noqa: E402
+from neuroscan.models.transforms import crops as _crops  # noqa: E402
 from neuroscan.models.transforms import standardizer as _standardizer  # noqa: E402
 
 
@@ -55,8 +55,8 @@ class BraindecodeClf:
     def __init__(self, cls, n_chans, n_times, n_classes, epochs, lr, batch=128, weight_decay=1e-4,
                  device=None, log_every=0, val_frac=0.2, patience=0,
                  crop_len=None, n_train_crops=16, n_test_crops=8, standardize="ems", seed=0):
-        import torch
         import braindecode.models as M
+        import torch
 
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.epochs, self.lr, self.batch, self.wd = epochs, lr, batch, weight_decay
@@ -86,6 +86,7 @@ class BraindecodeClf:
 
     def fit(self, X, y):
         import copy
+
         import torch
 
         Xs = self.std.fit(X)(X)
