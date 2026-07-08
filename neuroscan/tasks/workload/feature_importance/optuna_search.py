@@ -80,7 +80,7 @@ def _run_one_study(F, fam, y, groups, families, cfg, tpe_seed, storage):
 
     try:
         importances = optuna.importance.get_param_importances(study)      # family -> fANOVA importance
-    except Exception:                                                     # fANOVA needs enough trials to fit
+    except (RuntimeError, ValueError):                                    # fANOVA needs enough trials to fit
         importances = {f: 0.0 for f in families}                         # (top-trial weights still hold below)
     n_top = max(1, int(cfg.top_frac * cfg.n_trials))
     top = sorted(study.trials, key=lambda t: t.value, reverse=True)[:n_top]

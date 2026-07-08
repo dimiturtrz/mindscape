@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import pickle
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -33,6 +34,11 @@ logger = logging.getLogger(__name__)
 
 _MLRUNS = REPO / "mlruns"
 _DB_URI = f"sqlite:///{(REPO / 'mlflow.db').as_posix()}"
+
+# Tracking is best-effort telemetry: it must never break a run, but it should never hide a real bug either.
+# So catch the failures mlflow/IO/torch-save actually raise and log them; anything else propagates.
+_TRACK_ERRORS = (mlflow.exceptions.MlflowException, OSError, RuntimeError)
+_SAVE_ERRORS = (OSError, RuntimeError, TypeError, pickle.PicklingError)   # torch.save / joblib.dump failures
 
 _active = None   # the live mlflow module while a run is open, else None
 
@@ -69,8 +75,8 @@ def run(experiment: str, run_name: str, params: dict | None = None, tags: dict |
         mlflow.set_experiment(experiment)
         try:
             mlflow.enable_system_metrics_logging()      # GPU/CPU/mem (psutil + pynvml if present)
-        except Exception:
-            pass
+        except _TRACK_ERRORS as exc:
+            logger.debug(f"tracking: {exc}")
         idf = Path(run_dir) / ".mlflow_run_id" if run_dir else None
         rid = idf.read_text().strip() if (idf and idf.exists()) else None
         if rid:
@@ -86,14 +92,15 @@ def run(experiment: str, run_name: str, params: dict | None = None, tags: dict |
             mlflow.set_tag(k, str(v))
         _active = mlflow
         yield
-    except Exception:
+    except _TRACK_ERRORS as exc:
+        logger.debug(f"tracking: {exc}")
         yield
     finally:
         try:
             if _active is not None:
                 _active.end_run()
-        except Exception:
-            pass
+        except _TRACK_ERRORS as exc:
+            logger.debug(f"tracking: {exc}")
         _active = None
 
 
@@ -103,8 +110,8 @@ def metrics(d: dict, step: int | None = None) -> None:
     for k, v in d.items():
         try:
             _active.log_metric(k, float(v), step=step)
-        except Exception:
-            pass
+        except _TRACK_ERRORS as exc:
+            logger.debug(f"tracking: {exc}")
 
 
 def per_group(prefix: str, d: dict) -> None:
@@ -118,8 +125,8 @@ def set_tags(d: dict) -> None:
     for k, v in (d or {}).items():
         try:
             _active.set_tag(k, str(v))
-        except Exception:
-            pass
+        except _TRACK_ERRORS as exc:
+            logger.debug(f"tracking: {exc}")
 
 
 def artifact(path: str | Path) -> None:
@@ -129,8 +136,8 @@ def artifact(path: str | Path) -> None:
     try:
         if Path(path).exists():
             _active.log_artifact(str(path))
-    except Exception:
-        pass
+    except _TRACK_ERRORS as exc:
+        logger.debug(f"tracking: {exc}")
 
 
 def artifact_json(name: str, obj) -> None:
@@ -140,8 +147,8 @@ def artifact_json(name: str, obj) -> None:
         p = Path(tempfile.gettempdir()) / name
         p.write_text(json.dumps(obj, indent=2))
         _active.log_artifact(str(p))
-    except Exception:
-        pass
+    except _TRACK_ERRORS as exc:
+        logger.debug(f"tracking: {exc}")
 
 
 def save_model(clf, name: str, run_dir: str | Path | None = None) -> Path | None:
@@ -164,7 +171,8 @@ def save_model(clf, name: str, run_dir: str | Path | None = None) -> Path | None
         else:                                                # sklearn pipeline (baseline)
             path = out_dir / f"{name}.joblib"
             joblib.dump(clf, path)
-    except Exception:
+    except _SAVE_ERRORS as exc:
+        logger.debug(f"save_model: {exc}")
         return None
     artifact(path)                                           # no-op if no active run
     return path
