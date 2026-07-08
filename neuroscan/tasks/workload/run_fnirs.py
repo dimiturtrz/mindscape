@@ -58,9 +58,11 @@ def main():
     run_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"\n=== {method} · {regime} · {dataset} ({len(folds)} folds, chance {chance:.3f}) ===")
     n_jobs = -1 if method in {"csp_lda", "riemann", "riemann_acm", "fnirs_lda"} else 1
-    res = harness.run(method, fit_fn, score_fn, folds, n_classes, regime=regime,
-                      params={"exp": args.exp, "method": method, "regime": regime, "dataset": dataset,
-                              "modality": "fnirs"}, run_dir=run_dir, n_jobs=n_jobs)
+    method_obj = harness.Method(method, fit_fn, score_fn, n_classes, regime)
+    res = harness.run(method_obj, folds, n_jobs=n_jobs,
+                      tracking_cfg=harness.TrackConfig(
+                          params={"exp": args.exp, "method": method, "regime": regime, "dataset": dataset,
+                                  "modality": "fnirs"}, run_dir=run_dir))
     (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
     if not args.no_record and results.record(run_dir):
         logger.info(f"   recorded -> results.json ({run_dir.name})")

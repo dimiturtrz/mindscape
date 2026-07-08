@@ -43,7 +43,8 @@ def test_build_tensor_contract():
     Xf = rng.standard_normal((n, 12, 320))               # 6 HbO + 6 HbR @10 Hz, 32 s
     pos_e = rng.uniform(-0.8, 0.8, (8, 2))
     pos_f = rng.uniform(-0.8, 0.8, (6, 2))
-    X = bc.build_tensor(Xe, Xf, pos_e, pos_f, grid=grid, fps=10.0, t_end=20.0)
+    X = bc.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=grid,
+                        series=bc.SeriesConfig(fps=10.0, t_end=20.0))
     assert X.shape == (n, 5, grid, grid, 200)
     assert np.isfinite(X).all()
 
@@ -57,7 +58,8 @@ def test_fused_node_series_eeg_format():
     Xf = rng.standard_normal((n, 12, 320))
     pos_e = rng.uniform(-0.8, 0.8, (8, 2)); pos_e[7] = np.nan          # one dropped node
     pos_f = rng.uniform(-0.8, 0.8, (6, 2))
-    joint, coupling = bc.fused_node_series(Xe, Xf, pos_e, pos_f, fps=10.0, t_end=20.0)
+    joint, coupling = bc.fused_node_series(bc.PairedModalities(Xe, Xf, pos_e, pos_f),
+                                           series=bc.SeriesConfig(fps=10.0, t_end=20.0))
     assert joint.shape == (n, 7, 200)                                  # 8 EEG nodes − 1 non-finite = 7
     assert np.isfinite(joint).all()
     assert set(coupling) == {"lag", "decay", "beta"}

@@ -28,7 +28,7 @@ def _cov_dataset(n_per_class=40, n_ch=4, n_t=128, seed=0):
 @pytest.mark.parametrize("method", ["ts", "mdm", "fgmdm", "acm"])
 def test_riemann_decodes_covariance_signal(method):
     X, y = _cov_dataset(seed=1)
-    clf = riemann.fit(X, y, method=method)
+    clf = riemann.fit(X, y, riemann.RiemannConfig(method=method))
     proba = riemann.score(clf, X)
     assert proba.shape == (len(X), 2)
     assert np.allclose(proba.sum(1), 1.0, atol=1e-5)
@@ -39,7 +39,7 @@ def test_riemann_decodes_covariance_signal(method):
 def test_unknown_method_raises():
     X, y = _cov_dataset(n_per_class=8, seed=2)
     with pytest.raises(ValueError):
-        riemann.fit(X, y, method="nope")
+        riemann.fit(X, y, riemann.RiemannConfig(method="nope"))
 
 
 def test_recenter_makes_domain_mean_identity():

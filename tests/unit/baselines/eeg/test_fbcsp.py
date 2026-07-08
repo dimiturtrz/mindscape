@@ -6,7 +6,7 @@ contract holds and the signal decodes above chance.
 """
 import numpy as np
 
-from baselines.eeg.fbcsp import Fbcsp
+from baselines.eeg.fbcsp import Fbcsp, FbcspConfig
 
 
 def _band_cov_dataset(n_per_class=40, n_ch=6, n_t=256, fs=128.0, seed=0):
@@ -26,7 +26,7 @@ def _band_cov_dataset(n_per_class=40, n_ch=6, n_t=256, fs=128.0, seed=0):
 
 def test_fbcsp_decodes_band_covariance_signal():
     X, y = _band_cov_dataset(seed=1)
-    clf = Fbcsp(fs=128.0, fmin=4.0, fmax=40.0, band_width=4.0, n_components=4, k_features=8).fit(X, y)
+    clf = Fbcsp(FbcspConfig(fs=128.0, fmin=4.0, fmax=40.0, band_width=4.0, n_components=4, k_features=8)).fit(X, y)
     proba = clf.predict_proba(X)
     assert proba.shape == (len(X), 2)
     assert np.allclose(proba.sum(1), 1.0, atol=1e-5)
@@ -35,5 +35,5 @@ def test_fbcsp_decodes_band_covariance_signal():
 
 def test_fbcsp_selects_at_most_k_features():
     X, y = _band_cov_dataset(n_per_class=20, seed=2)
-    clf = Fbcsp(fs=128.0, k_features=5).fit(X, y)
+    clf = Fbcsp(FbcspConfig(fs=128.0, k_features=5)).fit(X, y)
     assert len(clf.sel_) == 5                          # MI keeps exactly k when the bank has more than k

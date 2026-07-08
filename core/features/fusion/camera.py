@@ -7,10 +7,22 @@ EEG. For real decoding, use raw/multiband EEG covariance + a boundary-aware fNIR
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 from scipy.spatial import Delaunay
 
-from core.features.fusion.series import _BANDS, channel_series
+from core.features.fusion.series import _BANDS, SeriesConfig, channel_series
+
+
+@dataclass
+class PairedModalities:
+    """Block-aligned EEG + fNIRS epochs plus each modality's 2D sensor positions — the four things every
+    brain-camera rasterizer needs together (was the loose `Xe, Xf, pos_e, pos_f` argument run)."""
+    eeg: np.ndarray
+    fnirs: np.ndarray
+    pos_eeg: np.ndarray
+    pos_fnirs: np.ndarray
 
 
 def _bary(pos: np.ndarray, pts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -69,27 +81,28 @@ def coverage_map(pos_e: np.ndarray, pos_f: np.ndarray, grid: int) -> np.ndarray:
     return (near(pos_e) * near(pos_f)).reshape(grid, grid).astype(np.float32)
 
 
-def build_tensor(Xe, Xf, pos_e, pos_f, *, grid=16, **kw):
+def build_tensor(paired: PairedModalities, *, grid=16, series: SeriesConfig | None = None):
     """Paired EEG+fNIRS -> the brain-camera tensor `X[n, C, grid, grid, T]`, C = [θ, α, β, CBSI-neural,
     coverage]. ⚠️ VIZ representation / DECODE NEGATIVE — the rasterized band-envelope maps underperform raw
-    EEG covariance as a decoder input. `kw` -> channel_series (fs/fps/lag/window)."""
-    eeg, neural, _, _ = channel_series(Xe, Xf, **kw)
-    W_e, _ = _interp_weights(pos_e, grid)
-    W_f, _ = _interp_weights(pos_f, grid)
+    EEG covariance as a decoder input. `series` -> channel_series timing (fs/fps/lag/window)."""
+    eeg, neural, _, _ = channel_series(paired.eeg, paired.fnirs, series)
+    W_e, _ = _interp_weights(paired.pos_eeg, grid)
+    W_f, _ = _interp_weights(paired.pos_fnirs, grid)
     eeg_maps = [_zscore(_apply(eeg[b], W_e, grid)) for b in _BANDS]                 # strength layers
     neural_map = _zscore(_apply(neural, W_f, grid))                                 # origin + spread
-    cov = coverage_map(pos_e, pos_f, grid)                                          # locality gate
+    cov = coverage_map(paired.pos_eeg, paired.pos_fnirs, grid)                      # locality gate
     stack = eeg_maps + [neural_map, _broadcast(cov, eeg_maps[0].shape)]
     return np.stack(stack, axis=1).astype(np.float32)                              # [n, C=5, grid, grid, T]
 
 
-def fused_node_series(Xe, Xf, pos_e, pos_f, *, band="sum", fnirs=True, **kw):
+def fused_node_series(paired: PairedModalities, *, band="sum", fnirs=True, series: SeriesConfig | None = None):
     """The FUSION-only signal collapsed to EEG channel format `[n, n_e, T]`. At each EEG node the joint = EEG
     envelope STRENGTH × co-located fNIRS CBSI × locality COVERAGE. ⚠️ DECODE NEGATIVE — the multiplicative joint
     ROBS (0.34-0.40 vs raw-EEG 0.59): it entangles clean EEG with weak fNIRS and drops phase (envelope). Kept as
     the documented control for "don't multiply, don't decode the viz branch". `fnirs=False` returns the EEG
-    strength alone (isolates the lossy representation from the lossy combiner). `kw` -> channel_series."""
-    eeg, neural, _, coupling = channel_series(Xe, Xf, **kw)
+    strength alone (isolates the lossy representation from the lossy combiner). `series` -> channel_series."""
+    eeg, neural, _, coupling = channel_series(paired.eeg, paired.fnirs, series)
+    pos_e, pos_f = paired.pos_eeg, paired.pos_fnirs
     ok = np.isfinite(pos_e).all(1)
     strength = sum(eeg[b] for b in _BANDS) if band == "sum" else eeg[band]      # [n, n_e, T], envelopes ≥ 0
     strength = strength[:, ok, :]

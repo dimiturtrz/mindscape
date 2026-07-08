@@ -50,9 +50,11 @@ def main():
     # lag-aligned) and the locality-coverage kernel. The viz just displays them — no fusion logic in JS.
     # Derive the hemodynamic coupling (offset + decay) over ALL the subject's blocks (robust), then export the
     # requested block aligned by that derived lag — no fixed 5 s.
-    *_, coupling = bc.channel_series(Xe, Xf, fs_e=_FS_E, fs_f=_FS_F, tmin_f=_TMIN_F, fps=_FPS, t_end=_TEND)
-    eeg_s, neural_s, t_dst, _ = bc.channel_series(Xe[b:b + 1], Xf[b:b + 1], fs_e=_FS_E, fs_f=_FS_F,
-                                                  tmin_f=_TMIN_F, fps=_FPS, t_end=_TEND, lag_s=coupling["lag"])
+    *_, coupling = bc.channel_series(Xe, Xf, bc.SeriesConfig(fs_e=_FS_E, fs_f=_FS_F, tmin_f=_TMIN_F,
+                                                             fps=_FPS, t_end=_TEND))
+    eeg_s, neural_s, t_dst, _ = bc.channel_series(
+        Xe[b:b + 1], Xf[b:b + 1],
+        bc.SeriesConfig(fs_e=_FS_E, fs_f=_FS_F, tmin_f=_TMIN_F, fps=_FPS, t_end=_TEND, lag_s=coupling["lag"]))
     eeg = {name: _disp(eeg_s[name][0]).T.tolist() for name in eeg_s}          # {band: [T, ch_e]}
     fnirs = {"neural": _disp(neural_s[0]).T.tolist()}                          # [T, ch_f]
     cov = bc.coverage_map(pos_e, pos_f, _COV_GRID)                            # [g, g] locality confidence

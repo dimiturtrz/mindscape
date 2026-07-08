@@ -17,6 +17,7 @@ in the 2026-07-05 deep-dive). `fs`, `tmin`, `task_dur` set the epoch timing (Shi
 from __future__ import annotations
 
 import numpy as np
+from pydantic import BaseModel
 from scipy.stats import gamma
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.pipeline import make_pipeline
@@ -25,12 +26,24 @@ from sklearn.preprocessing import StandardScaler
 from baselines.base import Baseline
 
 
-def _canonical_hrf(fs: float, length_s: float = 32.0, peak: float = 6.0, under: float = 16.0,
-                   p_disp: float = 1.0, u_disp: float = 1.0, ratio: float = 1 / 6) -> np.ndarray:
-    """SPM-style double-gamma HRF sampled at `fs`, peak-normalized. `p_disp`/`u_disp` widen the gammas (used
-    to form the dispersion-derivative basis)."""
-    t = np.arange(0, length_s, 1.0 / fs)
-    h = gamma.pdf(t, peak / p_disp, scale=p_disp) - ratio * gamma.pdf(t, under / u_disp, scale=u_disp)
+class HrfConfig(BaseModel):
+    """Double-gamma HRF shape knobs (defaults = the SPM canonical). `length_s` = kernel length; `peak`/`under`
+    = the two gamma peak times; `p_disp`/`u_disp` widen the gammas (nudged to form the dispersion-derivative
+    basis); `ratio` = undershoot weight."""
+    length_s: float = 32.0
+    peak: float = 6.0
+    under: float = 16.0
+    p_disp: float = 1.0
+    u_disp: float = 1.0
+    ratio: float = 1 / 6
+
+
+def _canonical_hrf(fs: float, config: HrfConfig | None = None) -> np.ndarray:
+    """SPM-style double-gamma HRF sampled at `fs`, peak-normalized (shape set by `HrfConfig`)."""
+    cfg = config or HrfConfig()
+    t = np.arange(0, cfg.length_s, 1.0 / fs)
+    h = (gamma.pdf(t, cfg.peak / cfg.p_disp, scale=cfg.p_disp)
+         - cfg.ratio * gamma.pdf(t, cfg.under / cfg.u_disp, scale=cfg.u_disp))
     return h / np.abs(h).max()
 
 
@@ -57,7 +70,7 @@ class GlmBeta(Baseline):
         bases = [hrf]
         if self.derivatives:
             tderiv = np.gradient(hrf) * self.fs                      # temporal derivative (delay variation)
-            disp = (hrf - _canonical_hrf(self.fs, p_disp=1.01)) / 0.01   # dispersion derivative (width variation)
+            disp = (hrf - _canonical_hrf(self.fs, HrfConfig(p_disp=1.01))) / 0.01   # dispersion deriv (width)
             bases += [tderiv, disp]
         cols = [np.convolve(box, b)[:T] for b in bases]              # regressor = task ⊛ basis
         n_feat = len(cols)

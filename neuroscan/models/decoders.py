@@ -13,10 +13,12 @@ ONNX-exportable (the Stage-2 edge path rides on it). RTX 5090 + bf16 autocast: m
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass
 
 import braindecode.models as M
 import numpy as np
 import torch
+from pydantic import BaseModel
 
 # method -> (braindecode class, training + crop hparams). crop_frac=0.5 + 16 train crops is the standard
 # 2a recipe; strong nets get more epochs (cheap on the 5090, capped by early stopping).
@@ -57,24 +59,55 @@ def _take(Xs, y, idx, cl, n_crops):
     return Xc, y[idx][cmap]
 
 
+@dataclass
+class Arch:
+    """The braindecode model class name + the data-derived input/output shape (channels, time samples the net
+    consumes, class count)."""
+    cls: str
+    n_chans: int
+    n_times: int
+    n_classes: int
+
+
+class TrainCfg(BaseModel):
+    """Trainer hyperparameters for a BraindecodeClf. `epochs`/`lr`/`batch`/`weight_decay` = the optimizer loop;
+    `device` (None -> auto cuda/cpu); `log_every`/`val_frac`/`patience` = logging + early-stop; `crop_len`
+    (None = full trial) + `n_train_crops`/`n_test_crops` = the sliding-window crop augmentation; `standardize`
+    = the input standardizer; `seed` varies net init for seed-averaging."""
+    model_config = {"arbitrary_types_allowed": True}
+    epochs: int
+    lr: float
+    batch: int = 128
+    weight_decay: float = 1e-4
+    device: str | None = None
+    log_every: int = 0
+    val_frac: float = 0.2
+    patience: int = 0
+    crop_len: int | None = None
+    n_train_crops: int = 16
+    n_test_crops: int = 8
+    standardize: str = "ems"
+    seed: int = 0
+
+
 class BraindecodeClf:
     """A braindecode net wrapped as a Decoder (see core.decoder.Decoder): `fit(X, y) -> self`
     and `predict_proba(X) -> probs`, the same contract the classical baselines satisfy — so the harness
     runs nets and baselines through one path."""
 
-    def __init__(self, cls, n_chans, n_times, n_classes, epochs, lr, batch=128, weight_decay=1e-4,
-                 device=None, log_every=0, val_frac=0.2, patience=0,
-                 crop_len=None, n_train_crops=16, n_test_crops=8, standardize="ems", seed=0):
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.epochs, self.lr, self.batch, self.wd = epochs, lr, batch, weight_decay
-        self.log_every, self.val_frac, self.patience = log_every, val_frac, patience
-        self.crop_len, self.n_train_crops, self.n_test_crops = crop_len, n_train_crops, n_test_crops
-        self.seed = seed
-        self.std = _standardizer(standardize)
-        torch.manual_seed(seed)                          # vary net init across seeds (seed-averaging)
-        Net = getattr(M, cls)
+    def __init__(self, arch: Arch, config: TrainCfg):
+        self.cfg = config
+        self.device = config.device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.epochs, self.lr, self.batch, self.wd = config.epochs, config.lr, config.batch, config.weight_decay
+        self.log_every, self.val_frac, self.patience = config.log_every, config.val_frac, config.patience
+        self.crop_len, self.n_train_crops, self.n_test_crops = (config.crop_len, config.n_train_crops,
+                                                                config.n_test_crops)
+        self.seed = config.seed
+        self.std = _standardizer(config.standardize)
+        torch.manual_seed(config.seed)                   # vary net init across seeds (seed-averaging)
+        Net = getattr(M, arch.cls)
         # net consumes crop_len samples when cropping, else the full trial
-        self.net = Net(n_chans=n_chans, n_outputs=n_classes, n_times=n_times).to(self.device)
+        self.net = Net(n_chans=arch.n_chans, n_outputs=arch.n_classes, n_times=arch.n_times).to(self.device)
 
     def _make_train_val(self, Xs, y):
         """Trial-level train/val split (val carved from held-out TRIALS, no crop leakage), then crop."""
@@ -174,14 +207,14 @@ def make(method: str):
         T = X.shape[2]
         crop_len = int(p["crop_frac"] * T) if p.get("crop_frac") else None
         n_times = crop_len or T
-        clf = BraindecodeClf(
-            p["cls"], X.shape[1], n_times, int(y.max()) + 1,
+        arch = Arch(cls=p["cls"], n_chans=X.shape[1], n_times=n_times, n_classes=int(y.max()) + 1)
+        config = TrainCfg(
             epochs=p["epochs"], lr=p["lr"], batch=p["batch"],
             log_every=p.get("log_every", 0), val_frac=p.get("val_frac", 0.2),
             patience=p.get("patience", 0), crop_len=crop_len,
             n_train_crops=p["n_train_crops"], n_test_crops=p["n_test_crops"],
             standardize=p.get("standardize", "ems"), seed=p.get("seed", 0))
-        return clf.fit(X, y)
+        return BraindecodeClf(arch, config).fit(X, y)
 
     def score(clf, X):
         return clf.predict_proba(X)

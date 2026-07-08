@@ -14,6 +14,8 @@ Reports BOTH fold-mean (per-subject equal weight) and pooled (per-epoch) — the
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
 from joblib import Parallel, delayed
@@ -23,6 +25,27 @@ from neuroscan import tracking
 from neuroscan.evaluation import diagnostics, metrics
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class Method:
+    """A decoder as the harness consumes it: a `name` + its `(fit, score)` pair + the class count and
+    evaluation `regime`. These five always travel together — every fold is fit/scored the same way."""
+    name: str
+    fit: Callable
+    score: Callable
+    n_classes: int
+    regime: str = ""
+
+
+@dataclass
+class TrackConfig:
+    """MLflow logging + model-persistence options for a `run` (no effect on the computed metrics). `params` =
+    the run params/tags; `run_dir` (a runs/<name>/ dir) enables resume + artifacts; `save_models` persists
+    each fold's trained model."""
+    params: dict | None = None
+    run_dir: object | None = None
+    save_models: bool = True
 
 
 def folds_for(meta, regime: str, test_sessions=()):
@@ -55,8 +78,7 @@ def _fit_score_fold(fold, fit_fn, score_fn):
     return str(name), row, probs, yte, clf
 
 
-def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str = "",
-              models_out: list | None = None, n_jobs: int = 1) -> dict:
+def aggregate(method: Method, folds, *, models_out: list | None = None, n_jobs: int = 1) -> dict:
     """Pure: run the method over folds, compute the metrics. No MLflow, no side effects.
     If `models_out` is given, each fold's fitted clf is appended as (fold_name, clf) for the caller to
     persist. `n_jobs`: parallelize the (independent) folds with the **threading** backend. NOTE the tradeoff:
@@ -69,10 +91,10 @@ def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str 
     (independent `reproduce_all --only` chunks), NOT fine-grained fold loky. See mindscape-07n.
     Default 1 (sequential); use -1 for CPU baselines, keep 1 for GPU nets (one device)."""
     if n_jobs == 1:
-        done = [_fit_score_fold(f, fit_fn, score_fn) for f in folds]
+        done = [_fit_score_fold(f, method.fit, method.score) for f in folds]
     else:
         done = Parallel(n_jobs=n_jobs, backend="threading")(
-            delayed(_fit_score_fold)(f, fit_fn, score_fn) for f in folds)
+            delayed(_fit_score_fold)(f, method.fit, method.score) for f in folds)
 
     per, P, Y, G = [], [], [], []
     for name, row, probs, yte, clf in done:                         # collected in fold order
@@ -89,24 +111,25 @@ def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str 
     fold_mean = {k: float(np.mean([r[k] for r in per])) for k in ("acc", "kappa", "ece")}
     pooled = {"acc": metrics.accuracy(y, pred), "kappa": metrics.kappa(y, pred),
               "ece": metrics.ece_from_probs(probs, y),
-              "confusion": metrics.confusion(y, pred, n_classes).tolist()}
+              "confusion": metrics.confusion(y, pred, method.n_classes).tolist()}
     sp = diagnostics.spread(per, "acc")
     logger.info(f"  {'MEAN':>6}  acc {fold_mean['acc']:.3f}  kappa {fold_mean['kappa']:.3f}  "
           f"ece {fold_mean['ece']:.3f}   (spread {sp['min']:.3f}-{sp['max']:.3f}, std {sp['std']:.3f})")
-    return {"method": method, "regime": regime, "n_classes": n_classes, "n_folds": len(per),
+    return {"method": method.name, "regime": method.regime, "n_classes": method.n_classes, "n_folds": len(per),
             "per_fold": per, "fold_mean": fold_mean, "pooled": pooled, "acc_spread": sp}
 
 
-def run(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str = "",
-        params: dict | None = None, run_dir=None, *, save_models: bool = True, n_jobs: int = 1) -> dict:
-    """aggregate + log to MLflow (guarded). `run_dir` (a runs/<name>/ dir) enables resume + artifacts.
-    `save_models` persists each fold's trained model. `n_jobs` parallelizes folds (see aggregate)."""
-    models: list = [] if save_models else None
-    res = aggregate(method, fit_fn, score_fn, folds, n_classes, regime, models_out=models, n_jobs=n_jobs)
+def run(method: Method, folds, *, tracking_cfg: TrackConfig | None = None, n_jobs: int = 1) -> dict:
+    """aggregate + log to MLflow (guarded), configured by `tracking_cfg` (see TrackConfig). `n_jobs`
+    parallelizes folds (see aggregate)."""
+    tc = tracking_cfg or TrackConfig()
+    models: list = [] if tc.save_models else None
+    res = aggregate(method, folds, models_out=models, n_jobs=n_jobs)
     fm, pooled = res["fold_mean"], res["pooled"]
-    tags = {"method": method, "regime": regime, "dataset": (params or {}).get("dataset", "")}
-    with tracking.run("mindscape", f"{method}_{regime}", params=params or {"method": method, "regime": regime},
-                      tags=tags, run_dir=run_dir):
+    tags = {"method": method.name, "regime": method.regime, "dataset": (tc.params or {}).get("dataset", "")}
+    with tracking.run("mindscape", f"{method.name}_{method.regime}",
+                      params=tc.params or {"method": method.name, "regime": method.regime},
+                      tags=tags, run_dir=tc.run_dir):
         tracking.metrics({"acc_mean": fm["acc"], "kappa_mean": fm["kappa"], "ece_mean": fm["ece"],
                           "acc_pooled": pooled["acc"], "kappa_pooled": pooled["kappa"],
                           "ece_pooled": pooled["ece"], "acc_std": res["acc_spread"]["std"],
@@ -115,5 +138,5 @@ def run(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str = "",
         tracking.per_group("ece_subject", {r["fold"]: r["ece"] for r in res["per_fold"]})
         tracking.artifact_json("aggregate.json", res)
         for fold_name, clf in (models or []):
-            tracking.save_model(clf, f"model_{method}_{fold_name}", run_dir=run_dir)
+            tracking.save_model(clf, f"model_{method.name}_{fold_name}", run_dir=tc.run_dir)
     return res

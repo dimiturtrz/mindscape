@@ -13,7 +13,20 @@ make_split holds out whole datasets/vendors; ours holds out subjects/sessions �
 from __future__ import annotations
 
 import polars as pl
+from pydantic import BaseModel
 from sklearn.model_selection import GroupKFold
+
+
+class SplitSpec(BaseModel):
+    """The criteria that define one split. `test_subjects`/`test_sessions` = held-out test rows (by subject
+    OR session); `val_subjects` = a held-out subject for tuning (not test) — if empty, a random `val_frac` is
+    carved from the non-test rows instead; `seed` makes that carve deterministic."""
+    model_config = {"arbitrary_types_allowed": True}
+    test_subjects: tuple = ()
+    test_sessions: tuple = ()
+    val_subjects: tuple = ()
+    val_frac: float = 0.2
+    seed: int = 0
 
 
 def _val_carve(rest: pl.DataFrame, val_frac: float, seed: int) -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -23,18 +36,19 @@ def _val_carve(rest: pl.DataFrame, val_frac: float, seed: int) -> tuple[pl.DataF
     return shuffled[n_val:], shuffled[:n_val]
 
 
-def make_split(meta: pl.DataFrame, test_subjects=(), test_sessions=(), val_subjects=(),
-               val_frac: float = 0.2, seed: int = 0
+def make_split(meta: pl.DataFrame, spec: SplitSpec | None = None
                ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
-    """(train, val, test) from criteria.
+    """(train, val, test) from the criteria in `spec` (see SplitSpec).
 
     test = rows whose subject ∈ test_subjects OR session ∈ test_sessions.
     val  = rows whose subject ∈ val_subjects (a held-out subject for tuning, not test) — or, if none
            given, a random `val_frac` carved from the non-test rows (in-distribution val).
     train = everything that's neither test nor val.
     """
-    test_subjects, test_sessions, val_subjects = (
-        [str(x) for x in test_subjects], [str(x) for x in test_sessions], [str(x) for x in val_subjects])
+    spec = spec or SplitSpec()
+    test_subjects = [str(x) for x in spec.test_subjects]
+    test_sessions = [str(x) for x in spec.test_sessions]
+    val_subjects = [str(x) for x in spec.val_subjects]
 
     test_expr = (pl.col("subject").is_in(test_subjects) | pl.col("session").is_in(test_sessions))
     test = meta.filter(test_expr)
@@ -42,7 +56,7 @@ def make_split(meta: pl.DataFrame, test_subjects=(), test_sessions=(), val_subje
     if val_subjects:
         val_expr = pl.col("subject").is_in(val_subjects)
         return rest.filter(~val_expr), rest.filter(val_expr), test
-    train, val = _val_carve(rest, val_frac, seed)
+    train, val = _val_carve(rest, spec.val_frac, spec.seed)
     return train, val, test
 
 
@@ -75,7 +89,7 @@ def within_subject(meta: pl.DataFrame, subject: str, test_sessions=(), val_frac:
     session(s) as `test_sessions` (the standard 2a protocol); else a random `val_frac`/test carve."""
     one = meta.filter(pl.col("subject") == str(subject))
     if test_sessions:
-        return make_split(one, test_sessions=test_sessions, val_frac=val_frac, seed=seed)
+        return make_split(one, SplitSpec(test_sessions=tuple(test_sessions), val_frac=val_frac, seed=seed))
     # no session protocol: carve test then val from the remainder
     shuffled = one.sample(fraction=1.0, shuffle=True, seed=seed)
     n_test = max(1, round(len(shuffled) * 0.2))

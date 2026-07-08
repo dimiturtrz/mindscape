@@ -2,7 +2,7 @@
 that the differentiable weighted head actually learns to up-weight the informative family."""
 import numpy as np
 
-from neuroscan.tasks.workload.feature_importance.differentiable import _effective_n, _fit, _knee
+from neuroscan.tasks.workload.feature_importance.differentiable import GroupSpec, _effective_n, _fit, _knee
 
 
 def test_effective_n_bounds():
@@ -29,6 +29,6 @@ def test_weighted_head_learns_to_prefer_informative_group():
     X = (X - X.mean(0)) / (X.std(0) + 1e-8)
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     gi = torch.as_tensor([0] * ch + [1] * ch, dtype=torch.long, device=dev)
-    m = _fit(X, y, gi, 2, 3, lam=0.0, hp={"lr": 0.05, "weight_decay": 1e-4, "epochs": 300})
+    m = _fit(X, y, GroupSpec(gi, 2, 3), lam=0.0, hp={"lr": 0.05, "weight_decay": 1e-4, "epochs": 300})
     w = m.weights().detach().cpu().numpy()
     assert w[0] > w[1]                                            # informative group gets more weight

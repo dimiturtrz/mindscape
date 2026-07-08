@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from baselines.eeg.bandpower import EegBandpower
 from baselines.eeg.csp_lda import CspLda
-from baselines.eeg.fbcsp import Fbcsp
+from baselines.eeg.fbcsp import Fbcsp, FbcspConfig
 from baselines.eeg.riemann import Acm, Fgmdm, Mdm, TangentSpace
 from baselines.fnirs.features import FnirsLda
 from baselines.fnirs.glm import GlmBeta
-from baselines.fnirs.windowed import WindowedFnirs
+from baselines.fnirs.windowed import WindowedConfig, WindowedFnirs
 from neuroscan.models.decoders import MODELS, make
 
 
@@ -25,6 +25,8 @@ def method_names() -> list[str]:
 # baselines that need the epoch sample rate: filter-designers (band-power, FBCSP) to build their filters,
 # the windowed fNIRS decoder (sub-window seconds->samples), and GLM-β (HRF/task regressor timing).
 _FS_METHODS = {"eeg_bandpower", "fbcsp", "fnirs_windowed", "fnirs_glm"}
+# the fs-taking baselines whose fs is a field on a config object (constructor takes the config, not fs=)
+_FS_CONFIG = {"fbcsp": FbcspConfig, "fnirs_windowed": WindowedConfig}
 
 
 def _proba(clf, X):
@@ -47,6 +49,9 @@ def get_method(name: str, fs: float | None = None):
     classes = _baseline_classes()
     if name in classes:
         cls = classes[name]
+        if name in _FS_CONFIG and fs is not None:
+            config = _FS_CONFIG[name](fs=fs)                  # fs is a config field, ctor takes the config
+            return (lambda X, y: cls(config).fit(X, y), _proba)
         kw = {"fs": fs} if (name in _FS_METHODS and fs is not None) else {}
         return (lambda X, y: cls(**kw).fit(X, y), _proba)
     fit, _ = make(name)                      # net builds its own cfg; its scorer is predict_proba too

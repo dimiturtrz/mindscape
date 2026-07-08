@@ -15,19 +15,19 @@ def _meta():
 
 
 def test_test_subjects_holds_out_whole_subject():
-    tr, _va, te = splits.make_split(_meta(), test_subjects=["3"])
+    tr, _va, te = splits.make_split(_meta(), splits.SplitSpec(test_subjects=["3"]))
     assert set(te["subject"].unique()) == {"3"}
     assert "3" not in set(tr["subject"].unique())
 
 
 def test_test_sessions_holds_out_session_across_subjects():
-    tr, _va, te = splits.make_split(_meta(), test_sessions=["1test"])
+    tr, _va, te = splits.make_split(_meta(), splits.SplitSpec(test_sessions=["1test"]))
     assert set(te["session"].unique()) == {"1test"}
     assert set(tr["session"].unique()) == {"0train"}
 
 
 def test_val_subjects_disjoint_from_train_and_test():
-    tr, va, te = splits.make_split(_meta(), test_subjects=["1"], val_subjects=["2"])
+    tr, va, te = splits.make_split(_meta(), splits.SplitSpec(test_subjects=["1"], val_subjects=["2"]))
     assert set(te["subject"].unique()) == {"1"}
     assert set(va["subject"].unique()) == {"2"}
     assert set(tr["subject"].unique()) == {"3"}

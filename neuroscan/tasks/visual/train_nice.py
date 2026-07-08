@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -74,20 +75,30 @@ def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
 
 
 def _load_split(subjects: list[int], split: str, resample: float):
-    epochs, concept, image_files, _ = things.get_epochs(subjects, split=split, resample=resample)
+    epochs, concept, image_files, _ = things.get_epochs(
+        subjects, things.ThingsEpochCfg(split=split, resample=resample))
     return epochs, concept, _clip_targets(image_files, split)
 
 
+@dataclass
+class RetrievalSet:
+    """One retrieval eval set: the EEG epochs, their per-trial concept labels, and the candidate embedding
+    bank to retrieve against."""
+    eeg: np.ndarray
+    concept: np.ndarray
+    candidates: np.ndarray
+
+
 @torch.no_grad()
-def evaluate(encoder, eeg, eeg_concept, candidates, device, batch: int = _EVAL_BATCH) -> dict:
+def evaluate(encoder, data: RetrievalSet, device, batch: int = _EVAL_BATCH) -> dict:
     """Single-trial + concept-averaged retrieval top-1/5 against a per-concept prototype bank."""
     encoder.eval()
-    embedded = torch.cat([encoder(torch.tensor(eeg[i:i + batch]).to(device)).cpu()
-                          for i in range(0, len(eeg), batch)])          # [N,512] normalized
-    candidate_bank = torch.tensor(candidates)
-    labels = torch.tensor(eeg_concept)
+    embedded = torch.cat([encoder(torch.tensor(data.eeg[i:i + batch]).to(device)).cpu()
+                          for i in range(0, len(data.eeg), batch)])      # [N,512] normalized
+    candidate_bank = torch.tensor(data.candidates)
+    labels = torch.tensor(data.concept)
     single = retrieval_topk(embedded, candidate_bank, labels)
-    n_concepts = int(eeg_concept.max()) + 1
+    n_concepts = int(data.concept.max()) + 1
     averaged = torch.stack([torch.nn.functional.normalize(embedded[labels == c].mean(0), dim=-1)
                             for c in range(n_concepts)])
     concept_avg = retrieval_topk(averaged, candidate_bank, torch.arange(n_concepts))
@@ -154,14 +165,14 @@ def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dic
             optimizer.step()
             total_loss += loss.item()
 
-        val_top1 = evaluate(encoder, val_eeg, val_labels, val_bank, device)["single_trial"][1]
+        val_top1 = evaluate(encoder, RetrievalSet(val_eeg, val_labels, val_bank), device)["single_trial"][1]
         if val_top1 > best_val:
             best_val, best_epoch, since_improved = val_top1, epoch, 0
             best_state = {k: v.detach().cpu().clone() for k, v in encoder.state_dict().items()}
         else:
             since_improved += 1
         if epoch % 5 == 0 or epoch == cfg.epochs - 1:
-            test = evaluate(encoder, test_eeg, test_concept, test_bank, device)
+            test = evaluate(encoder, RetrievalSet(test_eeg, test_concept, test_bank), device)
             logger.info(f"ep {epoch:3d}  loss {total_loss/len(loader):.3f}  val-top1 {val_top1*100:.2f}%  "
                   f"test single {test['single_trial'][1]*100:.2f}%/{test['single_trial'][5]*100:.2f}%  "
                   f"avg {test['concept_avg'][1]*100:.2f}%/{test['concept_avg'][5]*100:.2f}%")
@@ -170,7 +181,7 @@ def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dic
             break
 
     encoder.load_state_dict(best_state)                            # report TEST at the best-VAL checkpoint
-    test = evaluate(encoder, test_eeg, test_concept, test_bank, device)
+    test = evaluate(encoder, RetrievalSet(test_eeg, test_concept, test_bank), device)
     return {"regime": regime, "train": train_subjects, "test": test_subject,
             "best_val_epoch": best_epoch, "val_top1": best_val, "epochs_run": epoch + 1,
             "chance_top1": 1 / (int(test_concept.max()) + 1), **test}

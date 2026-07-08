@@ -42,7 +42,8 @@ def _build_all():
         Xf, yf = store.gather(mf.filter(mf["subject"] == s))
         assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
         pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
-        Xs.append(bc.build_tensor(Xe, Xf, pos_e, pos_f, grid=_GRID, fps=_FPS, t_end=_TEND))
+        Xs.append(bc.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=_GRID,
+                                  series=bc.SeriesConfig(fps=_FPS, t_end=_TEND)))
         ys.append(ye)
         gs.append(np.array([s] * len(ye)))
     return np.concatenate(Xs), np.concatenate(ys), np.concatenate(gs)

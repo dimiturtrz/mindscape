@@ -40,7 +40,7 @@ def test_aggregate_shape_and_separable_signal(monkeypatch):
         return clf.predict_proba(X.reshape(len(X), -1))
 
     folds = [_fake_fold("1", seed=1), _fake_fold("2", seed=2)]
-    res = harness.aggregate("lda_stub", fit, score, folds, n_classes=4, regime="within")
+    res = harness.aggregate(harness.Method("lda_stub", fit, score, 4, "within"), folds)
 
     assert set(res) >= {"method", "regime", "n_folds", "per_fold", "fold_mean", "pooled", "acc_spread"}
     assert res["n_folds"] == 2
@@ -71,7 +71,8 @@ def test_run_persists_a_model_per_fold(monkeypatch, tmp_path):
         return clf.predict_proba(X.reshape(len(X), -1))
 
     folds = [_fake_fold("1", seed=1), _fake_fold("2", seed=2)]
-    harness.run("lda_stub", fit, score, folds, n_classes=4, regime="within", run_dir=tmp_path)
+    harness.run(harness.Method("lda_stub", fit, score, 4, "within"), folds,
+                tracking_cfg=harness.TrackConfig(run_dir=tmp_path))
 
     saved = sorted((tmp_path / "models").glob("*.joblib"))
     assert len(saved) == 2                       # one model per fold

@@ -17,6 +17,7 @@ natural base for cross-subject transfer (manifold re-centering). Interface = the
 from __future__ import annotations
 
 import numpy as np
+from pydantic import BaseModel
 from pyriemann.classification import MDM, FgMDM
 from pyriemann.estimation import Covariances
 from pyriemann.tangentspace import TangentSpace as _TS
@@ -96,14 +97,24 @@ class Acm(_RiemannBaseline):
 _METHODS = {"ts": TangentSpace, "mdm": Mdm, "fgmdm": Fgmdm, "acm": Acm}
 
 
-def fit(X: np.ndarray, y: np.ndarray, method: str = "ts", estimator: str = "oas",
-        order: int = 4, lag: int = 8) -> Baseline:
-    """Back-compat shim — build the method object for `method` and fit it. Prefer the classes directly
-    (TangentSpace/Mdm/Acm); this keeps the old `fit(X, y, method=...)` call sites working."""
-    if method not in _METHODS:
-        raise ValueError(f"unknown riemann method {method!r}; use one of {sorted(_METHODS)}")
-    kw = {"order": order, "lag": lag, "estimator": estimator} if method == "acm" else {"estimator": estimator}
-    return _METHODS[method](**kw).fit(X, y)
+class RiemannConfig(BaseModel):
+    """Which Riemannian variant + its knobs. `estimator` = covariance shrinkage (all variants); `order`/`lag`
+    = the time-delay-embedding depth/stride used only by ACM."""
+    method: str = "ts"
+    estimator: str = "oas"
+    order: int = 4
+    lag: int = 8
+
+
+def fit(X: np.ndarray, y: np.ndarray, config: RiemannConfig | None = None) -> Baseline:
+    """Back-compat shim — build the method object for `config.method` and fit it. Prefer the classes directly
+    (TangentSpace/Mdm/Acm); this keeps the old `fit(X, y, config=...)` call sites working."""
+    config = config or RiemannConfig()
+    if config.method not in _METHODS:
+        raise ValueError(f"unknown riemann method {config.method!r}; use one of {sorted(_METHODS)}")
+    kw = ({"order": config.order, "lag": config.lag, "estimator": config.estimator}
+          if config.method == "acm" else {"estimator": config.estimator})
+    return _METHODS[config.method](**kw).fit(X, y)
 
 
 def score(clf: Baseline, X: np.ndarray) -> np.ndarray:

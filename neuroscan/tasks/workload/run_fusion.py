@@ -174,7 +174,8 @@ def main():
         get_method decoder. The `nback_fusion_plain` config (params.plain_eeg) falls back to plain Riemann."""
         if not recenter:
             return eeg_score(eeg_fit(Xtr, ytr), Xte)
-        return transfer.zero_shot_predict(_cov(Xtr), ytr, gtr, _cov(Xte), scale=False, target_groups=gte)
+        return transfer.zero_shot_predict(transfer.Domain(_cov(Xtr), ytr, gtr),
+                                          transfer.Domain(_cov(Xte), groups=gte), scale=False)
 
     def eeg_feats(X, g):
         """EEG feature vector for feature-level fusion — the re-centered tangent-space rep, so its EEG side

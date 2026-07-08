@@ -16,7 +16,13 @@ from pydantic import BaseModel
 # (core/data/signal) so the EEG adapter doesn't import "up" into fNIRS. Re-exported here so existing
 # `from core.data.fnirs.base import bandpass / epoch_blocks / CANONICAL_NBACK` call sites keep working.
 from core.data.fnirs.clean import clean_key
-from core.data.signal import CANONICAL_NBACK, CANONICAL_NBACK_NAMES, bandpass, block_epochs  # noqa: F401
+from core.data.signal import (  # noqa: F401
+    CANONICAL_NBACK,
+    CANONICAL_NBACK_NAMES,
+    BlockedRecording,
+    bandpass,
+    block_epochs,
+)
 
 
 class FnirsCfg(BaseModel):
@@ -45,4 +51,4 @@ class FnirsCfg(BaseModel):
 def epoch_blocks(cont, onsets, y, fs: float, cfg: FnirsCfg) -> tuple:
     """Baseline-corrected block epoching per the fNIRS recipe — a thin FnirsCfg adapter over the shared
     `signal.block_epochs` (the modality-agnostic windowing op)."""
-    return block_epochs(cont, onsets, y, fs, cfg.tmin, cfg.tmax, cfg.baseline_s)
+    return block_epochs(BlockedRecording(cont, onsets, y), fs, cfg.tmin, cfg.tmax, cfg.baseline_s)

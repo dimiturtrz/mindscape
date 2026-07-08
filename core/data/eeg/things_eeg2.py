@@ -32,6 +32,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import polars as pl
+from pydantic import BaseModel
 from scipy.signal import resample as _resample
 
 from core.config import raw_dir
@@ -156,24 +157,34 @@ def _labels_for(split: str) -> tuple[np.ndarray, np.ndarray]:
 
 # ── epoching ──
 
-def _session_epochs(path, split: str, tmin: float, tmax: float, resample: float,
-                    fmin: float | None, fmax: float | None):
+class ThingsEpochCfg(BaseModel):
+    """THINGS-EEG2 epoching knobs. `split` = 'training'|'test'; `tmin`/`tmax` = the epoch window (s) around
+    each stimulus onset; `resample` = target rate (Hz); `fmin`/`fmax` = optional bandpass (None = skip)."""
+    split: str = "training"
+    tmin: float = 0.0
+    tmax: float = 1.0
+    resample: float = 250.0
+    fmin: float | None = None
+    fmax: float | None = None
+
+
+def _session_epochs(path, cfg: ThingsEpochCfg):
     """One session .npy -> (X [n,63,t] float32, concept[n], img_file[n]). Stim code -> image via metadata."""
     session = np.load(path, allow_pickle=True).item()
     raw = np.asarray(session["raw_eeg_data"])
     eeg, stim = raw[:_N_EEG], raw[_N_EEG]
     fs = float(np.asarray(session["sfreq"]))
 
-    if fmin is not None or fmax is not None:
-        eeg = bandpass(eeg, fmin or 0.1, fmax or (fs / 2 - 1), fs)
+    if cfg.fmin is not None or cfg.fmax is not None:
+        eeg = bandpass(eeg, cfg.fmin or 0.1, cfg.fmax or (fs / 2 - 1), fs)
 
     onset = np.where((stim[1:] != 0) & (stim[:-1] == 0))[0] + 1
     codes = stim[onset].astype(int)                                  # 1-based image id
-    concept_by_code, file_by_code = _labels_for(split)
+    concept_by_code, file_by_code = _labels_for(cfg.split)
     valid = (codes >= 1) & (codes <= len(concept_by_code))          # drop target/catch trials out of range
     onset, codes = onset[valid], codes[valid]
 
-    start, stop = int(round(tmin * fs)), int(round(tmax * fs))
+    start, stop = int(round(cfg.tmin * fs)), int(round(cfg.tmax * fs))
     keep = (onset + start >= 0) & (onset + stop <= eeg.shape[1])
     onset, codes = onset[keep], codes[keep]
 
@@ -181,34 +192,33 @@ def _session_epochs(path, split: str, tmin: float, tmax: float, resample: float,
     # per-channel z-score: EEG is in volts (~1e-5), which leaves BatchNorm's running variance
     # ill-conditioned -> eval-mode embeddings collapse to chance. Standardizing to O(1) fixes it.
     epochs = (epochs - epochs.mean(axis=2, keepdims=True)) / (epochs.std(axis=2, keepdims=True) + 1e-7)
-    if resample and resample != fs:
-        epochs = _resample(epochs, int(round(epochs.shape[2] * resample / fs)), axis=2).astype(np.float32)
+    if cfg.resample and cfg.resample != fs:
+        epochs = _resample(epochs, int(round(epochs.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
     return epochs, concept_by_code[codes - 1], file_by_code[codes - 1]
 
 
-def get_epochs(subjects_: list[int] | None = None, *, split: str = "training",
-               tmin: float = 0.0, tmax: float = 1.0, resample: float = 250.0,
-               fmin: float | None = None, fmax: float | None = None, n_jobs: int = 1
+def get_epochs(subjects_: list[int] | None = None, config: ThingsEpochCfg | None = None, *, n_jobs: int = 1
                ) -> tuple[np.ndarray, np.ndarray, np.ndarray, pl.DataFrame]:
     """Epoch THINGS-EEG2 for the EEG->image task (our own preprocessing off the raw).
 
     Returns (eeg [n,63,t] float32, concept [n] int in [0,1653]/[0,199], img_file [n] str, meta {subject,session}).
-    `split` = 'training' (16,540 concept-images) or 'test' (200 held-out concepts). The concept index matches
-    `neuroscan/tasks/visual/clip_targets.py` (sorted concept order), so retrieval lines up.
+    `config.split` = 'training' (16,540 concept-images) or 'test' (200 held-out concepts). The concept index
+    matches `neuroscan/tasks/visual/clip_targets.py` (sorted concept order), so retrieval lines up.
 
     `n_jobs > 1` loads sessions concurrently on a THREAD pool — each session is a ~2.7 GB `.npy` load +
     band-pass + resample, all of which release the GIL, so threads overlap the disk read with the CPU work
     without pickling gigabytes across processes. Order is preserved (reproducible). Memory scales with
     n_jobs (each in-flight session holds its raw array), so keep it modest.
     """
+    cfg = config or ThingsEpochCfg()
     index = _index()
     chosen = subjects_ or sorted(index)
     work = [(subject, path) for subject in chosen
-            for path in sorted(index[subject].glob(f"ses-*/raw_eeg_{split}.npy"))]
+            for path in sorted(index[subject].glob(f"ses-*/raw_eeg_{cfg.split}.npy"))]
 
     def _epoch(item):
         subject, path = item
-        return subject, path, _session_epochs(path, split, tmin, tmax, resample, fmin, fmax)
+        return subject, path, _session_epochs(path, cfg)
 
     if n_jobs and n_jobs > 1:
         with ThreadPoolExecutor(max_workers=n_jobs) as pool:
