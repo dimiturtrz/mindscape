@@ -65,6 +65,21 @@ def test_fused_node_series_eeg_format():
     assert set(coupling) == {"lag", "decay", "beta"}
 
 
+def test_channel_series_fixed_lag_override_skips_estimation():
+    """`SeriesConfig.lag_s` overrides the derived hemodynamic offset: the returned coupling reports exactly
+    that lag and NaN decay/beta (no estimation ran)."""
+    rng = np.random.default_rng(5)
+    n = 3
+    Xe = rng.standard_normal((n, 8, 4000))               # 8 EEG ch @100 Hz
+    Xf = rng.standard_normal((n, 12, 320))               # 6 HbO + 6 HbR @10 Hz
+    eeg, neural, t_dst, coupling = bc.channel_series(
+        Xe, Xf, bc.SeriesConfig(fps=10.0, t_end=20.0, lag_s=3.0))
+    assert coupling["lag"] == 3.0
+    assert np.isnan(coupling["decay"]) and np.isnan(coupling["beta"])
+    assert set(eeg) == {"theta", "alpha", "beta"}
+    assert neural.shape[0] == n and t_dst.shape == (200,)
+
+
 def test_csd_transform_preserves_shape():
     """CSD (surface Laplacian) is a spatial filter — same [n, ch, t] shape, finite, and actually CHANGES the
     data (it's a high-pass, not identity). Real 10-20 names so the montage resolves."""

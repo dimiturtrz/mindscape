@@ -28,7 +28,7 @@ from sklearn.model_selection import GroupKFold
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
-from core.features import amplitude_features, band_powers
+from core.features import amplitude_features, band_powers, zscore_per_subject
 from neuroscan.evaluation import metrics, results
 
 logger = logging.getLogger(__name__)
@@ -42,22 +42,11 @@ def _lda():
     return LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")
 
 
-def _zscore(F, g):
-    """Per-subject z-score: standardize each subject's rows by ITS OWN feature mean/std (transductive — uses
-    all of the subject's rows). The honest calibration-half variant computes its stats inline in
-    `_cv_calib_half`, so this stays a single-purpose helper."""
-    out = F.copy()
-    for s in np.unique(g):
-        m = g == s
-        out[m] = (F[m] - F[m].mean(0)) / (F[m].std(0) + 1e-6)
-    return out
-
-
 def _cv_raw_or_transductive(F, y, g, subs, zt):
     accs = []
     for tr, te in GroupKFold(_K).split(subs, groups=subs):
         mtr, mte = np.isin(g, subs[tr]), np.isin(g, subs[te])
-        Fz = _zscore(F, g) if zt else F
+        Fz = zscore_per_subject(F, g) if zt else F
         accs.append(metrics.accuracy(y[mte], _lda().fit(Fz[mtr], y[mtr]).predict(Fz[mte])))
     return float(np.mean(accs))
 
@@ -67,7 +56,7 @@ def _cv_calib_half(F, y, g, subs, rng):
     a random half of its blocks and score the other half."""
     accs = []
     for tr, te in GroupKFold(_K).split(subs, groups=subs):
-        Ftr = _zscore(F, g)                                   # train side: per-subject z (train subjects only used)
+        Ftr = zscore_per_subject(F, g)                        # train side: per-subject z (train subjects only used)
         mtr = np.isin(g, subs[tr])
         clf = _lda().fit(Ftr[mtr], y[mtr])
         yt, yp = [], []
@@ -107,7 +96,7 @@ def main():
         "fnirs_ztrans": _cv_raw_or_transductive(Ff, y, ge, subs, zt=True),
     }
     # fusion picture on the z-scored (transductive) features: EEG becomes the strong modality; oracle grows
-    Fez, Ffz = _zscore(Fe, ge), _zscore(Ff, ge)
+    Fez, Ffz = zscore_per_subject(Fe, ge), zscore_per_subject(Ff, ge)
     CE, CF, LATE = [], [], []
     for tr, te in GroupKFold(_K).split(subs, groups=subs):
         mtr, mte = np.isin(ge, subs[tr]), np.isin(ge, subs[te])

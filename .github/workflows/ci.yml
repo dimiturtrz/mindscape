@@ -31,6 +31,10 @@ jobs:
       - name: Coverage — advisory (logic %, non-blocking)
         if: always()
         run: uv run coverage report || true
+      # Enforced floor (bd mindscape-y63 coverage-ratchet): the logic cores under tasks/ are extracted +
+      # tested, so the gate now BLOCKS below 80% (logic %). Raise the floor as coverage climbs.
+      - name: Coverage floor — enforced (>=80, blocks)
+        run: uv run coverage report --fail-under=80
 
   # Code-quality ratchet (bd mindscape-y63). ENFORCED step blocks on the graduated families (grows one per
   # phase); ADVISORY steps surface the rest of the curated backlog + formatting without blocking.

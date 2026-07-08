@@ -7,6 +7,7 @@ scale-invariance, and that the decoder beats chance through the fit/predict_prob
 import numpy as np
 import pytest
 
+from baselines.eeg import bandpower as bp_module
 from baselines.eeg.bandpower import EegBandpower
 from core.features import band_powers as _bandpower
 
@@ -63,3 +64,10 @@ def test_fit_returns_self_and_proba_contract(relative):
     clf = EegBandpower(fs=FS, relative=relative)
     assert clf.fit(X, y) is clf                              # fit -> self (Decoder contract)
     assert clf.predict_proba(X).shape == (len(y), 2)
+
+
+def test_module_shims_delegate_to_class():
+    X, y = _band_dataset(n_per_class=15)
+    clf = bp_module.fit(X, y)
+    probs = bp_module.score(clf, X)
+    assert probs.shape == (len(y), 2)

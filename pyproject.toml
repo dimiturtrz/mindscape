@@ -69,8 +69,9 @@ ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer"
 # adapters (OSF/OpenNeuro download, disk read), onnx/CLIP glue, mlflow tracking. Honesty rule: never omit a
 # module to DODGE pure logic — extract the core and test it (e.g. `_eval.cv_score`, `combine`, `base`), then
 # omit the shell. Logic files stay IN; low coverage there is honest signal to close (bd mindscape-y63
-# coverage-ratchet), not noise to hide. Gate is ADVISORY (CI prints, never fails) until a baseline floor is
-# set + ratcheted once the logic cores under `tasks/` are extracted + tested.
+# coverage-ratchet), not noise to hide. The logic cores under `tasks/` are now extracted + tested, so the
+# gate is ENFORCED: CI blocks below 80% (logic %) via `coverage report --fail-under=80` (ratchet the floor
+# up as coverage climbs); the advisory report step stays for the per-file missing-line view.
 [tool.coverage.run]
 source = ["core", "neuroscan", "baselines"]
 omit = [
@@ -85,9 +86,11 @@ omit = [
     "baselines/fusion/gate.py", "baselines/fusion/spatiotemporal.py", "core/data/eeg/braindecode_pre.py",
     # data adapters: filesystem read / OSF+OpenNeuro download
     "core/data/*/registry.py", "core/data/eeg/things_eeg2.py", "core/data/fnirs/shin2017.py",
-    # workload/fusion runners: load -> fit -> record orchestration (their logic lives in combine/base/_eval)
+    # workload/fusion runners: load -> fit -> record orchestration (their logic lives in combine/base/_eval,
+    # and the per-subject z-score in core.features.zscore_per_subject)
     "neuroscan/tasks/workload/run_fnirs.py", "neuroscan/tasks/workload/run_fusion.py",
-    "neuroscan/tasks/workload/fusion_gate.py", "neuroscan/tasks/workload/fusion_camera_eval.py",
+    "neuroscan/tasks/workload/fusion_gate.py", "neuroscan/tasks/workload/calibration_ablation.py",
+    "neuroscan/tasks/workload/fusion_camera_eval.py",
     "neuroscan/tasks/workload/fusion_riemann_eval.py", "neuroscan/tasks/workload/fnirs_windowed_eval.py",
     "neuroscan/tasks/workload/fnirs_glm_eval.py", "neuroscan/tasks/workload/fnirs_clean_ablation.py",
     "neuroscan/tasks/workload/coupling_probe.py", "neuroscan/tasks/workload/workload_confusion.py",

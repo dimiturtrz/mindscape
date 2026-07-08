@@ -15,3 +15,8 @@ def test_ceilings_unknown_is_empty():
 def test_compare_reports_gap_and_source():
     s = reference.compare(0.60, "bnci2014_001", "within_subject", method="fbcsp")
     assert "fbcsp" in s and "Ang" in s
+
+
+def test_compare_no_reference_recorded():
+    s = reference.compare(0.60, "nope", "within_subject")
+    assert "no reference recorded" in s and "0.600" in s
