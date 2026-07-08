@@ -75,7 +75,8 @@ class Shin2017NirsAdapter:
                 from scipy.signal import resample as _rs
                 X = _rs(X, int(round(X.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
             n = len(ye)
-            Xs.append(X); ys.append(ye)
+            Xs.append(X)
+            ys.append(ye)
             subj += [str(sub)] * n
             sess += [str(i // 9) for i in range(n)]                                   # 27 blocks -> 3 sessions of 9
             run += ["0"] * n

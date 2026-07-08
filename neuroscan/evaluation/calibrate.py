@@ -27,6 +27,10 @@ from neuroscan.models import decoders
 
 logger = logging.getLogger(__name__)
 
+_EPS = 1e-6              # guard against divide-by-zero when the val fix is ~0 (nothing to transfer)
+_TRANSFER_LIMITED = 0.5  # transfer ratio below this: calibration is domain-shift-limited
+_TRANSFER_GOOD = 1.2     # transfer ratio at/above this: calibration transfers well cross-session
+
 
 class TemperatureScaler:
     """Post-hoc temperature scaling (Guo 2017): one scalar T (logits -> logits/T), fit on a held-out val
@@ -126,7 +130,7 @@ def main():
     # the headline read: how much of the val-ECE fix transfers to the cross-session test
     val_fix = summary["val_ece"]["uncal"] - summary["val_ece"]["temp"]
     test_fix = summary["test_ece"]["uncal"] - summary["test_ece"]["temp"]
-    summary["transfer_ratio"] = round(test_fix / val_fix, 3) if val_fix > 1e-6 else None
+    summary["transfer_ratio"] = round(test_fix / val_fix, 3) if val_fix > _EPS else None
 
     logger.info(f"\n=== {args.method} temperature scaling (in-session val -> cross-session test) ===")
     logger.info(f"  val  ECE {summary['val_ece']['uncal']:.3f} -> {summary['val_ece']['temp']:.3f}  (fixed {val_fix:+.3f})")
@@ -134,9 +138,9 @@ def main():
     tr = summary["transfer_ratio"]
     if tr is None:
         verdict = "val already calibrated — nothing to transfer"
-    elif tr < 0.5:
+    elif tr < _TRANSFER_LIMITED:
         verdict = "calibration is domain-shift-LIMITED (val fix does not transfer to cross-session)"
-    elif tr < 1.2:
+    elif tr < _TRANSFER_GOOD:
         verdict = "calibration transfers partially across the session shift"
     else:
         verdict = "calibration transfers well (test fixed >= val) — model already low-ECE cross-session"

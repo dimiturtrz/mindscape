@@ -29,6 +29,8 @@ MODELS: dict[str, dict] = {
 DEFAULTS = {"n_train_crops": 16, "n_test_crops": 8, "log_every": 100, "val_frac": 0.2,
             "crop_frac": 0.5, "standardize": "ems"}
 
+_MIN_TRIALS_FOR_VAL = 8   # need more than this many trials before carving a held-out val split for early stopping
+
 
 # standardizers + crops live in transforms.py (independently testable). Re-exported with the legacy
 # private names so callers (e.g. tasks/motor_imagery/quantize.py) keep working.
@@ -76,7 +78,7 @@ class BraindecodeClf:
     def _make_train_val(self, Xs, y):
         """Trial-level train/val split (val carved from held-out TRIALS, no crop leakage), then crop."""
         cl = self.crop_len
-        use_val = self.patience > 0 and len(Xs) > 8
+        use_val = self.patience > 0 and len(Xs) > _MIN_TRIALS_FOR_VAL
         if use_val:
             order = np.random.default_rng(self.seed).permutation(len(Xs))
             nv = max(2, int(len(Xs) * self.val_frac))

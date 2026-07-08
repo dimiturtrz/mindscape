@@ -93,7 +93,8 @@ def main():
     subs = np.array(sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list())))
     qe = me.filter(me["subject"].is_in([str(s) for s in subs]))
     qf = mf.filter(mf["subject"].is_in([str(s) for s in subs]))
-    Xe, y = store.gather(qe); Xf, yf = store.gather(qf)
+    Xe, y = store.gather(qe)
+    Xf, yf = store.gather(qf)
     assert np.array_equal(y, yf), "EEG/fNIRS blocks misaligned"
     ge = qe["subject"].to_numpy()
     Fe, Ff = band_powers(Xe, _EEG_CFG.resample), amplitude_features(Xf)
@@ -112,7 +113,8 @@ def main():
         mtr, mte = np.isin(ge, subs[tr]), np.isin(ge, subs[te])
         pe = _lda().fit(Fez[mtr], y[mtr]).predict_proba(Fez[mte])
         pf = _lda().fit(Ffz[mtr], y[mtr]).predict_proba(Ffz[mte])
-        CE.append(pe.argmax(1) == y[mte]); CF.append(pf.argmax(1) == y[mte])
+        CE.append(pe.argmax(1) == y[mte])
+        CF.append(pf.argmax(1) == y[mte])
         LATE.append(((pe + pf) / 2).argmax(1) == y[mte])
     ce, cf, late = np.concatenate(CE), np.concatenate(CF), np.concatenate(LATE)
     out.update({

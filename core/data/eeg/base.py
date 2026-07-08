@@ -91,6 +91,6 @@ class MoabbMIAdapter:
         paradigm = MotorImagery(n_classes=self.n_classes, fmin=cfg.fmin, fmax=cfg.fmax,
                                 tmin=cfg.tmin, tmax=cfg.tmax, resample=cfg.resample)
         X, labels, meta = paradigm.get_data(dataset=ds, subjects=subjects or self.subjects())
-        y = np.array([self.label_map[str(l)] for l in labels], dtype=np.int64)
+        y = np.array([self.label_map[str(label)] for label in labels], dtype=np.int64)
         m = pl.from_pandas(meta[["subject", "session", "run"]].astype(str))
         return X.astype(np.float32), y, m

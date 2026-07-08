@@ -49,7 +49,8 @@ def _cv(F, fam, y, groups, families):
         clf = make_pipeline(StandardScaler(),
                             LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")).fit(Fr[tr], y[tr])
         pred = clf.predict(Fr[te])
-        accs.append(metrics.accuracy(y[te], pred)); kaps.append(metrics.kappa(y[te], pred))
+        accs.append(metrics.accuracy(y[te], pred))
+        kaps.append(metrics.kappa(y[te], pred))
     return float(np.mean(accs)), float(np.std(accs)), float(np.mean(kaps))
 
 

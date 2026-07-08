@@ -80,7 +80,9 @@ def aggregate(method: str, fit_fn, score_fn, folds, n_classes: int, regime: str 
             models_out.append((name, clf))
         per.append(row)
         logger.info(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  ece {row['ece']:.3f}  (n={row['n']})")
-        P.append(probs); Y.append(yte); G.append(np.full(len(yte), name))
+        P.append(probs)
+        Y.append(yte)
+        G.append(np.full(len(yte), name))
 
     probs, y, _ = np.concatenate(P), np.concatenate(Y), np.concatenate(G)
     pred = probs.argmax(1)

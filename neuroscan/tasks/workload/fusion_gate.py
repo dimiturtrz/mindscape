@@ -98,13 +98,18 @@ def main():
         tr_subs, te_subs = subs[tr], subs[te]
         # inner val: hold out one GroupKFold slice of the TRAIN subjects for early stopping
         itr, iva = next(GroupKFold(n_splits=4).split(tr_subs, groups=tr_subs))
-        va_subs = tr_subs[iva]; fit_subs = tr_subs[itr]
-        m_fit = np.isin(g, fit_subs); m_va = np.isin(g, va_subs); m_te = np.isin(g, te_subs)
+        va_subs = tr_subs[iva]
+        fit_subs = tr_subs[itr]
+        m_fit = np.isin(g, fit_subs)
+        m_va = np.isin(g, va_subs)
+        m_te = np.isin(g, te_subs)
 
         clf = GatedFusion(Fe.shape[1], Ff.shape[1], n_classes)
         clf.fit(Fe[m_fit], Ff[m_fit], y[m_fit], Fe[m_va], Ff[m_va], y[m_va])
         p, a = clf.predict(Fe[m_te], Ff[m_te])
-        P.append(p); A.append(a); Y.append(y[m_te])
+        P.append(p)
+        A.append(a)
+        Y.append(y[m_te])
         acc = metrics.accuracy(y[m_te], p.argmax(1))
         rows.append({"fold": str(i), "n": int(m_te.sum()), "gate_acc": acc,
                      "alpha_mean": float(a.mean())})

@@ -29,5 +29,6 @@ def cv_score(build, X, y, groups, *, grouped: bool, seeds=(0, 1, 2), k: int = 5,
         for tr, te in sp.split(X, y, groups if grouped else None):
             clf = (build() if build is not None else FnirsLda()).fit(X[tr], y[tr])
             pred = clf.predict_proba(X[te]).argmax(1)
-            accs.append(metrics.accuracy(y[te], pred)); kaps.append(metrics.kappa(y[te], pred))
+            accs.append(metrics.accuracy(y[te], pred))
+            kaps.append(metrics.kappa(y[te], pred))
     return float(np.mean(accs)), float(np.std(accs)), float(np.mean(kaps))

@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 _FS_E, _FS_F, _TMIN_F, _FPS, _TEND = 100.0, 10.0, -2.0, 10.0, 20.0
 _BETA = (13.0, 30.0)                                 # β power ~ the (de)synchronization that couples to blood
+_LAG_STABLE_STD_S = 2                                # per-subject lag std (s) below which the coupling fit is STABLE
 
 
 def _global_series(subject_frames):
@@ -42,7 +43,9 @@ def _global_series(subject_frames):
         tf = _TMIN_F + np.arange(Xf.shape[2]) / _FS_F
         cbsi = bc.cbsi_neural(bc._resample_time(Xf[:, :ch_f, :], tf, t_dst),
                               bc._resample_time(Xf[:, ch_f:, :], tf, t_dst)).mean(1)          # [n, T]
-        drives.append(beta); resps.append(cbsi); groups.append([s] * len(beta))
+        drives.append(beta)
+        resps.append(cbsi)
+        groups.append([s] * len(beta))
     return drives, resps, groups
 
 
@@ -74,7 +77,7 @@ def main():
     logger.info(f"\nPOOLED gamma fit: lag {lag:.1f}s · decay {decay:.2f}s · β {beta:.2g}")
     per = np.array([bc.estimate_coupling(dv, rp, _FPS)[0] for dv, rp in zip(drives, resps, strict=True)])
     logger.info(f"per-subject lag: mean {per.mean():.1f}s · std {per.std():.1f}s · range [{per.min():.1f}, {per.max():.1f}] "
-          f"-> {'STABLE' if per.std() < 2 else 'UNSTABLE (pool instead)'}")
+          f"-> {'STABLE' if per.std() < _LAG_STABLE_STD_S else 'UNSTABLE (pool instead)'}")
 
 
 if __name__ == "__main__":

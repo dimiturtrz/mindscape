@@ -31,6 +31,7 @@ _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _FN_TMAX, _FPS, _TEND = 32.0, 10.0, 20.0
 _SEEDS, _K = [0, 1, 2], 5
 _CSD = True                                        # surface-Laplacian deblur of EEG before fusion
+_FNIRS_BASELINE_ACC = 0.595                        # EEG-only re-centered Riemann reference (0.580) + margin
 
 
 def _cov(X):
@@ -53,7 +54,9 @@ def _build_all(band="sum"):
             Xe = bc.csd_transform(Xe, ch_e, 100.0)                     # spatial deblur before fusion
         pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
         joint, _ = bc.fused_node_series(Xe, Xf, pos_e, pos_f, band=band, fps=_FPS, t_end=_TEND)
-        Cs.append(_cov(joint)); ys.append(ye); gs.append(np.array([s] * len(ye)))
+        Cs.append(_cov(joint))
+        ys.append(ye)
+        gs.append(np.array([s] * len(ye)))
     return np.concatenate(Cs), np.concatenate(ys), np.concatenate(gs)
 
 
@@ -70,12 +73,13 @@ def main():
             # winning EEG method: per-subject re-center (train AND test, unsupervised) -> tangent -> LR
             proba = transfer.zero_shot_predict(C[tr], y[tr], g[tr], C[te], scale=False, target_groups=g[te])
             pred = proba.argmax(1)
-            accs.append(metrics.accuracy(y[te], pred)); kaps.append(metrics.kappa(y[te], pred))
+            accs.append(metrics.accuracy(y[te], pred))
+            kaps.append(metrics.kappa(y[te], pred))
     a, k = float(np.mean(accs)), float(np.mean(kaps))
     logger.info(f"\n  fused-only (joint EEG×fNIRS×coverage) · re-centered tangent · cross-subject {len(_SEEDS)}x{_K}-fold: "
           f"acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
     logger.info("  reference (same protocol, EEG-only re-centered Riemann): best-single 0.580")
-    logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {'FUSION CASHED something' if a > 0.595 else 'fair null (fusion adds nothing decodable)'}")
+    logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {'FUSION CASHED something' if a > _FNIRS_BASELINE_ACC else 'fair null (fusion adds nothing decodable)'}")
 
 
 if __name__ == "__main__":

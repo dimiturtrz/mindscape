@@ -46,7 +46,8 @@ class BrainCameraNet:
         self.net_.train()
         for _ in range(self.epochs):
             for idx in np.array_split(rng.permutation(n), max(1, n // self.batch)):
-                xb = Xt[idx].to(self.dev_); yb = yt[idx].to(self.dev_)
+                xb = Xt[idx].to(self.dev_)
+                yb = yt[idx].to(self.dev_)
                 opt.zero_grad()
                 lossf(self.net_(xb), yb).backward()
                 opt.step()
