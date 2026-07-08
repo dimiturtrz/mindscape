@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from core.data.eeg import things_eeg1, things_eeg2
 from neuroscan.evaluation import cross_dataset as bridge
-from neuroscan.evaluation.retrieval import retrieval_calibration
+from neuroscan.evaluation.retrieval import retrieval_calibration, retrieval_metrics
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tasks.visual.train_nice import RetrievalSet, TrainConfig, evaluate, train_encoder
 
@@ -98,13 +98,16 @@ def run(cfg: CrossDatasetConfig) -> dict:
     topk = evaluate(encoder, RetrievalSet(e2_eeg, e2_concept, test_bank), device)
 
     scores = _embed(encoder, e2_eeg, device) @ test_bank.T
+    metrics = retrieval_metrics(scores, e2_concept)
     calib = retrieval_calibration(scores, e2_concept, scale=_LOGIT_SCALE)
     logger.info(f"cross-dataset EEG1->EEG2: single top1 {topk['single_trial'][1]*100:.2f}%  "
-          f"avg top1 {topk['concept_avg'][1]*100:.2f}%  ECE {calib['ece']:.3f}  conf-gap {calib['conf_gap']:.3f}")
+          f"MRR {metrics['mrr']:.3f}  median-rank {metrics['median_rank']:.0f}/{len(eval_names)}  "
+          f"PR-AUC {metrics['pr_auc']:.3f}  ECE {calib['ece']:.3f}")
     return {"direction": "eeg1->eeg2", "eeg1_subjects": list(cfg.eeg1_subjects),
             "eeg2_subjects": list(cfg.eeg2_subjects), "n_candidates": len(eval_names),
             "chance_top1": 1 / len(eval_names), **stats,
             "single_trial": topk["single_trial"], "concept_avg": topk["concept_avg"],
+            "retrieval_metrics": metrics,
             "calibration": {"ece": calib["ece"], "conf_gap": calib["conf_gap"], "top1_acc": calib["top1_acc"]}}
 
 

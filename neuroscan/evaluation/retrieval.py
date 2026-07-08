@@ -1,14 +1,36 @@
-"""Calibration diagnostics for zero-shot retrieval — does the model KNOW when it's right?
+"""Retrieval quality + calibration diagnostics for zero-shot EEG->image.
 
-Cross-subject EEG->image retrieval reports a low top-k (the honest number). A deployable system also needs
-the confidence to be trustworthy: when the retrieval is confident, is it actually right? This module turns
-the per-trial candidate scores into a confidence (softmax over the candidate bank) and measures how well that
-confidence tracks correctness — the expected calibration error (ECE), a reliability curve, and the gap between
-the mean confidence on hits vs misses. Pure numpy so it's testable without a trained encoder.
+`retrieval_metrics` — richer than top-k: recall@k, MRR, median rank, PR-AUC (top-1 alone hides whether the
+true concept landed at rank 2 or rank 200). `retrieval_calibration` — does the model KNOW when it's right?:
+softmax the candidate scores into a confidence, then ECE + a reliability curve + the hit-vs-miss confidence
+gap. Both pure (numpy/sklearn on the [N, C] score matrix), testable without a trained encoder.
 """
 from __future__ import annotations
 
 import numpy as np
+from sklearn.metrics import average_precision_score
+
+
+def retrieval_metrics(scores: np.ndarray, labels: np.ndarray, ks: tuple[int, ...] = (1, 5)) -> dict:
+    """Full retrieval quality from the [N, C] candidate-score matrix + true label per trial — richer than
+    top-k, which discards WHERE the true concept ranked (rank 2 vs rank C look identical at top-1).
+
+    Returns recall@k, MRR (mean reciprocal rank), median rank, and PR-AUC. Rank is 1-based (# candidates
+    scoring strictly higher than the true one, +1). Note: mean-average-precision equals MRR here because each
+    trial has exactly one relevant candidate, so it isn't reported separately. PR-AUC (over all N×C pairs,
+    positive = the true candidate) is the honest AUC under the 1-vs-(C-1) imbalance — ROC-AUC inflates.
+    """
+    scores, labels = np.asarray(scores, dtype=float), np.asarray(labels)
+    n = len(labels)
+    true_score = scores[np.arange(n), labels]
+    ranks = (scores > true_score[:, None]).sum(axis=1) + 1        # 1-based rank of the true candidate
+    out = {f"recall@{k}": float((ranks <= k).mean()) for k in ks}
+    out["mrr"] = float((1.0 / ranks).mean())
+    out["median_rank"] = float(np.median(ranks))
+    relevant = np.zeros_like(scores, dtype=int)
+    relevant[np.arange(n), labels] = 1
+    out["pr_auc"] = float(average_precision_score(relevant.ravel(), scores.ravel()))
+    return out
 
 
 def _softmax(scores: np.ndarray) -> np.ndarray:

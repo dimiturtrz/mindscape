@@ -1,7 +1,26 @@
-"""Retrieval confidence calibration — pure, on synthetic candidate-score matrices."""
+"""Retrieval confidence calibration + rank metrics — pure, on synthetic candidate-score matrices."""
 import numpy as np
 
-from neuroscan.evaluation.retrieval import retrieval_calibration
+from neuroscan.evaluation.retrieval import retrieval_calibration, retrieval_metrics
+
+
+def test_retrieval_metrics_known_ranks():
+    # trial0: true=0 is the top score (rank 1); trial1: true=0 has two higher (rank 3)
+    scores = np.array([[10.0, 1, 1, 1, 1],
+                       [1.0, 10, 5, 1, 1]])
+    labels = np.array([0, 0])
+    m = retrieval_metrics(scores, labels, ks=(1, 5))
+    assert m["recall@1"] == 0.5 and m["recall@5"] == 1.0
+    assert abs(m["mrr"] - (1.0 + 1.0 / 3) / 2) < 1e-9        # (1/1 + 1/3)/2
+    assert m["median_rank"] == 2.0                            # ranks [1, 3]
+    assert 0.0 <= m["pr_auc"] <= 1.0
+
+
+def test_retrieval_metrics_perfect_vs_worst():
+    C = 5
+    scores_perfect = np.eye(C) * 10                          # each trial's true label scores highest
+    m = retrieval_metrics(scores_perfect, np.arange(C))
+    assert m["recall@1"] == 1.0 and m["mrr"] == 1.0 and m["median_rank"] == 1.0 and m["pr_auc"] == 1.0
 
 
 def _scores(n_conf_correct, n_flat_wrong, n_cand=5, seed=0):

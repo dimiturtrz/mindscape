@@ -474,11 +474,14 @@ hardest honest test: train on **THINGS-EEG1** (Grootswagers, ds003825 — 50 sub
 RSVP, [adapter](core/data/eeg/things_eeg1.py) real-data validated) and retrieve on **THINGS-EEG2** — different
 people, different rig, same 1,854 THINGS concepts. EEG2's 200 test concepts are held out of EEG1 training
 ([bridge](neuroscan/evaluation/cross_dataset.py)) so it stays cross-dataset *and* concept-zero-shot *and*
-cross-subject at once; retrieval reuses EEG2's shared CLIP bank. **Status: implemented but not yet a valid
-result.** The naive run trains a real EEG1 representation (within-EEG1 val 2.2%, 4× chance) but retrieves on
-EEG2 at *chance* (0.6% top-1) — because the two rigs' 63 channels aren't montage-aligned, so the encoder's
-spatial filters land on the wrong electrodes at eval. That chance number is **confounded, not a finding**;
-electrode-name alignment is the open blocker (bd mindscape-fji) before the transfer question can be answered.
+cross-subject at once; retrieval reuses EEG2's shared CLIP bank. **Result: a genuine negative — naive
+cross-dataset transfer fails.** The EEG1 encoder learns (within-EEG1 val 2.4%, ~5× chance) but retrieves on
+EEG2 at chance (0.5% top-1), and **montage-aligning the 62 shared electrodes does not rescue it** — the two
+rigs share all but Fz/Cz but in scrambled channel order, and fixing that (`common_channel_order`/`align_channels`)
+leaves the result at chance. So the failure isn't a channel-order artifact; the datasets are simply too far
+apart (different rig + reference, 10 Hz vs 5 Hz RSVP, EEG1's weaker single-shot SNR). *Honest caveat: reference
+and filtering aren't harmonized either, so this is "naive transfer fails," not "transfer is impossible" — a
+common-reference re-projection is the untested next step.*
 
 → **[neuroscan/tasks/visual/](neuroscan/tasks/visual/)**
 
