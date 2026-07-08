@@ -93,8 +93,9 @@ class RetrievalSet:
 def evaluate(encoder, data: RetrievalSet, device, batch: int = _EVAL_BATCH) -> dict:
     """Single-trial + concept-averaged retrieval top-1/5 against a per-concept prototype bank."""
     encoder.eval()
-    embedded = torch.cat([encoder(torch.tensor(data.eeg[i:i + batch]).to(device)).cpu()
-                          for i in range(0, len(data.eeg), batch)])      # [N,512] normalized
+    with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda")):
+        embedded = torch.cat([encoder(torch.tensor(data.eeg[i:i + batch]).to(device)).float().cpu()
+                              for i in range(0, len(data.eeg), batch)])  # [N,512] normalized (back to fp32)
     candidate_bank = torch.tensor(data.candidates)
     labels = torch.tensor(data.concept)
     single = retrieval_topk(embedded, candidate_bank, labels)
@@ -151,8 +152,9 @@ def train_encoder(train_eeg: np.ndarray, train_targets: np.ndarray, train_concep
             eeg_batch = eeg_batch.to(device)
             target_batch = torch.nn.functional.normalize(target_batch.to(device), dim=-1)
             optimizer.zero_grad()
-            loss = clip_infonce(encoder(eeg_batch), target_batch, logit_scale.exp().clamp(max=100))
-            loss.backward()
+            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda")):
+                loss = clip_infonce(encoder(eeg_batch), target_batch, logit_scale.exp().clamp(max=100))
+            loss.backward()                                # bf16 autocast needs no GradScaler (unlike fp16)
             optimizer.step()
             total_loss += loss.item()
 
