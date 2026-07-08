@@ -54,18 +54,18 @@ def _load_features():
     Xe, ye = store.gather(qe)
     Xf, yf = store.gather(qf)
     assert np.array_equal(ye, yf), "EEG/fNIRS blocks misaligned — fusion invalid"
-    g = qe["subject"].to_numpy()
+    groups = qe["subject"].to_numpy()
     Fe = band_powers(Xe, _EEG_CFG.resample).astype(np.float32)         # [n, 28*3]
     Ff = amplitude_features(Xf).astype(np.float32)                     # [n, ch*3]
-    return Fe, Ff, ye.astype(np.int64), g
+    return Fe, Ff, ye.astype(np.int64), groups
 
 
-def _zscore_per_subject(F, g):
+def _zscore_per_subject(F, groups):
     """Standardize each feature within each subject (its own mean/std) — unsupervised, so it applies to a
     held-out test subject too. Removes the subject-specific offset that sinks cross-subject band-power."""
     out = np.empty_like(F)
-    for s in np.unique(g):
-        m = g == s
+    for s in np.unique(groups):
+        m = groups == s
         mu, sd = F[m].mean(0), F[m].std(0)
         out[m] = (F[m] - mu) / (sd + 1e-6)
     return out
@@ -85,9 +85,9 @@ def main():
 
     from sklearn.model_selection import GroupKFold
 
-    Fe, Ff, y, g = _load_features()
-    Fe, Ff = _zscore_per_subject(Fe, g), _zscore_per_subject(Ff, g)
-    subs = np.array(sorted(set(g)))
+    Fe, Ff, y, groups = _load_features()
+    Fe, Ff = _zscore_per_subject(Fe, groups), _zscore_per_subject(Ff, groups)
+    subs = np.array(sorted(set(groups)))
     n_classes = int(y.max()) + 1
     logger.info(f"gated fusion: {len(y)} blocks · {len(subs)} subjects · EEG {Fe.shape[1]}d · fNIRS {Ff.shape[1]}d · "
           f"chance {1/n_classes:.3f}")
@@ -100,9 +100,9 @@ def main():
         itr, iva = next(GroupKFold(n_splits=4).split(tr_subs, groups=tr_subs))
         va_subs = tr_subs[iva]
         fit_subs = tr_subs[itr]
-        m_fit = np.isin(g, fit_subs)
-        m_va = np.isin(g, va_subs)
-        m_te = np.isin(g, te_subs)
+        m_fit = np.isin(groups, fit_subs)
+        m_va = np.isin(groups, va_subs)
+        m_te = np.isin(groups, te_subs)
 
         clf = GatedFusion(Fe.shape[1], Ff.shape[1], n_classes)
         clf.fit(Fe[m_fit], Ff[m_fit], y[m_fit], Fe[m_va], Ff[m_va], y[m_va])

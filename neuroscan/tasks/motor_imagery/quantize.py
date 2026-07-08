@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+from scipy.special import softmax
 
 from core import export_onnx
 from core.data import store
@@ -36,9 +37,7 @@ def _onnx_trial_proba(path, X_std, crop_len, n_test_crops):
     else:
         Xc, tidx = X_std, np.arange(len(X_std))
     logits = export_onnx.run(path, Xc)
-    z = logits - logits.max(1, keepdims=True)
-    p = np.exp(z)
-    p /= p.sum(1, keepdims=True)
+    p = softmax(logits, axis=1)
     out = np.zeros((len(X_std), p.shape[1]))
     np.add.at(out, tidx, p)
     return out / (n_test_crops if crop_len else 1)
@@ -110,11 +109,12 @@ def main():
     with tracking.run("mindscape", f"quantize_{args.method}",
                       params={"method": args.method, "subject": str(sub)},
                       tags={"kind": "quantize"}, run_dir=rep_dir):
-        a, s, lat = rep["accuracy"], rep["size_mb"], rep["latency_ms_cpu"]
-        m = {"acc_torch_fp32": a["torch_fp32"], "acc_onnx_fp32": a["onnx_fp32"],
-             "size_fp32_mb": s["fp32"], "latency_fp32_ms": lat["fp32"], "parity_max_dlogit": gap}
-        if "onnx_int8" in a:
-            m.update({"acc_onnx_int8": a["onnx_int8"], "size_int8_mb": s["int8"], "latency_int8_ms": lat["int8"]})
+        accuracy, size, latency = rep["accuracy"], rep["size_mb"], rep["latency_ms_cpu"]
+        m = {"acc_torch_fp32": accuracy["torch_fp32"], "acc_onnx_fp32": accuracy["onnx_fp32"],
+             "size_fp32_mb": size["fp32"], "latency_fp32_ms": latency["fp32"], "parity_max_dlogit": gap}
+        if "onnx_int8" in accuracy:
+            m.update({"acc_onnx_int8": accuracy["onnx_int8"], "size_int8_mb": size["int8"],
+                      "latency_int8_ms": latency["int8"]})
         tracking.metrics(m)
     logger.info(f"\n=== {args.method} edge quantization (subject {sub}) ===")
     logger.info(f"  parity max|Δlogit| {gap:.2e}  (gate < 1e-3) OK")
