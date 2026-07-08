@@ -20,10 +20,17 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - name: Install dependencies (locked)
-        run: uv sync --frozen
-      - name: Unit tests
-        run: uv run pytest tests/unit -q
+      - name: Install dependencies (locked, + dev extra for pytest + coverage)
+        run: uv sync --frozen --extra dev
+      # One instrumented run = the test gate AND the coverage data. Config (source/omit/exclude) lives in
+      # [tool.coverage.*] — denominator is library LOGIC, not filesystem/mlflow/libs/downloads/GPU shells.
+      - name: Unit tests + coverage (tests block)
+        run: uv run pytest tests/unit --cov --cov-report=term-missing -q
+      # Coverage is ADVISORY (bd mindscape-y63 coverage-ratchet): print the logic-% + missing lines, never
+      # block, until the untested logic cores under tasks/ are extracted + tested and a floor is set.
+      - name: Coverage — advisory (logic %, non-blocking)
+        if: always()
+        run: uv run coverage report || true
 
   # Code-quality ratchet (bd mindscape-y63). ENFORCED step blocks on the graduated families (grows one per
   # phase); ADVISORY steps surface the rest of the curated backlog + formatting without blocking.
@@ -40,3 +47,20 @@ jobs:
         run: uvx ruff@0.15.13 check . --statistics || true
       - name: Ruff — format check (advisory)
         run: uvx ruff@0.15.13 format --check . || true
+
+  # Dead code — the axis ruff can't see (bd mindscape-y63). Two tiers (paths/ignores in [tool.vulture]).
+  # BLOCKS at conf>=80 (near-certain: unreachable, unused locals — currently clean); WARNS at conf>=60
+  # (dead funcs, eats entry-point/no-fan-in FPs) as GitHub annotations, never blocks.
+  deadcode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Dead code — enforced (vulture conf>=80)
+        run: uvx vulture@2.16 --min-confidence 80
+      - name: Dead code — advisory (vulture conf>=60, warns)
+        if: always()
+        run: |
+          uvx vulture@2.16 --min-confidence 60 | sed -E 's#^([^:]+):([0-9]+): (.*)$#::warning file=\1,line=\2::\3#' || true
