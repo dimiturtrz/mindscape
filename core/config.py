@@ -11,6 +11,7 @@ We also point MOABB/MNE at <data>/raw so downloads land inside the one root, not
 """
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
@@ -19,6 +20,8 @@ from moabb.datasets import download as _dl
 from moabb.utils import set_download_dir
 from omegaconf import OmegaConf
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 REPO = Path(__file__).resolve().parent.parent   # repo root — the one place that computes it
 
@@ -128,12 +131,12 @@ def configure_moabb_download() -> Path:
     os.environ["MOABB_RESULTS"] = os.fspath(processed_dir() / "moabb_results")
     try:
         mne.set_config("MNE_DATA", native, set_env=True)
-    except Exception:
-        pass
+    except OSError as exc:
+        logger.debug(f"mne.set_config: {exc}")
     try:
         set_download_dir(native)
-    except Exception:
-        pass
+    except OSError as exc:
+        logger.debug(f"moabb.set_download_dir: {exc}")
     if os.name == "nt":
         # ONLY native Windows needs this — a Windows absolute path has a drive colon that MOABB's
         # buggy sanitizer strips. Under WSL/POSIX the root is '/mnt/<drive>/...' (no colon) so MOABB works

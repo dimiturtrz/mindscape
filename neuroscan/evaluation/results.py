@@ -126,7 +126,7 @@ def record(run_dir: Path | str, out_path: Path = _OUT) -> str | None:
         runs[run_dir.name] = row
         _dump(runs, out_path)
         return run_dir.name
-    except Exception:
+    except (OSError, ValueError):
         return None
 
 

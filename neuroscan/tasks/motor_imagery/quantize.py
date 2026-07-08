@@ -132,7 +132,7 @@ def main():
         rep["latency_ms_cpu"]["int8"] = export_onnx.latency_ms(int8_path, Xc)
         rep["latency_ms_cpu"]["speedup"] = round(
             rep["latency_ms_cpu"]["fp32"] / max(rep["latency_ms_cpu"]["int8"], 1e-6), 2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         rep["int8_error"] = str(e)
 
     rep_dir = out / f"{args.method}_sub{sub}"
