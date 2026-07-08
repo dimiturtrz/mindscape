@@ -2,8 +2,31 @@
 from __future__ import annotations
 
 import torch
+import torch.nn.functional as F
 
 from neuroscan.models.nice import NiceConfig, NiceEncoder, clip_infonce, retrieval_topk
+
+
+def _pair(seed=0, b=8, d=32):
+    g = torch.Generator().manual_seed(seed)
+    eeg = F.normalize(torch.randn(b, d, generator=g), dim=-1)
+    img = F.normalize(torch.randn(b, d, generator=g), dim=-1)
+    return eeg, img, torch.tensor(14.0)
+
+
+def test_clip_infonce_hard_beta_zero_is_exact_standard():
+    eeg, img, scale = _pair()
+    logits = scale * eeg @ img.t()
+    target = torch.arange(8)
+    std = 0.5 * (F.cross_entropy(logits, target) + F.cross_entropy(logits.t(), target))
+    assert torch.allclose(clip_infonce(eeg, img, scale, hard_beta=0.0), std)   # bd fww: off by default
+
+
+def test_clip_infonce_hard_beta_raises_loss_on_hard_negatives():
+    eeg, img, scale = _pair()
+    base = clip_infonce(eeg, img, scale, hard_beta=0.0)
+    hard = clip_infonce(eeg, img, scale, hard_beta=1.0)
+    assert hard > base                                        # boosting hard negatives increases the loss
 
 
 def test_encoder_shape_and_norm():

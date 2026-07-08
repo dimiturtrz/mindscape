@@ -18,14 +18,14 @@ def _overconfident():
 
 def test_fit_temperature_softens_overconfidence():
     logits, y = _overconfident()
-    T = calibrate.fit_temperature(logits, y)
+    T = calibrate.TemperatureScaler().fit(logits, y).T
     assert T > 1.0                           # overconfident -> T>1 softens
 
 
 def test_temperature_lowers_ece_and_keeps_argmax():
     logits, y = _overconfident()
-    T = calibrate.fit_temperature(logits, y)
-    assert calibrate.ece_at(logits, y, T) < calibrate.ece_at(logits, y, 1.0)
+    T = calibrate.TemperatureScaler().fit(logits, y).T
+    assert calibrate.TemperatureScaler(T).ece(logits, y) < calibrate.TemperatureScaler(1.0).ece(logits, y)
     # argmax (accuracy) unchanged by temperature
     assert np.array_equal((logits / T).argmax(1), logits.argmax(1))
 

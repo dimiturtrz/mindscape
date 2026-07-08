@@ -1,7 +1,7 @@
 """ONNX export + INT8 quantization + parity/size/latency — the Stage-2 edge tail of training.
 
 The deployable artifact is the trained decoder, exported to ONNX and dynamically quantized to INT8 for
-commodity edge CPU. We report the honest deployment triad (the siblings' discipline, carried):
+commodity edge CPU. We report the measured deployment triad (the siblings' discipline, carried):
     accuracy:  fp32 vs int8           (the cost of quantizing)
     size:      fp32 vs int8 (MB)      (the compression)
     latency:   fp32 vs int8 (ms, CPU) (the speedup on the edge target)

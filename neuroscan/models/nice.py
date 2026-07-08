@@ -1,6 +1,6 @@
 """NICE-style EEG image encoder (Song et al., ICLR 2024) — the Stage-3 EEG->image baseline.
 
-The honest paradigm here is *retrieval*, not classification: learn an EEG encoder that maps an epoch to the
+The correct paradigm here is *retrieval*, not classification: learn an EEG encoder that maps an epoch to the
 CLIP image-embedding space, trained contrastively (InfoNCE) against the CLIP embedding of the image the
 subject was viewing. At test we do zero-shot retrieval over the 200 held-out concepts (disjoint from train):
 cosine-match the EEG embedding to the 200 candidate CLIP embeddings -> top-1/top-5 vs 0.5% chance. Generation
@@ -66,13 +66,22 @@ class NiceEncoder(nn.Module):
         return F.normalize(z, dim=-1)
 
 
-def clip_infonce(eeg: torch.Tensor, img: torch.Tensor, logit_scale: torch.Tensor) -> torch.Tensor:
+def clip_infonce(eeg: torch.Tensor, img: torch.Tensor, logit_scale: torch.Tensor,
+                 hard_beta: float = 0.0) -> torch.Tensor:
     """Symmetric InfoNCE (CLIP loss) between L2-normalized EEG and image embeddings in a batch.
 
     Positives = matched (eeg_i, img_i); negatives = every other image in the batch. Symmetric over both
     directions. `logit_scale` is the learned temperature (exp), clamped by the caller.
+
+    `hard_beta` > 0 turns on online hard-negative weighting (bd fww): each OFF-diagonal (negative) logit is
+    boosted by `hard_beta ×` its own (detached) similarity, so high-similarity negatives contribute more to
+    the softmax denominator and get a stronger push-down gradient. Rides this same forward pass — no extra
+    inference — and self-sharpens as the encoder improves. `hard_beta = 0` is the exact standard CLIP loss.
     """
     logits = logit_scale * eeg @ img.t()                   # [B,B]
+    if hard_beta > 0:
+        off_diag = ~torch.eye(eeg.shape[0], dtype=torch.bool, device=eeg.device)
+        logits = logits + hard_beta * logits.detach() * off_diag
     target = torch.arange(eeg.shape[0], device=eeg.device)
     return 0.5 * (F.cross_entropy(logits, target) + F.cross_entropy(logits.t(), target))
 

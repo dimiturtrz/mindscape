@@ -9,7 +9,7 @@ jointly:
 
 `entropy(w)` is the differentiable sparsity penalty — minimising it concentrates weight on the few families
 that earn it (good metrics grab weight, junk starves). Sweep `lambda` → the accuracy vs effective-#-features
-tradeoff curve (the Pareto analog, no black-box search). The knee subset is validated honestly on a **sealed
+tradeoff curve (the Pareto analog, no black-box search). The knee subset is validated on a **sealed
 subject holdout** the sweep never touches.
 
 `grain='family'` learns one weight per descriptor family (15); `grain='channel'` learns one per column
@@ -196,13 +196,13 @@ def main():
               f"top {[(f, round(v, 2)) for f, v in top]}")
 
     knee = _knee(sweep)
-    # honest: refit at the knee lambda on ALL search subjects, score the sealed holdout
+    # leakage-free: refit at the knee lambda on ALL search subjects, score the sealed holdout
     Xtr, Xte = _standardise(Fs, Fb[seal_idx])
     m = _fit(Xtr, ys, spec, knee["lam"], hp)
     sealed = float((_predict(m, Xte) == y[seal_idx]).mean())
     kept = {f: round(v, 3) for f, v in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1]) if v > _KEEP_WEIGHT_MIN}
     logger.info(f"\nknee λ={knee['lam']}: eff-#feat {knee['eff_n']:.2f} · search-acc {knee['acc']:.3f} (optimistic) "
-          f"· SEALED-acc {sealed:.3f} (honest)")
+          f"· SEALED-acc {sealed:.3f} (unbiased)")
     logger.info(f"knee subset (family weight>0.05): {kept}")
 
     out = REPO / cfg.out

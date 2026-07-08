@@ -7,6 +7,6 @@ subject-grouped CV plumbing (`._cv`):
                         weights + cross-seed stability. The importance *ranking* (robust) vs peak acc (optimistic).
   - `differentiable`  — the same idea by gradient descent (torch/CUDA): softmax weights + linear head, entropy(w)
                         as a differentiable sparsity penalty; sweep lambda → accuracy vs effective-#-features.
-  - `recipes`         — the honest confirm: fixed family sets under plain grouped CV (no search, no optimism),
+  - `recipes`         — the leakage-free confirm: fixed family sets under plain grouped CV (no search, no optimism),
                         the apples-to-apples table that anchors the README numbers.
 """

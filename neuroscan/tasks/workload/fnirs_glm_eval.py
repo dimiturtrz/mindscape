@@ -45,7 +45,7 @@ def main():
         lv = _acc(build, data, CvConfig(grouped=True, classes=[1, 2]))   # 2-back vs 3-back (level)
         logger.info(f"  {name:<28}{wa:>8.3f}{ca:>8.3f}   {ol:>8.3f}{lv:>7.3f}")
     logger.info("\n  0v-load / 2-v-3 are cross-subject binary (chance 0.5). GLM-β sharpening 0v-load but NOT 2-v-3\n"
-          "  = it's physiology, not features (the honest diagnostic).")
+          "  = it's physiology, not features (the robust diagnostic).")
 
 
 if __name__ == "__main__":

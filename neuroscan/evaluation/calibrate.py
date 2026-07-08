@@ -1,4 +1,4 @@
-"""Temperature scaling (Guo 2017) — post-hoc calibration, and the honest finding that it's domain-limited.
+"""Temperature scaling (Guo 2017) — post-hoc calibration, and the measured finding that it's domain-limited.
 
 Fit a single scalar T (logits -> logits/T) on a held-out IN-SESSION val set by minimizing NLL, model
 frozen; T>1 softens overconfidence. It does NOT change argmax, so accuracy is untouched — only the
@@ -70,16 +70,6 @@ class TemperatureScaler:
         p = self.probs(logits, T)
         conf, pred = p.max(1), p.argmax(1)
         return metrics.ece(conf, (pred == labels).astype(float))[0]
-
-
-def fit_temperature(logits: np.ndarray, labels: np.ndarray) -> float:
-    """Back-compat shim — prefer `TemperatureScaler().fit(logits, labels)`."""
-    return TemperatureScaler().fit(logits, labels).T
-
-
-def ece_at(logits: np.ndarray, labels: np.ndarray, T: float = 1.0) -> float:
-    """Back-compat shim — ECE of softmax(logits / T)."""
-    return TemperatureScaler(T).ece(logits, labels)
 
 
 def _parse_args():

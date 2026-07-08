@@ -1,6 +1,6 @@
 """Cross-dataset zero-shot EEG->image — train NICE on THINGS-EEG1, retrieve on THINGS-EEG2.
 
-The hardest honest generalization test: different people, different rig (63-ch BrainVision @10 Hz RSVP vs
+The hardest leakage-free generalization test: different people, different rig (63-ch BrainVision @10 Hz RSVP vs
 EEG2's setup), SAME 1,854 THINGS concepts. EEG2's 200 test concepts also occur in EEG1, so they're held out
 of EEG1 training (cross_dataset.holdout_mask) to keep it concept-zero-shot; retrieval then runs on EEG2's
 200-concept CLIP bank. The per-trial training target is the concept's shared CLIP prototype (looked up by

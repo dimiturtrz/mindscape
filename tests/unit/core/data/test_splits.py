@@ -67,7 +67,3 @@ def test_make_split_default_spec_carves_random_val_no_test():
     n = len(_meta())
     assert len(va) == max(1, round(n * 0.2))               # default val_frac 0.2
     assert len(tr) + len(va) == n
-
-
-def test_sessions_returns_sorted_unique():
-    assert splits.sessions(_meta()) == ["0train", "1test"]

@@ -18,7 +18,7 @@ def retrieval_metrics(scores: np.ndarray, labels: np.ndarray, ks: tuple[int, ...
     Returns recall@k, MRR (mean reciprocal rank), median rank, and PR-AUC. Rank is 1-based (# candidates
     scoring strictly higher than the true one, +1). Note: mean-average-precision equals MRR here because each
     trial has exactly one relevant candidate, so it isn't reported separately. PR-AUC (over all N×C pairs,
-    positive = the true candidate) is the honest AUC under the 1-vs-(C-1) imbalance — ROC-AUC inflates.
+    positive = the true candidate) is the unbiased AUC under the 1-vs-(C-1) imbalance — ROC-AUC inflates.
     """
     scores, labels = np.asarray(scores, dtype=float), np.asarray(labels)
     n = len(labels)

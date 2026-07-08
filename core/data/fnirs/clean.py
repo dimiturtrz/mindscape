@@ -46,7 +46,7 @@ class Cbsi:
 class Detrend:
     """Per-channel per-epoch linear detrend — remove a straight-line drift over the window (residual slow
     trend the 0.01 Hz highpass leaves). Stateless; a control more than a fix (largely redundant with the
-    highpass, so a near-null ablation result is the expected, honest outcome)."""
+    highpass, so a near-null ablation result is the expected, measured outcome)."""
 
     def fit(self, X):
         return self

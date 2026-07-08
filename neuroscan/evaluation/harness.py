@@ -9,7 +9,7 @@ A *fold* is (name, train_df, test_df). A *regime* turns the data cloud into a fo
     cross_subject   leave-one-subject-out                            -> the OOD gap (headline)
 
 `aggregate` is pure (folds in, metrics out — unit-testable). `run` calls it then logs to MLflow.
-Reports BOTH fold-mean (per-subject equal weight) and pooled (per-epoch) — the honest pair.
+Reports BOTH fold-mean (per-subject equal weight) and pooled (per-epoch) — the measured pair.
 """
 from __future__ import annotations
 

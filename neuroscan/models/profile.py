@@ -1,4 +1,4 @@
-"""Model size profiling — parameters + FLOPs per decoder, for the honest deployability table.
+"""Model size profiling — parameters + FLOPs per decoder, for the measured deployability table.
 
 FLOPs are a single forward pass at the real 2a input (22 ch x 1125 samples, batch 1), via fvcore.
 Params are the trainable count. The point: a tiny edge-deployable net vs a heavier near-SOTA one,

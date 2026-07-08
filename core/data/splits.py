@@ -1,6 +1,6 @@
 """Train/val/test splits as criteria over the epoch cloud (data/store.py).
 
-The honesty story lives here. A split isn't a named thing — it's the cloud filtered on criteria, and
+The leakage-control story lives here. A split isn't a named thing — it's the cloud filtered on criteria, and
 the criteria self-document what was held out. The *evaluation regime* IS which criteria you filter on:
 
     within-subject   train+test one subject (random val carve)      -> the ceiling
@@ -96,7 +96,3 @@ def within_subject(meta: pl.DataFrame, subject: str, test_sessions=(), val_frac:
     test, rest = shuffled[:n_test], shuffled[n_test:]
     train, val = _val_carve(rest, val_frac, seed)
     return train, val, test
-
-
-def sessions(meta: pl.DataFrame) -> list[str]:
-    return sorted(meta["session"].unique().to_list())
