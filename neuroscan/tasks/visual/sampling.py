@@ -30,6 +30,31 @@ def stratified_batches(concept_ids: np.ndarray, batch_size: int, rng: np.random.
     return [np.asarray(order[i:i + batch_size]) for i in range(0, len(order), batch_size)]
 
 
+def balanced_batches(concept_ids: np.ndarray, concepts_per_batch: int, samples_per_concept: int,
+                     rng: np.random.Generator, n_batches: int | None = None) -> list[np.ndarray]:
+    """STRICT balanced batches (bd 2j2): each batch = `concepts_per_batch` concepts × `samples_per_concept`
+    trials each, so every concept in the batch is represented EQUALLY (unlike `stratified_batches`' round-robin,
+    which decays as scarce concepts empty out). Scarce concepts are drawn WITH replacement to keep the count
+    exact. `n_batches` defaults to one pass over the data. Balances the InfoNCE negatives across the label space
+    every step."""
+    by_concept: dict[int, list[int]] = {}
+    for i, concept in enumerate(concept_ids):
+        by_concept.setdefault(int(concept), []).append(i)
+    concepts = list(by_concept)
+    per_batch = min(concepts_per_batch, len(concepts))
+    if n_batches is None:
+        n_batches = max(1, len(concept_ids) // (per_batch * samples_per_concept))
+    batches = []
+    for _ in range(n_batches):
+        chosen = rng.choice(concepts, size=per_batch, replace=False)
+        idx: list[int] = []
+        for concept in chosen:
+            pool = by_concept[int(concept)]
+            idx.extend(rng.choice(pool, size=samples_per_concept, replace=len(pool) < samples_per_concept).tolist())
+        batches.append(np.asarray(idx))
+    return batches
+
+
 def clip_neighbor_groups(concept_cosine: np.ndarray, k: int) -> dict[int, list[int]]:
     """For each concept (row of the concept-concept CLIP cosine matrix), its `k` nearest OTHER concepts —
     the model-free hard negatives (semantically confusable in the shared CLIP target space). Self is excluded."""

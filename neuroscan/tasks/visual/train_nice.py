@@ -33,7 +33,7 @@ from torch.utils.data import DataLoader, Dataset
 from core.data.eeg import things_eeg2 as things
 from neuroscan.models.nice import NiceConfig, NiceEncoder, clip_infonce, retrieval_topk
 from neuroscan.tasks.visual import clip_targets
-from neuroscan.tasks.visual.sampling import stratified_batches
+from neuroscan.tasks.visual.sampling import balanced_batches, stratified_batches
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,10 @@ class TrainConfig(BaseModel):
     patience: int = 8            # early-stop patience on val-top1 (epochs)
     val_fraction: float = 0.1    # share of TRAINING concepts held out for leak-free model selection
     train_frac: float = 1.0      # per-epoch random subset of fit trials (bd pqh: <1 speeds over-sized data)
-    sampling: str = "uniform"    # "uniform" | "stratified" — concept-balanced batches (bd ewd)
+    sampling: str = "uniform"    # "uniform" | "stratified" (round-robin) | "balanced" (strict, bd 2j2)
+    concepts_per_batch: int = 64  # sampling="balanced": concepts × samples = effective batch (64×8=512)
+    samples_per_concept: int = 8  # strict equal per-concept representation each batch (bd 2j2)
+    val_every: int = 1           # eval the (big) held-out val set every N epochs — strides its per-epoch cost
 
 
 def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
@@ -139,7 +142,8 @@ def train_encoder(train_eeg: np.ndarray, train_targets: np.ndarray, train_concep
     fit_indices = np.where(fit_mask)[0]            # view, not a copy — fit is the bulk of the epoch pile
     val_eeg = train_eeg[val_mask]                  # small (one split fraction), copy is fine
     rng = np.random.default_rng(cfg.seed)
-    epoch_n = len(fit_indices) if cfg.train_frac >= 1.0 else max(cfg.batch, int(len(fit_indices) * cfg.train_frac))
+    epoch_n = (len(fit_indices) if cfg.train_frac >= 1.0
+               else min(len(fit_indices), max(cfg.batch, int(len(fit_indices) * cfg.train_frac))))
     logger.info(f"early-stop val: {len(val_bank)} held-out train concepts, {int(val_mask.sum())} epochs; "
           f"fit {len(fit_indices)} trials, {epoch_n}/epoch (train_frac {cfg.train_frac})")
 
@@ -152,7 +156,13 @@ def train_encoder(train_eeg: np.ndarray, train_targets: np.ndarray, train_concep
     best_val, best_state, best_epoch, since_improved = -1.0, None, -1, 0
     for epoch in range(cfg.epochs):
         epoch_idx = fit_indices if cfg.train_frac >= 1.0 else rng.choice(fit_indices, epoch_n, replace=False)
-        if cfg.sampling == "stratified":                   # concept-balanced batches (bd ewd)
+        if cfg.sampling == "balanced":                     # strict equal-per-concept batches (bd 2j2)
+            full_bpe = max(1, len(fit_indices) // (cfg.concepts_per_batch * cfg.samples_per_concept))
+            n_bpe = full_bpe if cfg.train_frac >= 1.0 else max(1, int(full_bpe * cfg.train_frac))  # bd kqa
+            steps = [(torch.from_numpy(train_eeg[fit_indices[pos]]), torch.from_numpy(train_targets[fit_indices[pos]]))
+                     for pos in balanced_batches(train_concept[fit_indices], cfg.concepts_per_batch,
+                                                 cfg.samples_per_concept, rng, n_batches=n_bpe)]
+        elif cfg.sampling == "stratified":                 # round-robin approximation (bd ewd, v1)
             steps = [(torch.from_numpy(train_eeg[epoch_idx[pos]]), torch.from_numpy(train_targets[epoch_idx[pos]]))
                      for pos in stratified_batches(train_concept[epoch_idx], cfg.batch, rng) if len(pos) > 1]
         else:
@@ -172,19 +182,20 @@ def train_encoder(train_eeg: np.ndarray, train_targets: np.ndarray, train_concep
             total_loss += loss.item()
             n_batches += 1
 
-        val_top1 = evaluate(encoder, RetrievalSet(val_eeg, val_labels, val_bank), device)["single_trial"][1]
-        if val_top1 > best_val:
-            best_val, best_epoch, since_improved = val_top1, epoch, 0
-            best_state = {k: v.detach().cpu().clone() for k, v in encoder.state_dict().items()}
-        else:
-            since_improved += 1
-        epoch_s = time.perf_counter() - epoch_start
-        if epoch % 5 == 0 or epoch == cfg.epochs - 1:
-            logger.info(f"ep {epoch:3d}  loss {total_loss / max(1, n_batches):.3f}  val-top1 {val_top1 * 100:.2f}%  "
-                  f"{epoch_s:.1f}s ({n_batches / epoch_s:.0f} batch/s)")
-        if since_improved >= cfg.patience:
-            logger.info(f"early stop at ep {epoch} (best val = ep {best_epoch})")
-            break
+        train_s = time.perf_counter() - epoch_start
+        if epoch % cfg.val_every == 0 or epoch == cfg.epochs - 1:      # stride the big val eval (bd)
+            val_top1 = evaluate(encoder, RetrievalSet(val_eeg, val_labels, val_bank), device)["single_trial"][1]
+            if val_top1 > best_val:
+                best_val, best_epoch, since_improved = val_top1, epoch, 0
+                best_state = {k: v.detach().cpu().clone() for k, v in encoder.state_dict().items()}
+            else:
+                since_improved += 1
+            if epoch % 5 == 0 or epoch == cfg.epochs - 1:
+                logger.info(f"ep {epoch:3d}  loss {total_loss / max(1, n_batches):.3f}  val-top1 {val_top1*100:.2f}%"
+                      f"  {train_s:.1f}s ({n_batches / train_s:.0f} batch/s)")
+            if since_improved >= cfg.patience:
+                logger.info(f"early stop at ep {epoch} (best val = ep {best_epoch})")
+                break
 
     encoder.load_state_dict(best_state)                            # keep the best-VAL checkpoint
     return encoder, {"best_val_epoch": best_epoch, "val_top1": best_val, "epochs_run": epoch + 1}

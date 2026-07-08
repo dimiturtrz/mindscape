@@ -1,7 +1,26 @@
 """Batch-construction cores for contrastive retrieval — pure index/CLIP math."""
 import numpy as np
 
-from neuroscan.tasks.visual.sampling import clip_neighbor_groups, stratified_batches
+from neuroscan.tasks.visual.sampling import balanced_batches, clip_neighbor_groups, stratified_batches
+
+
+def test_balanced_batches_equal_per_concept():
+    concept_ids = np.repeat(np.arange(6), 10)               # 6 concepts x 10 trials
+    batches = balanced_batches(concept_ids, concepts_per_batch=3, samples_per_concept=4,
+                               rng=np.random.default_rng(0), n_batches=5)
+    for b in batches:
+        assert len(b) == 12                                 # 3 concepts x 4
+        counts = np.bincount(concept_ids[b])
+        present = counts[counts > 0]
+        assert len(present) == 3 and np.all(present == 4)   # exactly 3 concepts, 4 trials each — STRICT balance
+
+
+def test_balanced_batches_scarce_concept_uses_replacement():
+    concept_ids = np.array([0, 0, 1])                       # concept 1 has only 1 trial
+    batches = balanced_batches(concept_ids, concepts_per_batch=2, samples_per_concept=3,
+                               rng=np.random.default_rng(1), n_batches=1)
+    counts = np.bincount(concept_ids[batches[0]])
+    assert np.all(counts[counts > 0] == 3)                  # still 3 each (concept 1 drawn with replacement)
 
 
 def test_stratified_batches_span_distinct_concepts():
