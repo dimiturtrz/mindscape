@@ -19,10 +19,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 import sys
 
 from core.config import REPO
+
+logger = logging.getLogger(__name__)
 
 _RESULTS = REPO / "results.json"
 _README = REPO / "README.md"
@@ -66,17 +69,20 @@ def sync(check: bool = False) -> int:
     stale = [f"{expr}: {cur!r} -> {new!r}" for _old, expr, cur, new in marks if cur != new]
     if check:
         for s in stale:
-            print(f"  {s}")
-        print(f"{'STALE' if stale else 'ok'} — {len(stale)}/{len(marks)} marker(s) out of sync")
+            logger.info(f"  {s}")
+        logger.info(f"{'STALE' if stale else 'ok'} — {len(stale)}/{len(marks)} marker(s) out of sync")
         return 1 if stale else 0
     for old, expr, _cur, new in marks:
         text = text.replace(old, f"<!--r:{expr}-->{new}<!--/r-->", 1)
     _README.write_text(text, encoding="utf-8")
-    print(f"synced {len(marks)} marker(s); updated {len(stale)}")
+    logger.info(f"synced {len(marks)} marker(s); updated {len(stale)}")
     return 0
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="report staleness, don't write (CI gate)")
     sys.exit(sync(check=ap.parse_args().check))

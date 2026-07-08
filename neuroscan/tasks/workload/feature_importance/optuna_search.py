@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +30,8 @@ from core.data import store
 from core.data.fnirs.base import FnirsCfg
 from core.features import WeightedFamilyScaler, extract_bank, family_names
 from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
+
+logger = logging.getLogger(__name__)
 
 _CFG = Path(__file__).with_name("optuna.yaml")            # study config lives beside the code (config-as-data)
 
@@ -99,6 +102,9 @@ def _stability(per_seed_importances, families, topn=5):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     from omegaconf import OmegaConf
 
     ap = argparse.ArgumentParser(description=__doc__)
@@ -120,7 +126,7 @@ def main():
     families = family_names()
     out = REPO / cfg.out
     storage = _storage(out)
-    print(f"fNIRS bank: {F.shape[0]} blocks · {meta['subject'].n_unique()} subjects · {len(families)} families "
+    logger.info(f"fNIRS bank: {F.shape[0]} blocks · {meta['subject'].n_unique()} subjects · {len(families)} families "
           f"· {F.shape[1]} cols · {cfg.n_trials} trials × {len(cfg.tpe_seeds)} seeds "
           f"(chance {1/len(set(y.tolist())):.3f}) · journal {out}/journal.log")
 
@@ -129,27 +135,27 @@ def main():
         imp, topw, best, bparams = _run_one_study(F, fam, y, groups, families, cfg, int(s), storage)
         per_seed_imp.append(imp); per_seed_topw.append(topw); peaks.append(best); bests.append(bparams)
         top3 = sorted(imp, key=imp.get, reverse=True)[:3]
-        print(f"  seed {s}: peak-acc {best:.3f} (optimistic) · top-3 by importance {top3}")
+        logger.info(f"  seed {s}: peak-acc {best:.3f} (optimistic) · top-3 by importance {top3}")
 
     stab = _stability(per_seed_imp, families)
     cons_imp = {f: float(np.mean([imp.get(f, 0.0) for imp in per_seed_imp])) for f in families}
     cons_topw = {f: float(np.mean([tw[f] for tw in per_seed_topw])) for f in families}
     topw_sd = {f: float(np.std([tw[f] for tw in per_seed_topw])) for f in families}   # cross-seed spread
 
-    print(f"\n=== importance (consensus over {len(cfg.tpe_seeds)} seeds) ===")
+    logger.info(f"\n=== importance (consensus over {len(cfg.tpe_seeds)} seeds) ===")
     for f in sorted(families, key=lambda f: cons_imp[f], reverse=True):
-        print(f"  {f:<14} importance {cons_imp[f]:.3f}  ·  mean top-trial weight {cons_topw[f]:.2f} "
+        logger.info(f"  {f:<14} importance {cons_imp[f]:.3f}  ·  mean top-trial weight {cons_topw[f]:.2f} "
               f"(±{topw_sd[f]:.2f})")
-    print(f"\nstability: top-{stab['topn']} families agree across seeds at Jaccard {stab['mean_jaccard']:.2f} "
+    logger.info(f"\nstability: top-{stab['topn']} families agree across seeds at Jaccard {stab['mean_jaccard']:.2f} "
           f"({'STABLE — trust the ranking' if stab['mean_jaccard'] >= 0.6 else 'UNSTABLE — importance is search noise'})")
-    print(f"peak-acc range {min(peaks):.3f}-{max(peaks):.3f} (optimistic; not a generalisation estimate)")
+    logger.info(f"peak-acc range {min(peaks):.3f}-{max(peaks):.3f} (optimistic; not a generalisation estimate)")
 
     (out / "importance.json").write_text(json.dumps({
         "dataset": str(cfg.dataset), "n_trials": int(cfg.n_trials), "tpe_seeds": list(cfg.tpe_seeds),
         "consensus_importance": cons_imp, "consensus_top_weight": cons_topw, "top_weight_sd": topw_sd,
         "stability": stab, "peak_acc_per_seed": peaks, "best_params_per_seed": bests,
     }, indent=2))
-    print(f"-> {out}/importance.json (reproducible artifact — the README importance table is generated from this)")
+    logger.info(f"-> {out}/importance.json (reproducible artifact — the README importance table is generated from this)")
 
 
 if __name__ == "__main__":

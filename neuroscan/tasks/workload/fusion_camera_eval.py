@@ -9,6 +9,8 @@ cashed something flat fusion destroyed; ~0.58 = another honest null (but now on 
 """
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 
 from baselines.fusion.spatiotemporal import BrainCameraNet
@@ -19,6 +21,8 @@ from core.data.fnirs import shin2017 as fnmod
 from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
 from neuroscan.evaluation import metrics
+
+logger = logging.getLogger(__name__)
 
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _GRID, _FPS, _TEND = 16, 10.0, 20.0                # hemodynamic lag derived per subject (no fixed shift)
@@ -42,9 +46,12 @@ def _build_all():
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     from sklearn.model_selection import StratifiedGroupKFold
     X, y, g = _build_all()
-    print(f"brain-camera fusion · {X.shape[0]} blocks · {len(set(g))} subj · tensor {X.shape[1:]} · "
+    logger.info(f"brain-camera fusion · {X.shape[0]} blocks · {len(set(g))} subj · tensor {X.shape[1:]} · "
           f"grid {_GRID} fps {_FPS} lag derived/subj · chance {1/(y.max()+1):.3f}")
     accs, kaps = [], []
     for seed in _SEEDS:
@@ -53,10 +60,10 @@ def main():
             pred = clf.predict_proba(X[te]).argmax(1)
             accs.append(metrics.accuracy(y[te], pred)); kaps.append(metrics.kappa(y[te], pred))
     a, k = float(np.mean(accs)), float(np.mean(kaps))
-    print(f"\n  brain-camera 3D-CNN · cross-subject {len(_SEEDS)}x{_K}-fold: acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
-    print("  reference (per-subject-z features -> LDA): best-single 0.580 · late 0.587 · feature 0.564 · oracle 0.752")
-    print(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {'CASHED something' if a > 0.595 else 'null'}")
-    print("  NOTE: not a fair representation test — this is a raw 3D-CNN (no per-subject re-centering) on 702 "
+    logger.info(f"\n  brain-camera 3D-CNN · cross-subject {len(_SEEDS)}x{_K}-fold: acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
+    logger.info("  reference (per-subject-z features -> LDA): best-single 0.580 · late 0.587 · feature 0.564 · oracle 0.752")
+    logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {'CASHED something' if a > 0.595 else 'null'}")
+    logger.info("  NOTE: not a fair representation test — this is a raw 3D-CNN (no per-subject re-centering) on 702 "
           "cross-subject samples (overfits); the 0.580 ref had per-subject-z + LDA. Fair test = re-center + a "
           "readout that doesn't overfit. The null is the METHOD, not proof the representation is empty.")
 

@@ -32,8 +32,12 @@ DEFAULTS = {"n_train_crops": 16, "n_test_crops": 8, "log_every": 100, "val_frac"
 
 # standardizers + crops live in transforms.py (independently testable). Re-exported with the legacy
 # private names so callers (e.g. tasks/motor_imagery/quantize.py) keep working.
+import logging
+
 from neuroscan.models.transforms import crops as _crops  # noqa: E402
 from neuroscan.models.transforms import standardizer as _standardizer  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 
 def _take(Xs, y, idx, cl, n_crops):
@@ -125,12 +129,12 @@ class BraindecodeClf:
                 else:
                     bad += 1
                 if self.log_every and (ep + 1) % self.log_every == 0:
-                    print(f"    ep {ep + 1}/{self.epochs}  lr {sched.get_last_lr()[0]:.2e}  val {vl:.3f}  (best {best_loss:.3f}, bad {bad})")
+                    logger.info(f"    ep {ep + 1}/{self.epochs}  lr {sched.get_last_lr()[0]:.2e}  val {vl:.3f}  (best {best_loss:.3f}, bad {bad})")
                 if bad >= self.patience:
-                    print(f"    early stop @ ep {ep + 1} (val {best_loss:.3f})")
+                    logger.info(f"    early stop @ ep {ep + 1} (val {best_loss:.3f})")
                     break
             elif self.log_every and (ep + 1) % self.log_every == 0:
-                print(f"    ep {ep + 1}/{self.epochs}  lr {sched.get_last_lr()[0]:.2e}")
+                logger.info(f"    ep {ep + 1}/{self.epochs}  lr {sched.get_last_lr()[0]:.2e}")
 
         if best_state is not None:
             self.net.load_state_dict(best_state)

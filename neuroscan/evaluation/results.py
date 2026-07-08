@@ -24,9 +24,12 @@ not the source of truth. Two aggregate schemas exist and both are normalized:
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from core.config import REPO
+
+logger = logging.getLogger(__name__)
 
 _RUNS = REPO / "runs"
 _OUT = REPO / "results.json"
@@ -128,6 +131,9 @@ def record(run_dir: Path | str, out_path: Path = _OUT) -> str | None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     p = write()
     n = len(json.loads(p.read_text())["runs"])
-    print(f"wrote {p.relative_to(REPO)} — {n} run(s)")
+    logger.info(f"wrote {p.relative_to(REPO)} — {n} run(s)")

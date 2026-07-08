@@ -16,12 +16,15 @@ train run, so the UI shows the Stage-2 numbers next to the decode numbers — th
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
 from core.config import REPO
+
+logger = logging.getLogger(__name__)
 
 _MLRUNS = REPO / "mlruns"
 _DB_URI = f"sqlite:///{(REPO / 'mlflow.db').as_posix()}"
@@ -184,9 +187,12 @@ def backfill(experiment: str = "mindscape") -> None:
             metrics({f"{k}_mean": v for k, v in (results.read_metrics(res) or {}).items() if v is not None})
             artifact(aj)
         n += 1
-        print(f"backfilled {rd.name}")
-    print(f"backfilled {n} run(s)")
+        logger.info(f"backfilled {rd.name}")
+    logger.info(f"backfilled {n} run(s)")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     backfill()

@@ -12,6 +12,8 @@ representation, right model, per-subject re-centered) — retire the brain-camer
 """
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 
 from baselines.eeg import transfer
@@ -22,6 +24,8 @@ from core.data.fnirs import shin2017 as fnmod
 from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
 from neuroscan.evaluation import metrics
+
+logger = logging.getLogger(__name__)
 
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _FN_TMAX, _FPS, _TEND = 32.0, 10.0, 20.0
@@ -54,9 +58,12 @@ def _build_all(band="sum"):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     from sklearn.model_selection import StratifiedGroupKFold
     C, y, g = _build_all()
-    print(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
+    logger.info(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
     accs, kaps = [], []
     for seed in _SEEDS:
         for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(C, y, g):
@@ -65,10 +72,10 @@ def main():
             pred = proba.argmax(1)
             accs.append(metrics.accuracy(y[te], pred)); kaps.append(metrics.kappa(y[te], pred))
     a, k = float(np.mean(accs)), float(np.mean(kaps))
-    print(f"\n  fused-only (joint EEG×fNIRS×coverage) · re-centered tangent · cross-subject {len(_SEEDS)}x{_K}-fold: "
+    logger.info(f"\n  fused-only (joint EEG×fNIRS×coverage) · re-centered tangent · cross-subject {len(_SEEDS)}x{_K}-fold: "
           f"acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
-    print("  reference (same protocol, EEG-only re-centered Riemann): best-single 0.580")
-    print(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {'FUSION CASHED something' if a > 0.595 else 'fair null (fusion adds nothing decodable)'}")
+    logger.info("  reference (same protocol, EEG-only re-centered Riemann): best-single 0.580")
+    logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {'FUSION CASHED something' if a > 0.595 else 'fair null (fusion adds nothing decodable)'}")
 
 
 if __name__ == "__main__":

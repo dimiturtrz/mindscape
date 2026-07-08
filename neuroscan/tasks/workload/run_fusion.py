@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +33,8 @@ from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from neuroscan import models
 from neuroscan.evaluation import metrics
+
+logger = logging.getLogger(__name__)
 
 _EEG, _FNIRS = "shin2017_nback_eeg", "shin2017_nback"
 # the recipes each modality decodes best at (from the unimodal runs)
@@ -51,6 +54,9 @@ def _gather_aligned(meta_e, meta_f, subs):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--exp", default="nback_fusion", help="named fusion experiment in experiments.yaml")
     ap.add_argument("--set", dest="overrides", action="append", default=[], metavar="key=val",
@@ -66,7 +72,7 @@ def main():
     subs = sorted(set(meta_e["subject"].unique().to_list()) & set(meta_f["subject"].unique().to_list()))
     n_classes = int(meta_e["label_id"].max()) + 1
     recenter = not exp.params.get("plain_eeg", False)
-    print(f"fusion cloud: {len(subs)} paired subjects · {n_classes} classes · chance {1/n_classes:.3f} · "
+    logger.info(f"fusion cloud: {len(subs)} paired subjects · {n_classes} classes · chance {1/n_classes:.3f} · "
           f"EEG {'re-centered' if recenter else 'plain'} Riemann")
 
     eeg_fit, eeg_score = models.get_method("riemann")        # the plain-EEG fallback (fusion EEG is Riemann)
@@ -126,7 +132,7 @@ def main():
             "late": metrics.accuracy(y_te, p_late.argmax(1)),
             "feature": metrics.accuracy(y_te, p_feat.argmax(1)),
         })
-        print(f"  fold{i}: eeg {rows[-1]['eeg']:.3f} | fnirs {rows[-1]['fnirs']:.3f} | "
+        logger.info(f"  fold{i}: eeg {rows[-1]['eeg']:.3f} | fnirs {rows[-1]['fnirs']:.3f} | "
               f"late {rows[-1]['late']:.3f} | feature {rows[-1]['feature']:.3f}")
 
     mean = {k: float(np.mean([r[k] for r in rows])) for k in ("eeg", "fnirs", "late", "feature")}
@@ -141,18 +147,18 @@ def main():
     _acc_keys = combine.SWEEP_KEYS
     comp["best_aggregator"] = float(max(agg[k] for k in _acc_keys))
     comp["oracle_gap_captured"] = comp["best_aggregator"] - comp["best_single"]
-    print(f"\n=== fusion · {regime} · shin n-back ({len(rows)} folds, chance {1/n_classes:.3f}) ===")
+    logger.info(f"\n=== fusion · {regime} · shin n-back ({len(rows)} folds, chance {1/n_classes:.3f}) ===")
     for k in ("eeg", "fnirs", "late", "feature"):
-        print(f"  {k:>8}: {mean[k]:.3f}")
+        logger.info(f"  {k:>8}: {mean[k]:.3f}")
     best_uni = comp["best_single"]
-    print(f"  fusion vs best-unimodal: late {mean['late']-best_uni:+.3f} | feature {mean['feature']-best_uni:+.3f}")
-    print(f"  ORACLE (either correct) {comp['oracle_either']:.3f}  (+{comp['oracle_either']-best_uni:.3f} headroom) "
+    logger.info(f"  fusion vs best-unimodal: late {mean['late']-best_uni:+.3f} | feature {mean['feature']-best_uni:+.3f}")
+    logger.info(f"  ORACLE (either correct) {comp['oracle_either']:.3f}  (+{comp['oracle_either']-best_uni:.3f} headroom) "
           f"| err-corr {comp['err_corr']:+.3f} | both-wrong {comp['both_wrong']:.3f}")
-    print("  aggregation sweep (all output-space combiners vs best-single "
+    logger.info("  aggregation sweep (all output-space combiners vs best-single "
           f"{best_uni:.3f}, oracle {comp['oracle_either']:.3f}):")
     for k in _acc_keys:
-        print(f"    {k:>16} {agg[k]:.3f}  ({agg[k]-best_uni:+.3f})")
-    print(f"    conf-gap (correct-wrong max-prob): eeg {agg['eeg_conf_gap']:+.3f} | fnirs {agg['fnirs_conf_gap']:+.3f}"
+        logger.info(f"    {k:>16} {agg[k]:.3f}  ({agg[k]-best_uni:+.3f})")
+    logger.info(f"    conf-gap (correct-wrong max-prob): eeg {agg['eeg_conf_gap']:+.3f} | fnirs {agg['fnirs_conf_gap']:+.3f}"
           "  <- ~0 => confidence does not predict correctness => output-space fusion cannot select")
 
     run_dir = Path(args.out) if args.out else Path("runs") / f"fusion_{regime}_shin2017_nback"
@@ -161,7 +167,7 @@ def main():
            "fold_mean": {"acc": mean["late"]}, "per_role_mean": mean,
            "complementarity": comp, "aggregation": agg, "per_fold": rows}
     (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
-    print(f"-> {run_dir}/aggregate.json")
+    logger.info(f"-> {run_dir}/aggregate.json")
 
 
 def _subject_folds(subs, k):

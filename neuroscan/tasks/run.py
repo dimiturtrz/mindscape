@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 from core import config, reference
@@ -26,8 +27,13 @@ from core.data.eeg.base import EpochCfg
 from neuroscan import models
 from neuroscan.evaluation import harness
 
+logger = logging.getLogger(__name__)
+
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--exp", default="mi_csp_within",
                     help="named experiment in experiments.yaml (see that file for the list)")
@@ -43,7 +49,7 @@ def main():
     cfg = EpochCfg(**exp.recipe)
     meta = store.load(dataset, cfg)
     n_classes = int(meta["label_id"].max()) + 1                  # derived from data, not assumed 4-class
-    print(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · {n_classes} classes · "
+    logger.info(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · {n_classes} classes · "
           f"sessions {sorted(meta['session'].unique().to_list())} · recipe {cfg.key()}")
 
     test_sessions = [exp.test_session] if (regime == "within" and exp.test_session) else ()
@@ -55,7 +61,7 @@ def main():
 
     # classical baselines are CPU + fold-independent -> parallelize folds; GPU nets stay on one device
     n_jobs = -1 if method in {"csp_lda", "riemann", "riemann_acm", "fnirs_lda"} else 1
-    print(f"\n=== {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
+    logger.info(f"\n=== {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
     res = harness.run(method, fit_fn, score_fn, folds, n_classes, regime=regime,
                       params={"exp": args.exp, "method": method, "regime": regime,
                               "dataset": dataset, "resample": cfg.resample},
@@ -66,12 +72,12 @@ def main():
     from neuroscan.evaluation import modelcard, results
     modelcard.write(res, dataset, regime, run_dir / "CARD.md")
     if not args.no_record and results.record(run_dir):
-        print(f"   recorded -> results.json ({run_dir.name})")
+        logger.info(f"   recorded -> results.json ({run_dir.name})")
     ref_regime = "within_subject" if regime == "within" else "cross_subject"
-    print(f"\nfold-mean acc {res['fold_mean']['acc']:.3f} | pooled acc {res['pooled']['acc']:.3f} "
+    logger.info(f"\nfold-mean acc {res['fold_mean']['acc']:.3f} | pooled acc {res['pooled']['acc']:.3f} "
           f"| ece {res['fold_mean']['ece']:.3f}  (chance {1.0 / n_classes:.3f})")
-    print("  vs reference: " + reference.compare(res["fold_mean"]["acc"], dataset, ref_regime, method))
-    print(f"-> {out}")
+    logger.info("  vs reference: " + reference.compare(res["fold_mean"]["acc"], dataset, ref_regime, method))
+    logger.info(f"-> {out}")
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -34,6 +35,8 @@ from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from core.features import amplitude_features, band_powers
 from neuroscan.evaluation import metrics
+
+logger = logging.getLogger(__name__)
 
 _EEG, _FNIRS = "shin2017_nback_eeg", "shin2017_nback"
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
@@ -71,6 +74,9 @@ def _zscore_per_subject(F, g):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--out", default=None)
@@ -83,7 +89,7 @@ def main():
     Fe, Ff = _zscore_per_subject(Fe, g), _zscore_per_subject(Ff, g)
     subs = np.array(sorted(set(g)))
     n_classes = int(y.max()) + 1
-    print(f"gated fusion: {len(y)} blocks · {len(subs)} subjects · EEG {Fe.shape[1]}d · fNIRS {Ff.shape[1]}d · "
+    logger.info(f"gated fusion: {len(y)} blocks · {len(subs)} subjects · EEG {Fe.shape[1]}d · fNIRS {Ff.shape[1]}d · "
           f"chance {1/n_classes:.3f}")
 
     rows, P, A, Y = [], [], [], []
@@ -102,17 +108,17 @@ def main():
         acc = metrics.accuracy(y[m_te], p.argmax(1))
         rows.append({"fold": str(i), "n": int(m_te.sum()), "gate_acc": acc,
                      "alpha_mean": float(a.mean())})
-        print(f"  fold{i}: gate {acc:.3f} | ᾱ(eeg-weight) {a.mean():.2f} (n={int(m_te.sum())})")
+        logger.info(f"  fold{i}: gate {acc:.3f} | ᾱ(eeg-weight) {a.mean():.2f} (n={int(m_te.sum())})")
 
     y_all, P_all = np.concatenate(Y), np.concatenate(P)
     gate = float((P_all.argmax(1) == y_all).mean())
     fold_mean = float(np.mean([r["gate_acc"] for r in rows]))
     std = float(np.std([r["gate_acc"] for r in rows]))
-    print("\n=== gated fusion · 5-fold GroupKFold · shin n-back ===")
-    print(f"  gate pooled {gate:.3f} | fold-mean {fold_mean:.3f} ± {std:.3f}")
-    print(f"  NOTE: this ~{fold_mean:.2f} is NOT a fusion win — it ties z-scored-EEG-alone (~0.581) and "
+    logger.info("\n=== gated fusion · 5-fold GroupKFold · shin n-back ===")
+    logger.info(f"  gate pooled {gate:.3f} | fold-mean {fold_mean:.3f} ± {std:.3f}")
+    logger.info(f"  NOTE: this ~{fold_mean:.2f} is NOT a fusion win — it ties z-scored-EEG-alone (~0.581) and "
           "z-concat-LDA (~0.578).")
-    print("  The lift over raw fNIRS (0.474) is per-subject z-scoring rescuing EEG (0.407->0.581), NOT the "
+    logger.info("  The lift over raw fNIRS (0.474) is per-subject z-scoring rescuing EEG (0.407->0.581), NOT the "
           "gate; the gate captures no oracle headroom (see run_fusion + the ablation).")
 
     run_dir = Path(args.out) if args.out else Path("runs") / "fusion_gate_cross_subject_kfold_shin2017_nback"
@@ -124,7 +130,7 @@ def main():
     if not args.no_record:
         from neuroscan.evaluation import results
         results.record(run_dir)
-    print(f"-> {run_dir}/aggregate.json")
+    logger.info(f"-> {run_dir}/aggregate.json")
 
 
 if __name__ == "__main__":

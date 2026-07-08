@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 from core import config
@@ -23,8 +24,13 @@ from core.data.fnirs.base import FnirsCfg
 from neuroscan import models
 from neuroscan.evaluation import harness
 
+logger = logging.getLogger(__name__)
+
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--exp", default="nback_fnirs_cross",
                     help="named experiment in experiments.yaml")
@@ -41,7 +47,7 @@ def main():
     meta = store.load(dataset, cfg)
     n_classes = int(meta["label_id"].max()) + 1
     chance = 1.0 / n_classes
-    print(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · "
+    logger.info(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · "
           f"{n_classes} classes {sorted(meta['label'].unique().to_list())} · recipe {cfg.key()}")
 
     test_sessions = [exp.test_session] if (regime == "within" and exp.test_session) else ()
@@ -50,7 +56,7 @@ def main():
 
     run_dir = Path(args.out) if args.out else Path("runs") / f"{method}_{regime}_{dataset}"
     run_dir.mkdir(parents=True, exist_ok=True)
-    print(f"\n=== {method} · {regime} · {dataset} ({len(folds)} folds, chance {chance:.3f}) ===")
+    logger.info(f"\n=== {method} · {regime} · {dataset} ({len(folds)} folds, chance {chance:.3f}) ===")
     n_jobs = -1 if method in {"csp_lda", "riemann", "riemann_acm", "fnirs_lda"} else 1
     res = harness.run(method, fit_fn, score_fn, folds, n_classes, regime=regime,
                       params={"exp": args.exp, "method": method, "regime": regime, "dataset": dataset,
@@ -58,11 +64,11 @@ def main():
     (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
     from neuroscan.evaluation import results
     if not args.no_record and results.record(run_dir):
-        print(f"   recorded -> results.json ({run_dir.name})")
+        logger.info(f"   recorded -> results.json ({run_dir.name})")
     fm = res["fold_mean"]
-    print(f"\nfold-mean acc {fm['acc']:.3f} | kappa {fm['kappa']:.3f} | ece {fm['ece']:.3f}  "
+    logger.info(f"\nfold-mean acc {fm['acc']:.3f} | kappa {fm['kappa']:.3f} | ece {fm['ece']:.3f}  "
           f"(chance {chance:.3f})")
-    print(f"-> {run_dir}/aggregate.json")
+    logger.info(f"-> {run_dir}/aggregate.json")
 
 
 if __name__ == "__main__":

@@ -16,12 +16,16 @@ derivable at the POPULATION level; use the pooled value as the argued constant, 
 """
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
+
+logger = logging.getLogger(__name__)
 
 _FS_E, _FS_F, _TMIN_F, _FPS, _TEND = 100.0, 10.0, -2.0, 10.0, 20.0
 _BETA = (13.0, 30.0)                                 # β power ~ the (de)synchronization that couples to blood
@@ -43,6 +47,9 @@ def _global_series(subject_frames):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     me = store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
     mf = store.load("shin2017_nback", FnirsCfg())
     subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
@@ -50,23 +57,23 @@ def main():
               for s in subs]
     drives, resps, _ = _global_series(frames)
     D, R = np.concatenate(drives), np.concatenate(resps)
-    print(f"pooled n={D.shape[0]} blocks · {len(subs)} subjects")
+    logger.info(f"pooled n={D.shape[0]} blocks · {len(subs)} subjects")
 
     # pure-shift scan: signed whole-head correlation vs lag — is there a coherent peak?
     Rz = (R - R.mean(1, keepdims=True)) / (R.std(1, keepdims=True) + 1e-9)
-    print("shift(s) : mean signed corr")
+    logger.info("shift(s) : mean signed corr")
     for sh in range(0, 12):
         k = int(round(sh * _FPS))
         d = np.roll(D, k, axis=1)
         if k > 0:
             d[:, :k] = D[:, :1]
         dz = (d - d.mean(1, keepdims=True)) / (d.std(1, keepdims=True) + 1e-9)
-        print(f"  {sh:2d}   {float((dz * Rz).mean(1).mean()):+.3f}")
+        logger.info(f"  {sh:2d}   {float((dz * Rz).mean(1).mean()):+.3f}")
 
     lag, decay, beta = bc.estimate_coupling(D, R, _FPS)
-    print(f"\nPOOLED gamma fit: lag {lag:.1f}s · decay {decay:.2f}s · β {beta:.2g}")
+    logger.info(f"\nPOOLED gamma fit: lag {lag:.1f}s · decay {decay:.2f}s · β {beta:.2g}")
     per = np.array([bc.estimate_coupling(dv, rp, _FPS)[0] for dv, rp in zip(drives, resps, strict=True)])
-    print(f"per-subject lag: mean {per.mean():.1f}s · std {per.std():.1f}s · range [{per.min():.1f}, {per.max():.1f}] "
+    logger.info(f"per-subject lag: mean {per.mean():.1f}s · std {per.std():.1f}s · range [{per.min():.1f}, {per.max():.1f}] "
           f"-> {'STABLE' if per.std() < 2 else 'UNSTABLE (pool instead)'}")
 
 

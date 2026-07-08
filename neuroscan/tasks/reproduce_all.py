@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 from core import config
@@ -21,6 +22,8 @@ from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from neuroscan import models
 from neuroscan.evaluation import harness, results
+
+logger = logging.getLogger(__name__)
 
 
 def _canonical_runs():
@@ -38,6 +41,9 @@ def _canonical_runs():
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--cross-only", action="store_true", help="skip within-subject runs")
     ap.add_argument("--only", default=None,
@@ -62,15 +68,15 @@ def main():
         n_jobs = 1 if method in MODELS else -1                    # classical baselines parallelize folds; nets don't
         run_dir = Path("runs") / f"{method}_{regime}_{dataset}"
         run_dir.mkdir(parents=True, exist_ok=True)
-        print(f"\n=== {name} · {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
+        logger.info(f"\n=== {name} · {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
         res = harness.run(method, fit_fn, score_fn, folds, n_classes, regime=regime,
                           params={"exp": name, "method": method, "regime": regime, "dataset": dataset},
                           run_dir=run_dir, n_jobs=n_jobs)
         (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
         results.record(run_dir)
-        print(f"  -> acc {res['fold_mean']['acc']:.3f}  kappa {res['fold_mean']['kappa']:.3f}  "
+        logger.info(f"  -> acc {res['fold_mean']['acc']:.3f}  kappa {res['fold_mean']['kappa']:.3f}  "
               f"(chance {1/n_classes:.3f})")
-    print("\nreproduce_all done — regenerated results.json. Run `align --exp mi_align_recenter` (+ "
+    logger.info("\nreproduce_all done — regenerated results.json. Run `align --exp mi_align_recenter` (+ "
           "`--exp mi_align_recenter_acm`) for recentering, then `sync_numbers` to update the README.")
 
 

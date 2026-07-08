@@ -18,6 +18,7 @@ grows) so the numbers the README cites are reproducible + recorded, not hand-typ
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +30,8 @@ from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from core.features import amplitude_features, band_powers
 from neuroscan.evaluation import metrics, results
+
+logger = logging.getLogger(__name__)
 
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _K = 5
@@ -81,6 +84,9 @@ def _cv_calib_half(F, y, g, subs, rng):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for _n in ("mne", "moabb", "braindecode"):
+        logging.getLogger(_n).setLevel(logging.WARNING)
     rng = np.random.default_rng(_SEED)
     me = store.load("shin2017_nback_eeg", _EEG_CFG)
     mf = store.load("shin2017_nback", FnirsCfg())
@@ -116,8 +122,8 @@ def main():
     })
 
     for k, v in out.items():
-        print(f"  {k:14s} {v:.3f}")
-    print(f"\n  EEG transfer: raw {out['eeg_raw']:.3f} -> calib-half {out['eeg_zcalib']:.3f} (honest) "
+        logger.info(f"  {k:14s} {v:.3f}")
+    logger.info(f"\n  EEG transfer: raw {out['eeg_raw']:.3f} -> calib-half {out['eeg_zcalib']:.3f} (honest) "
           f"/ transductive {out['eeg_ztrans']:.3f} (upper bound)")
 
     run_dir = Path("runs") / "calibration_ablation_shin2017_nback_eeg"
@@ -127,7 +133,7 @@ def main():
         {"method": "calibration_ablation", "regime": "cross_subject_kfold", "n_classes": 3,
          "fold_mean": {"acc": out["eeg_zcalib"]}, "per_role_mean": out}, indent=2))
     results.record(run_dir)
-    print(f"-> recorded {run_dir.name}")
+    logger.info(f"-> recorded {run_dir.name}")
 
 
 if __name__ == "__main__":
