@@ -453,14 +453,15 @@ field's usual numbers inflate*, plus the hardest generalization test the two THI
 scored four ways. The commonly-quoted cell (within-subject, concept-averaged) vs the defensible one
 (cross-subject, single-trial):
 
-| top-1 | single-trial | concept-averaged |
+| top-1 (top-5) | single-trial | concept-averaged |
 |---|---|---|
-| **within-subject** | ~4% | **~15%** ← usually quoted |
-| **cross-subject** | **~2%** ← robust | ~6% |
+| **within-subject** | 4.0% (14.5%) | **14.8% (39.5%)** ← usually quoted |
+| **cross-subject** | **1.9% (7.6%)** ← robust | 4.8% (14.3%) |
 
-Two independent leaks stack: seeing the test *person* (within→cross) and averaging test *repeats* — together an
-**~8× gap** between the headline and the honest number. Cross-subject *does* lift with training-subject count
-(2% train-1 → 6% train-4 LOSO), the same subject-generalization story as motor imagery.
+*(measured, 2-subject mean; chance 0.5%.)* Two independent leaks stack: seeing the test *person*
+(within→cross, 4.0→1.9%) and averaging test *repeats* (single→avg, 1.9→4.8%) — together an **8.0× gap**
+(14.8% vs 1.9%, +12.9 pts) between the commonly-quoted headline and the defensible number. Same
+subject-generalization story as motor imagery, now in perception.
 
 **Zero-shot is verified, not assumed** — the train/test concept sets are checked to be disjoint on concept
 *names* (1,654 train / 200 test / **0 overlap**; comparing split-local indices would have falsely flagged all
