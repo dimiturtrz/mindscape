@@ -133,8 +133,8 @@ def _report(regime, n_classes, rows, mean, comp, agg, acc_keys):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     args = _parse_args()
 
     exp = config.load_experiment(args.exp, args.overrides)
