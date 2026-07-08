@@ -13,12 +13,18 @@ ONNX-exportable (the Stage-2 edge path rides on it). RTX 5090 + bf16 autocast: m
 from __future__ import annotations
 
 import copy
+import logging
 from dataclasses import dataclass
 
 import braindecode.models as M
 import numpy as np
 import torch
 from pydantic import BaseModel
+
+# standardizers + crops live in transforms.py (independently testable); re-exported under the legacy
+# private names so callers (e.g. tasks/motor_imagery/quantize.py) keep working.
+from neuroscan.models.transforms import crops as _crops
+from neuroscan.models.transforms import standardizer as _standardizer
 
 # method -> (braindecode class, training + crop hparams). crop_frac=0.5 + 16 train crops is the standard
 # 2a recipe; strong nets get more epochs (cheap on the 5090, capped by early stopping).
@@ -37,13 +43,6 @@ DEFAULTS = {"n_train_crops": 16, "n_test_crops": 8, "log_every": 100, "val_frac"
 
 _MIN_TRIALS_FOR_VAL = 8   # need more than this many trials before carving a held-out val split for early stopping
 
-
-# standardizers + crops live in transforms.py (independently testable). Re-exported with the legacy
-# private names so callers (e.g. tasks/motor_imagery/quantize.py) keep working.
-import logging
-
-from neuroscan.models.transforms import crops as _crops  # noqa: E402
-from neuroscan.models.transforms import standardizer as _standardizer  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
