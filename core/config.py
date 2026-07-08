@@ -19,6 +19,9 @@ from pydantic import BaseModel
 
 REPO = Path(__file__).resolve().parent.parent   # repo root — the one place that computes it
 
+_DRIVE_PREFIX_LEN = 2   # a Windows drive prefix is 2 chars ("D:")
+_MNT_MIN_PARTS = 3      # a WSL mount path "/mnt/<x>/..." has at least 3 path parts ("/", "mnt", "<x>")
+
 
 # ─────────────────────────── experiment registry ───────────────────────────
 # Named runs live in experiments.yaml (config-as-data, like reference.yaml); entrypoints take `--exp <name>`
@@ -71,13 +74,13 @@ def to_native_path(path_str: str) -> str:
     # Parse with PurePath (robust to '\\', mixed slashes, 'D:' w/o slash); only the /mnt mapping is
     # explicit (no lib does the WSL drive<->mount convention).
     drive = PureWindowsPath(path_str).drive              # 'D:' for a drive path, '' otherwise
-    if len(drive) == 2 and drive.endswith(":"):
+    if len(drive) == _DRIVE_PREFIX_LEN and drive.endswith(":"):
         rest = "/".join(PureWindowsPath(path_str).parts[1:])
         if os.name == "nt":
             return f"{drive}/{rest}".rstrip("/")
         return f"/mnt/{drive[0].lower()}/{rest}".rstrip("/")
     parts = PurePosixPath(path_str).parts                # /mnt/<x>/... on Windows -> drive
-    if os.name == "nt" and len(parts) >= 3 and parts[1] == "mnt" and len(parts[2]) == 1:
+    if os.name == "nt" and len(parts) >= _MNT_MIN_PARTS and parts[1] == "mnt" and len(parts[2]) == 1:
         return f"{parts[2].upper()}:/" + "/".join(parts[3:])
     return path_str
 
@@ -156,7 +159,7 @@ def _patch_moabb_drive_colon() -> None:
 
     def _safe(path):
         s = str(path)
-        if len(s) >= 2 and s[1] == ":" and s[0].isalpha():        # 'D:...' -> keep 'D:', clean rest
+        if len(s) >= _DRIVE_PREFIX_LEN and s[1] == ":" and s[0].isalpha():        # 'D:...' -> keep 'D:', clean rest
             drive, rest = s[:2], s[2:]
             return _P(drive + rest.translate({ord(c): "-" for c in _bad}))
         return _P(s.translate({ord(c): "-" for c in _bad}))

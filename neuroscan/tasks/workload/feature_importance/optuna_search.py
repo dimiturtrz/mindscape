@@ -34,6 +34,7 @@ from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
 logger = logging.getLogger(__name__)
 
 _CFG = Path(__file__).with_name("optuna.yaml")            # study config lives beside the code (config-as-data)
+_STABLE_JACCARD = 0.6   # top-family sets agree across seeds at/above this Jaccard -> trust the ranking
 
 
 def _cv_score(F, fam, y, groups, weights, fold_seeds, k) -> float:
@@ -133,7 +134,10 @@ def main():
     per_seed_imp, per_seed_topw, peaks, bests = [], [], [], []
     for s in cfg.tpe_seeds:
         imp, topw, best, bparams = _run_one_study(F, fam, y, groups, families, cfg, int(s), storage)
-        per_seed_imp.append(imp); per_seed_topw.append(topw); peaks.append(best); bests.append(bparams)
+        per_seed_imp.append(imp)
+        per_seed_topw.append(topw)
+        peaks.append(best)
+        bests.append(bparams)
         top3 = sorted(imp, key=imp.get, reverse=True)[:3]
         logger.info(f"  seed {s}: peak-acc {best:.3f} (optimistic) · top-3 by importance {top3}")
 
@@ -147,7 +151,7 @@ def main():
         logger.info(f"  {f:<14} importance {cons_imp[f]:.3f}  ·  mean top-trial weight {cons_topw[f]:.2f} "
               f"(±{topw_sd[f]:.2f})")
     logger.info(f"\nstability: top-{stab['topn']} families agree across seeds at Jaccard {stab['mean_jaccard']:.2f} "
-          f"({'STABLE — trust the ranking' if stab['mean_jaccard'] >= 0.6 else 'UNSTABLE — importance is search noise'})")
+          f"({'STABLE — trust the ranking' if stab['mean_jaccard'] >= _STABLE_JACCARD else 'UNSTABLE — importance is search noise'})")
     logger.info(f"peak-acc range {min(peaks):.3f}-{max(peaks):.3f} (optimistic; not a generalisation estimate)")
 
     (out / "importance.json").write_text(json.dumps({

@@ -133,7 +133,8 @@ def main():
 
     rows, P, Y = [], [], []
     for row, probs, yte in sorted(out_folds, key=lambda r: r[0]["fold"]):
-        rows.append(row); Y.append(yte)
+        rows.append(row)
+        Y.append(yte)
         if probs is not None:
             P.append(probs)
         cal = f" calib={row['n_calib']}" if "n_calib" in row else ""

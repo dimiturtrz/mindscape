@@ -83,7 +83,8 @@ def aggregation_sweep(Pe, Pf, Stk, Pce, Pcf, y, ce, cf) -> dict:
     """Can any OUTPUT-space combiner cash the oracle headroom? Try every cheap→learned aggregator on the
     pooled probs. They all fail here because confidence does not track correctness (see the conf_gap) — the
     reliability signal a selector needs is not in the probabilities at all."""
-    acc = lambda P: float((P.argmax(1) == y).mean())
+    def acc(P):
+        return float((P.argmax(1) == y).mean())
     we, wf = Pe.max(1, keepdims=True), Pf.max(1, keepdims=True)
     return {
         "mean": acc((Pe + Pf) / 2), "product": acc(Pe * Pf),

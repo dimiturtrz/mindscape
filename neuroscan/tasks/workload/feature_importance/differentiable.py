@@ -38,6 +38,9 @@ from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
 logger = logging.getLogger(__name__)
 
 _DEV = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+_EPS = 1e-12            # drop numerically-zero simplex weights before the entropy / effective-#-features sum
+_KEEP_WEIGHT_MIN = 0.05  # family weight above this is reported in the knee subset (the kept features)
 _CFG = Path(__file__).with_name("subset.yaml")            # study config lives beside the code (config-as-data)
 
 
@@ -103,13 +106,14 @@ def _cv_acc(F_, group_idx, y, groups, n_groups, n_classes, lam, hp):
 
 
 def _effective_n(w: np.ndarray) -> float:
-    p = w[w > 1e-12]
+    p = w[w > _EPS]
     return float(np.exp(-(p * np.log(p)).sum()))
 
 
 def _knee(points):
     """Utopia-corner knee of the (acc, eff_n) sweep: closest to high-acc / low-eff_n."""
-    acc = np.array([p["acc"] for p in points]); en = np.array([p["eff_n"] for p in points])
+    acc = np.array([p["acc"] for p in points])
+    en = np.array([p["eff_n"] for p in points])
     an = (acc - acc.min()) / (np.ptp(acc) + 1e-9)
     en_ = (en - en.min()) / (np.ptp(en) + 1e-9)
     return points[int(np.hypot(1 - an, en_).argmin())]
@@ -177,12 +181,13 @@ def main():
     Xtr, Xte = _standardise(Fs, Fb[seal_idx])
     m = _fit(Xtr, ys, group_idx, n_groups, n_classes, knee["lam"], hp)
     sealed = float((_predict(m, Xte) == y[seal_idx]).mean())
-    kept = {f: round(v, 3) for f, v in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1]) if v > 0.05}
+    kept = {f: round(v, 3) for f, v in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1]) if v > _KEEP_WEIGHT_MIN}
     logger.info(f"\nknee λ={knee['lam']}: eff-#feat {knee['eff_n']:.2f} · search-acc {knee['acc']:.3f} (optimistic) "
           f"· SEALED-acc {sealed:.3f} (honest)")
     logger.info(f"knee subset (family weight>0.05): {kept}")
 
-    out = REPO / cfg.out; out.mkdir(parents=True, exist_ok=True)
+    out = REPO / cfg.out
+    out.mkdir(parents=True, exist_ok=True)
     (out / f"subset_{grain}.json").write_text(json.dumps(
         {"dataset": str(cfg.dataset), "grain": grain, "sweep": sweep,
          "knee": knee, "sealed_acc": sealed, "kept": kept}, indent=2))

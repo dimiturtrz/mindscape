@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+from scipy.special import softmax
 
 from core import export_onnx
 from core.data import store
@@ -26,6 +27,8 @@ from neuroscan.models import decoders
 
 logger = logging.getLogger(__name__)
 
+_ONNX_PARITY_TOL = 1e-3   # max |Δlogit| allowed between the torch net and its exported ONNX before quantizing
+
 
 def _onnx_trial_proba(path, X_std, crop_len, n_test_crops):
     """Run an ONNX model over the crops of each trial and average softmax back per trial."""
@@ -34,8 +37,7 @@ def _onnx_trial_proba(path, X_std, crop_len, n_test_crops):
     else:
         Xc, tidx = X_std, np.arange(len(X_std))
     logits = export_onnx.run(path, Xc)
-    z = logits - logits.max(1, keepdims=True)
-    p = np.exp(z); p /= p.sum(1, keepdims=True)
+    p = softmax(logits, axis=1)
     out = np.zeros((len(X_std), p.shape[1]))
     np.add.at(out, tidx, p)
     return out / (n_test_crops if crop_len else 1)
@@ -80,7 +82,7 @@ def main():
     # parity gate on a batch of crops (the unit the net actually consumes)
     Xc = decoders._crops(Xte_std, crop_len, clf.n_test_crops)[0] if crop_len else Xte_std
     gap = export_onnx.parity(clf.net, fp32_path, Xc[:128], device="cpu")
-    assert gap < 1e-3, f"ONNX parity failed: max|Δlogit| = {gap:.2e}"
+    assert gap < _ONNX_PARITY_TOL, f"ONNX parity failed: max|Δlogit| = {gap:.2e}"
 
     acc_fp32 = metrics.accuracy(yte, _onnx_trial_proba(fp32_path, Xte_std, crop_len, clf.n_test_crops).argmax(1))
 
@@ -107,12 +109,13 @@ def main():
     with tracking.run("mindscape", f"quantize_{args.method}",
                       params={"method": args.method, "subject": str(sub)},
                       tags={"kind": "quantize"}, run_dir=rep_dir):
-        a, s, l = rep["accuracy"], rep["size_mb"], rep["latency_ms_cpu"]
-        m = {"acc_torch_fp32": a["torch_fp32"], "acc_onnx_fp32": a["onnx_fp32"],
-             "size_fp32_mb": s["fp32"], "latency_fp32_ms": l["fp32"], "parity_max_dlogit": gap}
-        if "onnx_int8" in a:
-            m.update({"acc_onnx_int8": a["onnx_int8"], "size_int8_mb": s["int8"], "latency_int8_ms": l["int8"]})
-        tracking.metrics(m)
+        accuracy, size, latency = rep["accuracy"], rep["size_mb"], rep["latency_ms_cpu"]
+        record = {"acc_torch_fp32": accuracy["torch_fp32"], "acc_onnx_fp32": accuracy["onnx_fp32"],
+                  "size_fp32_mb": size["fp32"], "latency_fp32_ms": latency["fp32"], "parity_max_dlogit": gap}
+        if "onnx_int8" in accuracy:
+            record.update({"acc_onnx_int8": accuracy["onnx_int8"], "size_int8_mb": size["int8"],
+                           "latency_int8_ms": latency["int8"]})
+        tracking.metrics(record)
     logger.info(f"\n=== {args.method} edge quantization (subject {sub}) ===")
     logger.info(f"  parity max|Δlogit| {gap:.2e}  (gate < 1e-3) OK")
     a = rep["accuracy"]

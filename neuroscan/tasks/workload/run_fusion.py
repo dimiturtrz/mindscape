@@ -123,8 +123,14 @@ def main():
         stk, pec, pfc = combine.smart_aggregators(eeg_probs, fn_fit, fn_score,
                                                   Xe_tr, Xf_tr, y_tr, g_tr, pe, pf)
 
-        CE.append(pe.argmax(1) == y_te); CF.append(pf.argmax(1) == y_te); Y.append(y_te)
-        PE.append(pe); PF.append(pf); STK.append(stk); PEc.append(pec); PFc.append(pfc)
+        CE.append(pe.argmax(1) == y_te)
+        CF.append(pf.argmax(1) == y_te)
+        Y.append(y_te)
+        PE.append(pe)
+        PF.append(pf)
+        STK.append(stk)
+        PEc.append(pec)
+        PFc.append(pfc)
         rows.append({
             "fold": str(i), "n": int(len(y_te)),
             "eeg": metrics.accuracy(y_te, pe.argmax(1)),

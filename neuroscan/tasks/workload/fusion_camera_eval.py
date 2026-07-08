@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _GRID, _FPS, _TEND = 16, 10.0, 20.0                # hemodynamic lag derived per subject (no fixed shift)
 _SEEDS, _K = [0, 1, 2], 5
+_FNIRS_BASELINE_ACC = 0.595   # EEG best-single reference (0.580) + margin; beat it to claim fusion cashed a gain
 
 
 def _build_all():
@@ -41,7 +42,8 @@ def _build_all():
         assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
         pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
         Xs.append(bc.build_tensor(Xe, Xf, pos_e, pos_f, grid=_GRID, fps=_FPS, t_end=_TEND))
-        ys.append(ye); gs.append(np.array([s] * len(ye)))
+        ys.append(ye)
+        gs.append(np.array([s] * len(ye)))
     return np.concatenate(Xs), np.concatenate(ys), np.concatenate(gs)
 
 
@@ -58,11 +60,12 @@ def main():
         for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(X, y, g):
             clf = BrainCameraNet(n_classes=int(y.max()) + 1, seed=seed).fit(X[tr], y[tr])
             pred = clf.predict_proba(X[te]).argmax(1)
-            accs.append(metrics.accuracy(y[te], pred)); kaps.append(metrics.kappa(y[te], pred))
+            accs.append(metrics.accuracy(y[te], pred))
+            kaps.append(metrics.kappa(y[te], pred))
     a, k = float(np.mean(accs)), float(np.mean(kaps))
     logger.info(f"\n  brain-camera 3D-CNN · cross-subject {len(_SEEDS)}x{_K}-fold: acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
     logger.info("  reference (per-subject-z features -> LDA): best-single 0.580 · late 0.587 · feature 0.564 · oracle 0.752")
-    logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {'CASHED something' if a > 0.595 else 'null'}")
+    logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {'CASHED something' if a > _FNIRS_BASELINE_ACC else 'null'}")
     logger.info("  NOTE: not a fair representation test — this is a raw 3D-CNN (no per-subject re-centering) on 702 "
           "cross-subject samples (overfits); the 0.580 ref had per-subject-z + LDA. Fair test = re-center + a "
           "readout that doesn't overfit. The null is the METHOD, not proof the representation is empty.")

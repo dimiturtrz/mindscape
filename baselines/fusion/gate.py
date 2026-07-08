@@ -26,7 +26,8 @@ class GatedFusion:
         class Net(nn.Module):
             def __init__(s):
                 super().__init__()
-                enc = lambda din: nn.Sequential(nn.Linear(din, d), nn.ReLU(), nn.Dropout(c["dropout"]))
+                def enc(din):
+                    return nn.Sequential(nn.Linear(din, d), nn.ReLU(), nn.Dropout(c["dropout"]))
                 s.enc_e, s.enc_f = enc(c["d_e"]), enc(c["d_f"])
                 s.head_e = nn.Linear(d, c["n_classes"])
                 s.head_f = nn.Linear(d, c["n_classes"])
@@ -55,10 +56,12 @@ class GatedFusion:
         ve, vf, vy = map(torch.as_tensor, (Xe_va, Xf_va, y_va))
         best, best_state, bad = 1e9, None, 0
         for _ep in range(self.cfg["max_epochs"]):
-            self.net.train(); opt.zero_grad()
+            self.net.train()
+            opt.zero_grad()
             p, _ = self.net(te, tf)
             loss = nll(torch.log(p + 1e-12), ty)
-            loss.backward(); opt.step()
+            loss.backward()
+            opt.step()
             self.net.eval()
             with torch.no_grad():
                 pv, _ = self.net(ve, vf)

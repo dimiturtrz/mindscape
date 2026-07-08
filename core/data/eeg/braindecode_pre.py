@@ -54,7 +54,8 @@ def get_data(dataset_name: str = "BNCI2014_001", subjects: list[int] | None = No
         d = wds.description
         arr = np.stack([wds[i][0] for i in range(len(wds))]).astype(np.float32)   # [n, ch, t]
         lab = np.array([wds[i][1] for i in range(len(wds))], dtype=np.int64)        # braindecode int labels
-        Xs.append(arr); ys.append(lab)
+        Xs.append(arr)
+        ys.append(lab)
         n = len(lab)
         subj += [str(d["subject"])] * n
         sess += [str(d["session"])] * n

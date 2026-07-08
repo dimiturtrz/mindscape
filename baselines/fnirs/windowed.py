@@ -35,6 +35,8 @@ from core.features import FNIRS_FEATURE_FNS
 # sub-windows, not from a wide per-window bank, so this stays compact (small K).
 _DEFAULT_FAMILIES = ("mean", "slope")
 _AGGREGATES = ("concat", "mean", "max", "lse")
+_MIL_MIN_CLASSES = 3          # MIL score-pooling needs a per-class score axis; binary LDA has only 1 margin
+_MULTICLASS_SCORE_NDIM = 2    # multiclass LDA.decision_function is 2-D [n, C]; binary is 1-D
 
 
 class WindowedFnirs(Baseline):
@@ -103,7 +105,7 @@ class WindowedFnirs(Baseline):
             yw = np.repeat(y, W)                                          # each sub-window inherits its block label
             self.pipe_ = self._lda().fit(Fw.reshape(n * W, D), yw)       # ONE shared stage-1 over all windows
             self.classes_ = self.pipe_.classes_
-            if self.aggregate in ("max", "lse") and len(self.classes_) < 3:
+            if self.aggregate in ("max", "lse") and len(self.classes_) < _MIL_MIN_CLASSES:
                 # binary LDA.decision_function is 1-D (one margin, not per-class) — the score-pool has no
                 # per-class axis to reduce over. concat/mean stay valid; MIL pooling needs >=3 classes.
                 raise ValueError(f"aggregate={self.aggregate!r} needs >=3 classes (got {len(self.classes_)}); "
@@ -127,7 +129,7 @@ class WindowedFnirs(Baseline):
         # max / lse: pool the per-window class SCORES (LDA decision fn), then softmax to probabilities. MIL —
         # the block score for a class is its strongest (max) / soft-strongest (lse) sub-window, not the mean.
         s = self.pipe_.decision_function(Fw.reshape(n * W, D))
-        s = s.reshape(n, W, -1) if s.ndim == 2 else s.reshape(n, W, 1)   # [n, W, C]
+        s = s.reshape(n, W, -1) if s.ndim == _MULTICLASS_SCORE_NDIM else s.reshape(n, W, 1)   # [n, W, C]
         pooled = s.max(axis=1) if self.aggregate == "max" else _logsumexp(s, axis=1)
         return self._softmax(pooled)
 

@@ -38,7 +38,9 @@ def main():
     Cs, ys, gs = [], [], []
     for s in subs:
         X, y = store.gather(me.filter(me["subject"] == s))
-        Cs.append(_cov(X)); ys.append(y); gs.append(np.array([s] * len(y)))
+        Cs.append(_cov(X))
+        ys.append(y)
+        gs.append(np.array([s] * len(y)))
     C, y, g = np.concatenate(Cs), np.concatenate(ys), np.concatenate(gs)
     n_cls = int(y.max()) + 1
 
