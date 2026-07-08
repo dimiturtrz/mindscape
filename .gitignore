@@ -67,3 +67,5 @@ Thumbs.db
 # neuroviz generated topo data (derived from EEG; regenerate via neuroviz.export)
 neuroviz/web/data/
 elevator.txt
+.coverage
+.claude/
