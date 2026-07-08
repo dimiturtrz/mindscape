@@ -86,6 +86,7 @@ omit = [
     "baselines/fusion/gate.py", "baselines/fusion/spatiotemporal.py", "core/data/eeg/braindecode_pre.py",
     # data adapters: filesystem read / OSF+OpenNeuro download
     "core/data/*/registry.py", "core/data/eeg/things_eeg2.py", "core/data/fnirs/shin2017.py",
+    "core/data/eeg/shin2017_nback_eeg.py",   # BBCI .mat disk read (its pure epoching lives in core.data.signal)
     # workload/fusion runners: load -> fit -> record orchestration (their logic lives in combine/base/_eval,
     # and the per-subject z-score in core.features.zscore_per_subject)
     "neuroscan/tasks/workload/run_fnirs.py", "neuroscan/tasks/workload/run_fusion.py",
