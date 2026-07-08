@@ -1,7 +1,7 @@
 """MLflow experiment tracking — a thin, GUARDED layer (mirrors the siblings').
 
-Local sqlite backend (mlflow.db) + mlruns/ artifact store. If mlflow is absent or MINDSCAPE_NO_MLFLOW
-is set, every call is a no-op, so the harness never depends on it. It's the cross-run comparison UI
+Local sqlite backend (mlflow.db) + mlruns/ artifact store. If MINDSCAPE_NO_MLFLOW is set, every call is a
+no-op, so the harness never depends on it. It's the cross-run comparison UI
 (`mlflow ui --backend-store-uri sqlite:///mlflow.db`), not the source of truth — the runs/<name>/
 aggregate.json each run writes stays authoritative.
 
@@ -23,6 +23,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import joblib
+import mlflow
 import torch
 
 from core.config import REPO
@@ -36,14 +37,10 @@ _DB_URI = f"sqlite:///{(REPO / 'mlflow.db').as_posix()}"
 _active = None   # the live mlflow module while a run is open, else None
 
 
-def _mlflow():
-    if os.environ.get("MINDSCAPE_NO_MLFLOW"):
-        return None
-    try:
-        import mlflow  # noqa: PLC0415
-    except ImportError:
-        return None
-    return mlflow
+def _disabled() -> bool:
+    """The one off-switch (MINDSCAPE_NO_MLFLOW): tests + fast local runs skip tracking. mlflow is a hard
+    dep now, so there's no 'is it installed?' fallback — it either logs or is explicitly disabled."""
+    return bool(os.environ.get("MINDSCAPE_NO_MLFLOW"))
 
 
 def _flat(d: dict, prefix: str = "") -> dict:
@@ -63,8 +60,7 @@ def run(experiment: str, run_name: str, params: dict | None = None, tags: dict |
     """Open a tracked run (local mlruns/). No-op context if tracking is off; never breaks the caller.
     If `run_dir` holds a .mlflow_run_id, resume that run (log into it); else start fresh and persist the id."""
     global _active
-    mlflow = _mlflow()
-    if mlflow is None:
+    if _disabled():
         yield
         return
     try:
