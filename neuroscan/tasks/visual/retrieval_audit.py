@@ -41,15 +41,23 @@ class AuditConfig(BaseModel):
     patience: int = 8
 
 
+def _concept_names(split_key: str) -> set[str]:
+    """The concept IDENTITIES of a split (folder names minus the split-local 'NNNNN_' index prefix). The
+    integer concept index is re-numbered from 0 WITHIN each split, so identity has to be the name, not the
+    index — comparing indices would falsely report every test concept as 'seen'."""
+    meta = things._meta()
+    return {str(name)[6:] if str(name)[:5].isdigit() else str(name)
+            for name in meta[f"{split_key}_img_concepts"]}
+
+
 def verify_concept_disjoint() -> dict:
-    """Assert the THINGS-EEG2 train/test concept sets don't overlap — the dataset's zero-shot claim, checked
-    rather than assumed. Returns the two set sizes + the overlap (must be 0)."""
-    train_concepts = set(things._labels_for("training")[0].tolist())
-    test_concepts = set(things._labels_for("test")[0].tolist())
-    overlap = train_concepts & test_concepts
+    """Check the THINGS-EEG2 train/test concept sets don't overlap — the dataset's zero-shot claim, verified
+    on concept NAMES rather than assumed. Returns the two set sizes + the overlap (must be 0)."""
+    train_names, test_names = _concept_names("train"), _concept_names("test")
+    overlap = train_names & test_names
     if overlap:
         raise ValueError(f"train/test concepts overlap by {len(overlap)} — retrieval is NOT zero-shot")
-    return {"n_train_concepts": len(train_concepts), "n_test_concepts": len(test_concepts),
+    return {"n_train_concepts": len(train_names), "n_test_concepts": len(test_names),
             "concept_overlap": len(overlap)}
 
 
