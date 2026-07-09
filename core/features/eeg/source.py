@@ -72,16 +72,31 @@ def build_forward(ch_names: list[str], sfreq: float, cfg: SourceConfig | None = 
     return fwd, info
 
 
+def cortical_labels(cfg: SourceConfig | None = None):  # pragma: no cover — needs fsaverage annot
+    """The parcellation's cortical labels (unknown/medial-wall dropped) — shared by the dSPM inverse
+    (`build_inverse`, 728) and the fNIRS-priored inverse's parcel aggregation (4so)."""
+    cfg = cfg or SourceConfig()
+    _, subjects_dir = _fsaverage_dir()
+    return [lbl for lbl in mne.read_labels_from_annot("fsaverage", cfg.parcellation,
+                                                      subjects_dir=subjects_dir, verbose=False)
+            if "unknown" not in lbl.name]
+
+
+def source_positions(ch_names: list[str], sfreq: float, cfg: SourceConfig | None = None) -> np.ndarray:
+    """3D positions `[n_src, 3]` of the fixed-orientation source-space vertices, in the forward's source
+    order (concatenated over hemispheres) — the frame a spatial prior (e.g. fNIRS 'where', 4so) lives in."""
+    fwd, _ = build_forward(ch_names, sfreq, cfg)
+    fwd = mne.convert_forward_solution(fwd, force_fixed=True, use_cps=True, verbose=False)
+    return np.vstack([s["rr"][s["vertno"]] for s in fwd["src"]])   # [n_src, 3]
+
+
 def build_inverse(ch_names: list[str], sfreq: float, cfg: SourceConfig | None = None):  # pragma: no cover
     """Build (or load from cache) the dSPM inverse operator + cortical labels for a montage.
 
     Returns `(inverse_operator, labels)`. The fsaverage forward solution is computed once per
     (montage, sfreq, config) and the inverse cached to `processed_dir()/source_operators/<key>-inv.fif`."""
     cfg = cfg or SourceConfig()
-    _, subjects_dir = _fsaverage_dir()
-    labels = [lbl for lbl in mne.read_labels_from_annot("fsaverage", cfg.parcellation,
-                                                        subjects_dir=subjects_dir, verbose=False)
-              if "unknown" not in lbl.name]
+    labels = cortical_labels(cfg)
     cache_dir = processed_dir() / "source_operators"
     cache_dir.mkdir(parents=True, exist_ok=True)
     inv_path = cache_dir / f"{_cache_key(ch_names, sfreq, cfg)}-inv.fif"
