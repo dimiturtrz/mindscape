@@ -1,0 +1,4 @@
+{
+  "epochs": 60, "batch": 512, "lr": 3e-4, "patience": 12, "train_frac": 1.0,
+  "sampling": "uniform", "amp": true, "soft_tau": 0.1
+}

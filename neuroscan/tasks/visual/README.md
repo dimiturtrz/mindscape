@@ -36,20 +36,24 @@ Stages 1-2 closed their cross-subject gaps by removing per-subject *distribution
 re-centering; workload: per-subject z-score). We transplanted that logic here and tested it under **3-seed**
 rigor (train-4 → test-5, matched config). It does **not** transfer to the single-trial headline:
 
-| lever (single-trial top1) | mechanism | result |
+| lever (single-trial top1) | axis · mechanism | result |
 |---|---|---|
 | baseline | — | **1.87 ± 0.14 %** |
-| per-subject signal re-centering | whiten each subject's epochs `M⁻¹ᐟ² X` ([`covariance.py`](../../../core/features/eeg/covariance.py)) | ~1.71 (flat; concept-avg *hurt*) |
-| domain-adversarial | GRL + subject discriminator ([`nice.py`](../../../neuroscan/models/nice.py)) | 2.00 ± 0.06 (**Δ +0.13, within noise**) |
+| per-subject signal re-centering | *input space* · whiten each subject's epochs `M⁻¹ᐟ² X` ([`covariance.py`](../../../core/features/eeg/covariance.py)) | ~1.71 (flat; concept-avg *hurt*) |
+| domain-adversarial | *embedding space* · GRL + subject discriminator ([`nice.py`](../../../neuroscan/models/nice.py)) | 2.00 ± 0.06 (**Δ +0.13, within noise**) |
+| concept-aware soft InfoNCE | *loss* · CLIP-similarity soft targets ([`nice.py`](../../../neuroscan/models/nice.py)) | 1.73 (washes) |
 
-Both are mechanism-sound and physically motivated, and both **fail to move the single-trial-top1 number beyond
-noise** — the honest result. *Why they fail, diagnosed:* re-centering whitens an **ill-conditioned** per-subject
-covariance (cond ≈ 1500), amplifying noise channels ~38× and *hurting* the averaged metric while leaving
-single-trial flat (a shrinkage-regularised variant recovers the loss but not a gain); the adversary *does* act
-(consistent val-drop, a weak **top5** +0.43 pp ≈ 2.5 σ) but subject-invariance is not the missing piece, and a
-λ-ramp doesn't rescue it. **Conclusion: the single-trial cross-subject gap is a genuine hard floor for this
-compact encoder at this scale — bounded by single-trial SNR / capacity, not by a fixable subject-shift.** Both
-operators are kept opt-in + documented (`TrainConfig.recenter`, `.adversarial`); the negative is the finding.
+Three levers on **three different axes** — input alignment, embedding invariance, loss quality — and none moves
+the single-trial-top1 number beyond noise. That breadth is the point: it's not one idea failing. *Why they
+fail, diagnosed:* re-centering whitens an **ill-conditioned** per-subject covariance (cond ≈ 1500), amplifying
+noise channels ~38× and *hurting* the averaged metric while leaving single-trial flat (a shrinkage-regularised
+variant recovers the loss but not a gain); the adversary *does* act (consistent val-drop, a weak **top5** +0.43
+pp ≈ 2.5 σ) but subject-invariance isn't the missing piece, and a λ-ramp doesn't rescue it; soft-negatives fix a
+real false-negative but don't lift transfer. **Conclusion: the single-trial cross-subject gap is a genuine hard
+floor for this compact encoder at this scale — bounded by single-trial SNR / capacity, not by a fixable
+subject-shift or loss bug.** The remaining untested axis is *capacity* (a bigger encoder / longer schedule) — a
+different question (representation power, not transfer). All three operators are kept opt-in + documented
+(`TrainConfig.recenter`, `.adversarial`, `.soft_tau`); the negative is the finding.
 
 ## Critique / limitations (what's weak, on purpose visible)
 
