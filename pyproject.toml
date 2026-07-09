@@ -102,7 +102,6 @@ omit = [
     "baselines/fusion/gate.py", "baselines/fusion/spatiotemporal.py", "core/data/eeg/braindecode_pre.py",
     # data adapters: filesystem read / OSF+OpenNeuro download
     "core/data/*/registry.py", "core/data/eeg/things_eeg2.py", "core/data/fnirs/shin2017.py",
-    "core/data/eeg/shin2017_nback_eeg.py",   # BBCI .mat disk read (its pure epoching lives in core.data.signal)
     "core/data/eeg/things_eeg1.py",   # BrainVision disk read (its pure epochs_from_events is unit-tested)
     "core/features/fnirs/montage.py",   # fnirs_positions loads .mat (disk); pure _to_unit_disk tested in features/eeg/montage
     # workload/fusion runners: load -> fit -> record orchestration (their logic lives in combine/base/_eval,
