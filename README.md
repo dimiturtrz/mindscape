@@ -221,16 +221,6 @@ perception. The zero-shot disjointness
 check, the confidence calibration, and the hardest test — cross-dataset EEG1→EEG2 transfer, a **measured null**
 that montage-alignment doesn't rescue → **[neuroscan/tasks/visual/](neuroscan/tasks/visual/)**.
 
-**Lifting the defensible number — a pretrained encoder.** That cross-subject single-trial floor is **not a pure
-signal-to-noise ceiling**. A pretrained EEG foundation transformer ([CBraMod](https://github.com/wjq-learning/CBraMod),
-4.9M params, TUEG-pretrained), fine-tuned behind the same CLIP-retrieval head, **beats the from-scratch NICE
-encoder cross-subject single-trial (~1.35×, replicated on 2 held-out subjects)** — the first method here to move
-that number after three from-scratch transfer levers (input-alignment, domain-adversarial, concept-aware
-InfoNCE) all came back null. A *frozen* probe of the same backbone fails (near chance), so it's the pretrained
-capacity **adapted** to perception — not a linear readout — that lifts it; both fine-tune runs were still
-improving when stopped (a lower bound). Modest in absolute terms, but it re-frames the wall as **capacity-bound,
-not a hard SNR floor** — a swap-in encoder behind one contract → [neuroscan/models/foundation.py](neuroscan/models/foundation.py).
-
 *Grounding — data [THINGS-EEG2](https://osf.io/3jk45/) ·
 [THINGS-EEG1 (ds003825)](https://openneuro.org/datasets/ds003825) · method/SOTA NICE (Song et al., ICLR 2024) —
 the claimed numbers are the within-subject / concept-averaged cell (14.8 %); our measured cross-subject
