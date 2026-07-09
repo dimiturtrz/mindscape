@@ -119,15 +119,6 @@ def per_group(prefix: str, d: dict) -> None:
     metrics({f"{prefix}_{g}": v for g, v in d.items()})
 
 
-def set_tags(d: dict) -> None:
-    if _active is None:
-        return
-    for k, v in (d or {}).items():
-        try:
-            _active.set_tag(k, str(v))
-        except _TRACK_ERRORS as exc:
-            logger.debug(f"tracking: {exc}")
-
 
 def artifact(path: str | Path) -> None:
     """Log an existing file as a run artifact."""

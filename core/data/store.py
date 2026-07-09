@@ -25,7 +25,6 @@ from core.data.registry import get_adapter
 
 logger = logging.getLogger(__name__)
 
-META_FIELDS = ["dataset", "subject", "session", "run", "label_id", "label", "epoch", "file"]
 _SCHEMA = {
     "dataset": pl.Utf8, "subject": pl.Utf8, "session": pl.Utf8, "run": pl.Utf8,
     "label_id": pl.Int64, "label": pl.Utf8, "epoch": pl.Int64, "file": pl.Utf8,

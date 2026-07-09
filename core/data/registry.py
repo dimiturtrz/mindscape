@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from core.data.eeg.base import DatasetAdapter
 from core.data.eeg.bnci2014_001 import adapter as _bnci2014_001_adapter
 from core.data.eeg.shin2017_nback_eeg import adapter as _shin2017_nback_eeg_adapter
 from core.data.fnirs.shin2017 import adapter as _shin2017_nback_adapter
@@ -19,15 +20,11 @@ def register(name: str, factory: Callable) -> None:
     _FACTORIES[name] = factory
 
 
-def get_adapter(name: str):
+def get_adapter(name: str) -> DatasetAdapter:
     """Adapter for a dataset name (e.g. 'bnci2014_001', 'shin2017_nback')."""
     if name not in _FACTORIES:
         raise KeyError(f"unknown dataset {name!r}; have {sorted(_FACTORIES)}")
     return _FACTORIES[name]()
-
-
-def dataset_names() -> list[str]:
-    return sorted(_FACTORIES)
 
 
 # --- registrations (one line per dataset) ---

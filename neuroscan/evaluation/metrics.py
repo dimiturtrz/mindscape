@@ -41,13 +41,6 @@ def ece_from_probs(probs: np.ndarray, y_true: np.ndarray, n_bins: int = 15) -> f
     return ece(conf, (pred == np.asarray(y_true)).astype(float), n_bins)[0]
 
 
-def brier(probs: np.ndarray, y_true: np.ndarray) -> float:
-    """Multiclass Brier score = mean squared error between probs and the one-hot truth."""
-    probs = np.asarray(probs, float)
-    onehot = np.zeros_like(probs)
-    onehot[np.arange(len(y_true)), np.asarray(y_true)] = 1.0
-    return float(((probs - onehot) ** 2).sum(1).mean())
-
 
 def confusion(y_true: np.ndarray, y_pred: np.ndarray, n_classes: int) -> np.ndarray:
     """[n_classes, n_classes] integer confusion matrix (rows = true, cols = pred)."""

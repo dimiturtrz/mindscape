@@ -16,12 +16,6 @@ from baselines.fnirs.glm import GlmBeta
 from baselines.fnirs.windowed import WindowedConfig, WindowedFnirs
 from neuroscan.models.decoders import MODELS, make
 
-
-def method_names() -> list[str]:
-    return ["csp_lda", "riemann", "riemann_acm", "riemann_mdm", "riemann_fgmdm", "fbcsp",
-            "fnirs_lda", "fnirs_windowed", "fnirs_glm", "eeg_bandpower", *sorted(MODELS)]
-
-
 # baselines that need the epoch sample rate: filter-designers (band-power, FBCSP) to build their filters,
 # the windowed fNIRS decoder (sub-window seconds->samples), and GLM-β (HRF/task regressor timing).
 _FS_METHODS = {"eeg_bandpower", "fbcsp", "fnirs_windowed", "fnirs_glm"}
