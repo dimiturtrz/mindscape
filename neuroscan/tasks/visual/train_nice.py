@@ -84,6 +84,8 @@ class TrainConfig(BaseModel):
     concepts_per_batch: int = 64  # sampling="balanced": concepts × samples = effective batch (64×8=512)
     samples_per_concept: int = 8  # strict equal per-concept representation each batch (bd 2j2)
     hard_beta: float = 0.0        # >0 = online hard-negative weighting in the InfoNCE loss (bd fww)
+    soft_tau: float = 0.0         # >0 = concept-aware soft InfoNCE targets from CLIP-target sim (bd lbd) —
+                                  # same-concept pairs become partial positives, not false negatives
     val_every: int = 1           # eval the (big) held-out val set every N epochs — strides its per-epoch cost
     amp: bool = True             # bf16 autocast on cuda; False = fp32 (the naive arm of the parity test, bd 9s5)
     recenter: bool = False       # per-subject signal re-centering M^-1/2 X before the encoder (bd dpi) —
@@ -272,7 +274,8 @@ def train_encoder(data: TrainData, cfg: TrainConfig, device: str):
             optimizer.zero_grad()
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda" and cfg.amp)):
                 z = encoder(eeg_batch)
-                loss = clip_infonce(z, target_batch, logit_scale.exp().clamp(max=100), hard_beta=cfg.hard_beta)
+                loss = clip_infonce(z, target_batch, logit_scale.exp().clamp(max=100),
+                                    hard_beta=cfg.hard_beta, soft_tau=cfg.soft_tau)
                 if discriminator is not None:              # push encoder to be subject-invariant (GRL, bd 36g)
                     subj_logits = discriminator(z, lam)
                     loss = loss + cfg.adv_weight * F.cross_entropy(subj_logits, subj_batch.to(device))

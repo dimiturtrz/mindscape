@@ -67,7 +67,7 @@ class NiceEncoder(nn.Module):
 
 
 def clip_infonce(eeg: torch.Tensor, img: torch.Tensor, logit_scale: torch.Tensor,
-                 hard_beta: float = 0.0) -> torch.Tensor:
+                 hard_beta: float = 0.0, soft_tau: float = 0.0) -> torch.Tensor:
     """Symmetric InfoNCE (CLIP loss) between L2-normalized EEG and image embeddings in a batch.
 
     Positives = matched (eeg_i, img_i); negatives = every other image in the batch. Symmetric over both
@@ -77,11 +77,19 @@ def clip_infonce(eeg: torch.Tensor, img: torch.Tensor, logit_scale: torch.Tensor
     boosted by `hard_beta ×` its own (detached) similarity, so high-similarity negatives contribute more to
     the softmax denominator and get a stronger push-down gradient. Rides this same forward pass — no extra
     inference — and self-sharpens as the encoder improves. `hard_beta = 0` is the exact standard CLIP loss.
+
+    `soft_tau` > 0 replaces the hard one-hot target with a SOFT one — `softmax(img·imgᵀ / soft_tau)` — so a
+    same-concept-different-image pair (CLIP targets ~0.7 similar) is a partial positive, not a false negative
+    (bd lbd). Diagonal-dominant (self-sim = 1), tail set by `soft_tau`. Mutually exclusive with `hard_beta`.
     """
     logits = logit_scale * eeg @ img.t()                   # [B,B]
     if hard_beta > 0:
         off_diag = ~torch.eye(eeg.shape[0], dtype=torch.bool, device=eeg.device)
         logits = logits + hard_beta * logits.detach() * off_diag
+    if soft_tau > 0:                                        # concept-aware soft targets (bd lbd)
+        soft = F.softmax((img @ img.t()).detach() / soft_tau, dim=1)
+        return -0.5 * ((soft * F.log_softmax(logits, dim=1)).sum(1).mean()
+                       + (soft * F.log_softmax(logits.t(), dim=1)).sum(1).mean())
     target = torch.arange(eeg.shape[0], device=eeg.device)
     return 0.5 * (F.cross_entropy(logits, target) + F.cross_entropy(logits.t(), target))
 
