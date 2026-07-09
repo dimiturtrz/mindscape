@@ -86,6 +86,34 @@ def clip_infonce(eeg: torch.Tensor, img: torch.Tensor, logit_scale: torch.Tensor
     return 0.5 * (F.cross_entropy(logits, target) + F.cross_entropy(logits.t(), target))
 
 
+class _GradReverse(torch.autograd.Function):
+    """Identity forward, sign-flipped (× λ) gradient backward — the DANN gradient-reversal layer. Placed
+    before the subject discriminator so that minimizing the total loss trains the discriminator to name the
+    subject while pushing the ENCODER to make that impossible (subject-invariant embedding)."""
+
+    @staticmethod
+    def forward(ctx, x: torch.Tensor, lambd: float) -> torch.Tensor:
+        ctx.lambd = lambd
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad: torch.Tensor):
+        return -ctx.lambd * grad, None
+
+
+class SubjectDiscriminator(nn.Module):
+    """Adversary that predicts which subject an embedding came from, through a gradient-reversal layer (bd
+    36g). If the encoder's cross-subject collapse is because the embedding still encodes *who*, forcing it to
+    fool this head should make the EEG->image map subject-invariant and transfer better."""
+
+    def __init__(self, embed_dim: int, n_subjects: int, hidden: int = 256):
+        super().__init__()
+        self.net = nn.Sequential(nn.Linear(embed_dim, hidden), nn.ReLU(), nn.Linear(hidden, n_subjects))
+
+    def forward(self, z: torch.Tensor, lambd: float) -> torch.Tensor:
+        return self.net(_GradReverse.apply(z, lambd))
+
+
 @torch.no_grad()
 def retrieval_topk(eeg: torch.Tensor, candidates: torch.Tensor, labels: torch.Tensor,
                    ks: tuple[int, ...] = (1, 5)) -> dict[int, float]:
