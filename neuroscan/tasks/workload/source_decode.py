@@ -27,7 +27,7 @@ from neuroscan.evaluation import metrics
 logger = logging.getLogger(__name__)
 
 _CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
-_SEEDS, _K = [0, 1, 2], 5
+_SEEDS, _K = [0], 5          # 1 seed default (escalate-on-signal, bd); k-fold = validity not rigor
 _SENSOR_REF = 0.580        # EEG-sensor re-centered Riemann cross-subject reference (workload n-back)
 
 

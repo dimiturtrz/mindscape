@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _FN_TMAX, _FPS, _TEND = 32.0, 10.0, 20.0
-_SEEDS, _K = [0, 1, 2], 5
+_SEEDS, _K = [0], 5          # 1 seed default (escalate-on-signal, bd); k-fold = validity not rigor
 _CSD = True                                        # surface-Laplacian deblur of EEG before fusion
 _FNIRS_BASELINE_ACC = 0.595                        # EEG-only re-centered Riemann reference (0.580) + margin
 
