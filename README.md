@@ -125,6 +125,11 @@ re-scaling nudges it to 0.52 — the displacement *was* the gap. **Calibrated**,
 the MDWM fragility negative, the decoder comparison (params / FLOPs / latency), and why our numbers sit below
 published SOTA → **[motor_imagery/](neuroscan/tasks/motor_imagery/)**.
 
+*Grounding — challenge [BCI Competition IV-2a](https://www.bbci.de/competition/iv/) · data via
+[MOABB](https://moabb.neurotechx.com/) · SOTA [ATCNet](https://github.com/Altaheri/EEG-ATCNet) · homework:
+[2a SOTA-gap analysis](research/deep_dives/2026-06-30_2a_sota_recipe.md),
+[MI neuroscience](research/deep_dives/2026-06-30_motor-imagery-neuroscience.md).*
+
 ## Task · Mental workload / n-back (Shin) — one task, three approaches: EEG · fNIRS · fusion
 Decode **mental workload** — which n-back load (0/2/3-back) a subject holds in working memory — from the
 Shin hybrid set, where EEG and fNIRS were recorded **simultaneously**. So both modalities decode *one
@@ -184,6 +189,14 @@ lifting the weak modality is closed (fNIRS at the physiological ceiling), leavin
 source-space fusion** the open routes. Full combiner sweep, the gate, the z-score confirmation, and the
 literature caveats → **[workload/](neuroscan/tasks/workload/)**.
 
+*Grounding — benchmark [BenchNIRS](https://doi.org/10.3389/fnrgo.2023.994969) · data
+[Shin 2017](https://doi.org/10.14279/depositonce-5830.2)
+([MOABB](https://moabb.neurotechx.com/docs/generated/moabb.datasets.Shin2017A.html)) · fNIRS SOTA
+[fNIRS-T](https://github.com/wzhlearning/fNIRS-Transformer) · homework:
+[fNIRS decoding SOTA](research/deep_dives/2026-07-01_fnirs_decoding_sota.md),
+[EEG-fNIRS fusion SOTA](research/deep_dives/2026-07-01_eeg_fnirs_fusion_sota.md),
+[fNIRS datasets](research/deep_dives/2026-07-06_fnirs_datasets_benchmarks.md).*
+
 ## Task · Perception (EEG→image on THINGS) — the over-reporting audit
 
 Third rung of the ladder: decode the *seen image* from EEG. A NICE-style encoder maps each EEG epoch to the
@@ -204,6 +217,10 @@ test *repeats* — for an **8.0× gap** (14.8% vs 1.9%, +12.9 pts) between the q
 number. Same subject-generalization story as motor imagery, now in perception. The zero-shot disjointness
 check, the confidence calibration, and the hardest test — cross-dataset EEG1→EEG2 transfer, a **measured null**
 that montage-alignment doesn't rescue → **[neuroscan/tasks/visual/](neuroscan/tasks/visual/)**.
+
+*Grounding — data [THINGS-EEG2](https://osf.io/3jk45/) ·
+[THINGS-EEG1 (ds003825)](https://openneuro.org/datasets/ds003825) · method NICE (Song et al., ICLR 2024) ·
+homework: [EEG→image datasets + the leakage-trap landscape](research/deep_dives/2026-07-07_eeg_visual_semantic_decoding_datasets.md).*
 
 ## Limits (measured, not assumed)
 Competent on a public benchmark, **not** a finished system:
