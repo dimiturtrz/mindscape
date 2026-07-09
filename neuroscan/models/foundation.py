@@ -41,6 +41,8 @@ class FoundationConfig(BaseModel):
     patch_points: int = 200        # CBraMod points-per-patch — implies 200 Hz epochs (set resample=200)
     d_model: int = 200             # CBraMod per-token feature width (fixed by the checkpoint)
     freeze_backbone: bool = True   # capacity stays in the frozen pretrained weights; only the head learns
+    backbone_lr_scale: float = 0.1  # when unfrozen, backbone fine-tunes at base_lr × this (< head's) so the
+                                    # pretrained features aren't washed out — standard discriminative-LR fine-tune
     hidden: int = 512
     dropout: float = 0.5
 
@@ -86,6 +88,15 @@ class CBraModEncoder(nn.Module):
         if self.cfg.freeze_backbone:
             self.backbone.eval()
         return self
+
+    def param_groups(self, base_lr: float) -> list[dict]:
+        """Discriminative-LR optimizer groups: the pretrained backbone fine-tunes at `base_lr ×
+        backbone_lr_scale` (gentler than the head, so pretrained features survive), the fresh head at
+        `base_lr`. Frozen backbone -> head-only group. Consumed by the trainer's `_build_optim`."""
+        if self.cfg.freeze_backbone:
+            return [{"params": list(self.head.parameters()), "lr": base_lr}]
+        return [{"params": list(self.backbone.parameters()), "lr": base_lr * self.cfg.backbone_lr_scale},
+                {"params": list(self.head.parameters()), "lr": base_lr}]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, t = x.shape

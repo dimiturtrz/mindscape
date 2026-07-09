@@ -222,13 +222,17 @@ def _build_optim(spec: EncoderSpec, n_subjects: int, cfg: TrainConfig, device: s
     one AdamW."""
     encoder = build_encoder(cfg.model, spec).to(device)
     logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
-    params = [*encoder.parameters(), logit_scale]
+    # per-encoder optimizer groups if the encoder defines them (foundation: discriminative backbone/head LR),
+    # else one group at cfg.lr (NICE — unchanged).
+    make_groups = getattr(encoder, "param_groups", None)
+    groups = make_groups(cfg.lr) if make_groups else [{"params": [*encoder.parameters()], "lr": cfg.lr}]
+    groups.append({"params": [logit_scale], "lr": cfg.lr})
     discriminator = None
     if cfg.adversarial:
         discriminator = SubjectDiscriminator(spec.embed_dim, n_subjects).to(device)
-        params += [*discriminator.parameters()]
+        groups.append({"params": [*discriminator.parameters()], "lr": cfg.lr})
         logger.info(f"domain-adversarial: {n_subjects} subjects, lambda {cfg.adv_lambda}, weight {cfg.adv_weight}")
-    return encoder, logit_scale, discriminator, torch.optim.AdamW(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
+    return encoder, logit_scale, discriminator, torch.optim.AdamW(groups, lr=cfg.lr, weight_decay=cfg.weight_decay)
 
 
 def _dann_lambda(progress: float, max_lambda: float, gamma: float = 10.0) -> float:
