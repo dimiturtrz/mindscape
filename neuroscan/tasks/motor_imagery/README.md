@@ -80,11 +80,11 @@ Three findings fall out:
   gate** (fp32 ONNX matches torch < 1e-3) and benchmarks INT8 — which *adds* overhead at this scale. The story
   isn't "shrink it," it's "already small, measured." ([`core/export_onnx.py`](../../../core/export_onnx.py))
 
-## Why our numbers sit below published SOTA — deliberately
+## Why our numbers sit below claimed SOTA
 
-**All our numbers sit below the published ceilings, on purpose.** Our robust train→eval-session protocol is
-harder than the pooled within-session CV many papers report, and we don't do full per-model tuning or
-run-averaging. Snapshot vs the published bar (4-class, same session-1→2 hold-out):
+Our numbers sit below the published ceilings. Our robust train→eval-session protocol is harder than the pooled
+within-session CV many papers report, and we don't do full per-model tuning or run-averaging. Snapshot of our
+measured numbers vs the claimed bar (4-class, same session-1→2 hold-out):
 
 - **ours:** CSP+LDA within 0.598, cross-subject (LOSO) 0.391; ATCNet within 0.619.
 - **published:** FBCSP 0.65 · EEGNet ~0.71 · ShallowConvNet 0.74 · **ATCNet 0.81** (10-run avg, 500 epochs,
