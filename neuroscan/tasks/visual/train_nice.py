@@ -81,6 +81,7 @@ class TrainConfig(BaseModel):
     samples_per_concept: int = 8  # strict equal per-concept representation each batch (bd 2j2)
     hard_beta: float = 0.0        # >0 = online hard-negative weighting in the InfoNCE loss (bd fww)
     val_every: int = 1           # eval the (big) held-out val set every N epochs — strides its per-epoch cost
+    amp: bool = True             # bf16 autocast on cuda; False = fp32 (the naive arm of the parity test, bd 9s5)
 
 
 def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
@@ -217,7 +218,7 @@ def train_encoder(train_eeg: np.ndarray, train_targets: np.ndarray, train_concep
             eeg_batch = eeg_batch.to(device)
             target_batch = torch.nn.functional.normalize(target_batch.to(device), dim=-1)
             optimizer.zero_grad()
-            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda")):
+            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda" and cfg.amp)):
                 loss = clip_infonce(encoder(eeg_batch), target_batch, logit_scale.exp().clamp(max=100),
                                     hard_beta=cfg.hard_beta)
             loss.backward()                                # bf16 autocast needs no GradScaler (unlike fp16)
