@@ -9,8 +9,12 @@ on GitHub. An expression is either `<run_name>.<field>` (field = acc|kappa|ece, 
 eeg|fnirs|late|feature) or a difference of two such terms `a.acc-b.acc` (for the within→cross gap),
 formatted with an explicit signed unicode minus.
 
-    uv run python -m neuroscan.evaluation.sync_numbers            # rewrite README in place
+    uv run python -m neuroscan.evaluation.sync_numbers            # rewrite docs in place
     uv run python -m neuroscan.evaluation.sync_numbers --check    # exit 1 if anything is stale (CI gate)
+
+Scans the root README **and every sub-`README.md`** (so a deep result table can live in the task README it
+belongs to, not only the landing page) — vendored / generated trees are skipped. A file with no markers is
+left untouched.
 
 Numbers that are NOT run outputs — FLOPs / params / latency (profiler) and the published literature
 ceilings — stay hand-authored and unmarked; this only governs measured accuracy/kappa/ece cells.
@@ -30,6 +34,14 @@ logger = logging.getLogger(__name__)
 _RESULTS = REPO / "results.json"
 _README = REPO / "README.md"
 _DP = 3          # decimals shown in the README (snapshot keeps more; see results._PRECISION)
+_SKIP_DIRS = {".venv", "external", "node_modules", ".git", "mlruns", "runs", ".pytest_cache", ".beads", "docs"}
+
+
+def _doc_files() -> list:
+    """Root README first, then every sub-README.md outside vendored/generated trees."""
+    subs = [p for p in sorted(REPO.rglob("README.md"))
+            if p != _README and not _SKIP_DIRS & set(p.relative_to(REPO).parts)]
+    return [_README, *subs]
 
 _MARKER = re.compile(r"<!--r:([^>]+?)-->(.*?)<!--/r-->")
 _TERM = re.compile(r"^([\w.]+?)\.([a-z_]+)$")     # <run>.<field>; field validated by presence in the row
@@ -64,18 +76,27 @@ def _markers(runs: dict, text: str) -> list[tuple[str, str, str, str]]:
 
 def sync(*, check: bool = False) -> int:
     runs = json.loads(_RESULTS.read_text())["runs"]
-    text = _README.read_text(encoding="utf-8")
-    marks = _markers(runs, text)
-    stale = [f"{expr}: {cur!r} -> {new!r}" for _old, expr, cur, new in marks if cur != new]
+    total = stale_total = 0
+    for path in _doc_files():
+        text = path.read_text(encoding="utf-8")
+        marks = _markers(runs, text)
+        if not marks:
+            continue
+        stale = [(expr, cur, new) for _old, expr, cur, new in marks if cur != new]
+        total += len(marks)
+        stale_total += len(stale)
+        rel = path.relative_to(REPO)
+        if check:
+            for expr, cur, new in stale:
+                logger.info(f"  {rel}: {expr}: {cur!r} -> {new!r}")
+            continue
+        for old, expr, _cur, new in marks:
+            text = text.replace(old, f"<!--r:{expr}-->{new}<!--/r-->", 1)
+        path.write_text(text, encoding="utf-8")
     if check:
-        for s in stale:
-            logger.info(f"  {s}")
-        logger.info(f"{'STALE' if stale else 'ok'} — {len(stale)}/{len(marks)} marker(s) out of sync")
-        return 1 if stale else 0
-    for old, expr, _cur, new in marks:
-        text = text.replace(old, f"<!--r:{expr}-->{new}<!--/r-->", 1)
-    _README.write_text(text, encoding="utf-8")
-    logger.info(f"synced {len(marks)} marker(s); updated {len(stale)}")
+        logger.info(f"{'STALE' if stale_total else 'ok'} — {stale_total}/{total} marker(s) out of sync")
+        return 1 if stale_total else 0
+    logger.info(f"synced {total} marker(s); updated {stale_total}")
     return 0
 
 

@@ -6,9 +6,9 @@
 
 ---
 
-## Our numbers (honest, T→E hold-out, 4-class)
-- CSP+LDA within: **0.598** / κ0.463 ; cross-subject (LOSO): **0.382** / κ0.176
-- ATCNet within (crop-aug, early-stop): **0.584** / κ0.445
+> Our live numbers + the deploy-fair framing this diagnosis feeds are the canonical home of the result:
+> **[`neuroscan/tasks/motor_imagery/README.md`](../../neuroscan/tasks/motor_imagery/README.md)**. This file
+> keeps the *external* half — the published bar and the primary-source recipe diff.
 
 ## Published bar (primary sources)
 - **ATCNet (Altaheri 2023): 81.1–82.0%** — *10-run average*, **500 epochs, NO early stopping**, hold-out
