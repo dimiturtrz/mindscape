@@ -72,3 +72,6 @@ elevator.txt
 
 # Ephemeral session launch/watcher scripts (belong in the scratchpad dir, not the repo)
 scratch_*.sh
+
+# external git-repo deps: checked out, pinned, never vendored (see CLAUDE.md)
+external/
