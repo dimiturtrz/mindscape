@@ -96,10 +96,12 @@ def build_tensor(paired: PairedModalities, *, grid=16, series: SeriesConfig | No
 
 
 def fused_node_series(paired: PairedModalities, *, band="sum", fnirs=True, series: SeriesConfig | None = None):
-    """The FUSION-only signal collapsed to EEG channel format `[n, n_e, T]`. At each EEG node the joint = EEG
-    envelope STRENGTH × co-located fNIRS CBSI × locality COVERAGE. ⚠️ DECODE NEGATIVE — the multiplicative joint
-    ROBS (0.34-0.40 vs raw-EEG 0.59): it entangles clean EEG with weak fNIRS and drops phase (envelope). Kept as
-    the documented control for "don't multiply, don't decode the viz branch". `fnirs=False` returns the EEG
+    """The FUSION-only signal collapsed to EEG channel format `[n, n_e, T]`. At each EEG node the joint =
+    SIGN-ALIGNED EEG envelope × co-located fNIRS CBSI × locality COVERAGE. The EEG term is centered and flipped
+    by the derived coupling sign (bd 060) so the physically-correct quadrant — ERD power DROP with an HbO RISE —
+    reads as positive activation, instead of the old raw-envelope × CBSI that lit power-up + blood-up.
+    ⚠️ The prior sign-agnostic joint was DECODE NEGATIVE (0.34-0.40 vs raw-EEG 0.59); that number PREDATES the
+    sign fix and must be re-measured (`fusion_riemann_eval`) before re-claiming. `fnirs=False` returns the EEG
     strength alone (isolates the lossy representation from the lossy combiner). `series` -> channel_series."""
     eeg, neural, _, coupling = channel_series(paired.eeg, paired.fnirs, series)
     pos_e, pos_f = paired.pos_eeg, paired.pos_fnirs
@@ -114,6 +116,13 @@ def fused_node_series(paired: PairedModalities, *, band="sum", fnirs=True, serie
     pf = pos_f[np.isfinite(pos_f).all(1)]
     d2 = ((pos_e[ok][:, None, :] - pf[None, :, :]) ** 2).sum(-1).min(1)         # dist² each EEG node -> nearest fNIRS
     cov_e = np.exp(-d2 / s2)                                                    # locality coverage per node [n_e]
+    # ERD physics (bd 060): EEG band-power ANTI-correlates with HbO — cortical activation is power DOWN +
+    # blood UP, so the raw envelope (≥0) × CBSI lights the WRONG quadrant (power-up + blood-up). Align the EEG
+    # term to the DERIVED coupling sign: center the envelope in time and flip by sign(beta) so a power DROP
+    # coinciding with an HbO RISE reads as positive fused activation. beta < 0 for ERD; NaN (fixed-lag
+    # override — no derived sign) falls back to +1.
+    sign = float(np.sign(coupling["beta"])) if np.isfinite(coupling["beta"]) else 1.0
+    strength = sign * (strength - strength.mean(axis=-1, keepdims=True))
     joint = strength * neural_e * cov_e[None, :, None]                         # [n, n_e, T]
     return joint.astype(np.float32), coupling
 
