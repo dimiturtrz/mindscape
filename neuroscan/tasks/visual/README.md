@@ -53,3 +53,37 @@ the DataLoader is numpy-backed + index-viewed so 9 subjects' epochs fit in RAM w
   best *test* epoch would be leakage — the field's sin).
 - **Seed** for reproducibility; **eval batch ≤1024** (batch ≥2048 trips a cuDNN illegal-access on this conv
   shape, Blackwell / cu130).
+
+## The over-reporting audit — how much the field's usual numbers inflate
+
+The commonly-quoted perception number is within-subject, concept-averaged. The defensible one is
+cross-subject, single-trial. The same encoder scored four ways
+([`retrieval_audit.py`](retrieval_audit.py)):
+
+| top-1 (top-5) | single-trial | concept-averaged |
+|---|---|---|
+| **within-subject** | 4.0% (14.5%) | **14.8% (39.5%)** ← usually quoted |
+| **cross-subject** | **1.9% (7.6%)** ← robust | 4.8% (14.3%) |
+
+*(measured, 2-subject mean; chance 0.5%.)* Two independent leaks stack: seeing the test *person*
+(within→cross, 4.0 → 1.9%) and averaging test *repeats* (single→avg, 1.9 → 4.8%) — together an **8.0× gap**
+(14.8% vs 1.9%, +12.9 pts) between the commonly-quoted headline and the defensible number.
+
+**Zero-shot is verified, not assumed** — the train/test concept sets are checked disjoint on concept *names*
+(1,654 train / 200 test / **0 overlap**; comparing split-local indices would have falsely flagged all 200).
+**Confidence calibration** ([`../../evaluation/retrieval.py`](../../evaluation/retrieval.py)) asks the
+deployable question the top-k can't: when the retrieval is confident, is it right? — ECE + a hit-vs-miss
+confidence gap.
+
+## Cross-dataset zero-shot — the hardest test, a measured null
+
+[`cross_dataset_eval.py`](cross_dataset_eval.py) trains on **THINGS-EEG1** (Grootswagers ds003825 — 50 subj,
+63-ch, [adapter](../../../core/data/eeg/things_eeg1.py) real-data validated) and retrieves on **THINGS-EEG2** —
+different people, different rig, same 1,854 concepts; EEG2's test concepts are held out of EEG1
+([bridge](../../evaluation/cross_dataset.py)) so it's cross-dataset *and* concept-zero-shot *and* cross-subject
+at once. **Result: a measured null.** The EEG1 encoder learns (within-EEG1 val 2.4%, ~5× chance) but transfers
+at chance (0.5% top-1), and **montage-aligning the 62 shared electrodes doesn't rescue it**
+(`common_channel_order` / `align_channels` — the rigs share all but Fz/Cz, in scrambled order). So it's not a
+channel-order artifact; the datasets are just too far apart (reference, 10 vs 5 Hz RSVP, EEG1's weaker
+single-shot SNR). *Caveat: reference/filtering aren't harmonized either, so this is "naive transfer fails," not
+"impossible" — a common-reference re-projection is the untested next step.*

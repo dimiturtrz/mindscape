@@ -103,11 +103,10 @@ before/after on the *cross-session* test (ATCNet): test ECE **0.113 → 0.084**.
 whether an in-session calibration fix survives the session shift — not a single in-distribution ECE.
 ([`neuroscan/evaluation/calibrate.py`](neuroscan/evaluation/calibrate.py))
 
-**Closing the cross-subject gap — the RPA ladder, reported by regime.** The collapse is a *domain shift*:
-each subject's covariance cloud sits at a different location on the SPD manifold, so a classifier trained on
-others misses them — not because the ERD contrast differs, but because the cloud is *displaced*. **Riemannian
-Procrustes Analysis** (Rodrigues 2019) aligns the domains in three steps; we report where each sits on the
-**deployability axis** — how many *target* labels it needs ([`align.py`](neuroscan/tasks/motor_imagery/align.py)):
+**Closing the cross-subject gap — the RPA ladder.** The collapse is a **domain shift**: each subject's
+covariance cloud sits at a different *location* on the SPD manifold, so a classifier trained on others misses
+them. **Riemannian re-centering** whitens that displacement away per-subject; we report each rung by how many
+*target* labels it needs — the deployability axis ([`align.py`](neuroscan/tasks/motor_imagery/align.py)):
 
 | method (leave-one-subject-out) | target labels | cross-subject acc |
 |---|---|---|
@@ -120,54 +119,11 @@ Procrustes Analysis** (Rodrigues 2019) aligns the domains in three steps; we rep
 | **full RPA** | calib 50 % | **<!--r:riemann_rpa_ts_bnci2014_001.acc-->0.650<!--/r-->** |
 | MDWM | calib 50 % | <!--r:riemann_mdwm_ts_bnci2014_001.acc-->0.412<!--/r--> |
 
-Two regimes, read them separately. **Zero-shot** (no target labels — deployment-real): re-centering to the
-identity by each subject's own Riemannian mean (`C → M⁻¹ᐟ² C M⁻¹ᐟ²`, the manifold version of whitening)
-closes most of the gap, **0.36 → 0.50**; adding dispersion-alignment (re-scaling) nudges it to **0.52**. The
-displacement *was* the gap — and it's the *location*, not the features (ACM's richer time-delay covariances
-score 0.355 alone, only 0.471 even re-centered). **Calibrated** (a short labelled calibration session): the
-supervised re-rotation aligns *class* structure and lifts further — even **10 %** of a session (≈7 trials/class)
-reaches **0.555**, scaling to **0.650** at 50 %, approaching the within-subject ceiling (0.60–0.66).
-
-**MDWM is the negative we report.** Untuned it scores 0.412, below zero-shot re-centering. Its λ knob *can*
-lift it — but acc swings **0.31 → 0.57** across λ and the optimum is **λ = 1 (target-only)**, i.e. the best
-MDWM ignores the source entirely. A parameterless method (re-centering: no knob, no labels) is preferable
-when it's competitive, so we report MDWM untuned — tuning it up would hide the fragility worth showing.
-
-Calibrated labels come from a **disjoint** stratified split of the held-out subject — test labels never enter
-the fit, or "calibrated transfer" is just leakage.
-
-### The decoders — measured (same BCI-2a task, commodity architectures)
-We reproduce *standard* architectures (the decoder is commodity); the contribution is the eval rigor and
-the efficient deployable, not a leaderboard number. **All our numbers sit below the published ceilings —
-deliberately**: the robust train→eval-session protocol is harder than the pooled within-session CV many
-papers report, and we don't do full per-model tuning or run-averaging. The gap analysis, grounded in
-primary sources, is in [`research/`](research/deep_dives/2026-06-30_2a_sota_recipe.md).
-
-Params + FLOPs at the real input (22 ch × 1125 samples, batch 1; FLOPs via fvcore, latency torch CPU
-single-thread — `python -m neuroscan.models.profile`):
-
-| model | role | params | FLOPs | CPU latency | within-subj acc | kappa |
-|---|---|---|---|---|---|---|
-| CSP+LDA | baseline | — | — | — | <!--r:csp_lda_within_bnci2014_001.acc-->0.598<!--/r--> | <!--r:csp_lda_within_bnci2014_001.kappa-->0.464<!--/r--> |
-| **Riemann (tangent space + LR)** | baseline | — | — | — | **<!--r:riemann_within_bnci2014_001.acc-->0.655<!--/r-->** | **<!--r:riemann_within_bnci2014_001.kappa-->0.541<!--/r-->** |
-| **EEGNet** | compact CNN | **3.7K** | 13.7M | 1.5 ms | 0.606 | 0.475 |
-| **ATCNet** | attention + TCN | 114K | **2.8M** | 4.2 ms | 0.619 | 0.492 |
-| EEGConformer | transformer | 871K | 72M | 4.2 ms | — | — |
-
-Three findings fall out:
-- **Classical geometry leads within-subject — strong-and-cheap, not a settled verdict.** Riemannian
-  tangent-space + LR ([`baselines/riemann.py`](baselines/riemann.py)) hits **0.655**, above both deep nets *as
-  run here* (single seed, nets un-tuned — not a fair head-to-head). Consistent with the textbook finding that
-  per-trial covariance is hard to beat when per-subject data is tiny (~288 trials). But its *cross-subject*
-  score is 0.360, no better than CSP — plain tangent space doesn't transfer until you **re-center** it.
-- **Tiny doesn't cost accuracy here.** The 3.7K-param EEGNet lands ~1 pt behind the 30×-larger ATCNet (0.606
-  vs 0.619) — comparable, not distinguishable, at single seed: the edge-deployable model gives up little.
-- **Already edge-sized.** ~26 KB as ONNX, sub-ms inference; the optional deploy tail exports with a **parity
-  gate** (fp32 ONNX matches torch < 1e-3) and benchmarks INT8 — which *adds* overhead at this scale. The story
-  isn't "shrink it," it's "already small, measured." ([`core/export_onnx.py`](core/export_onnx.py))
-
-**Published ceilings** (cited, not chased): FBCSP 0.65 · EEGNet 0.70 · ShallowConvNet 0.74 · ATCNet 0.81 ·
-transformer SOTA 0.88; cross-subject SOTA 0.74.
+**Zero-shot** (no target labels — deployment-real) re-centering closes most of the gap, **0.36 → 0.50**, and
+re-scaling nudges it to 0.52 — the displacement *was* the gap. **Calibrated**, a supervised re-rotation on even
+10 % of a session reaches 0.555, scaling to **0.650** at 50 %, near the within-subject ceiling. The mechanism,
+the MDWM fragility negative, the decoder comparison (params / FLOPs / latency), and why our numbers sit below
+published SOTA → **[motor_imagery/](neuroscan/tasks/motor_imagery/)**.
 
 ## Task · Mental workload / n-back (Shin) — one task, three approaches: EEG · fNIRS · fusion
 Decode **mental workload** — which n-back load (0/2/3-back) a subject holds in working memory — from the
@@ -232,41 +188,22 @@ literature caveats → **[workload/](neuroscan/tasks/workload/)**.
 
 Third rung of the ladder: decode the *seen image* from EEG. A NICE-style encoder maps each EEG epoch to the
 viewed image's CLIP embedding (InfoNCE), then retrieves zero-shot among the 200 held-out THINGS test concepts
-(chance **0.5%**). The contribution here is **not** a leaderboard top-k — it's a bias audit of *how much the
-field's usual numbers inflate*, plus the hardest generalization test the two THINGS-EEG datasets allow.
+(chance **0.5%**). The contribution is **not** a leaderboard top-k — it's a bias audit of *how much the field's
+usual numbers inflate*.
 
-**The inflation grid** ([`retrieval_audit.py`](neuroscan/tasks/visual/retrieval_audit.py)) — the same encoder,
-scored four ways. The commonly-quoted cell (within-subject, concept-averaged) vs the defensible one
-(cross-subject, single-trial):
+**The inflation grid** ([`retrieval_audit.py`](neuroscan/tasks/visual/retrieval_audit.py)) — the same encoder
+scored four ways, the commonly-quoted cell vs the defensible one:
 
 | top-1 (top-5) | single-trial | concept-averaged |
 |---|---|---|
 | **within-subject** | 4.0% (14.5%) | **14.8% (39.5%)** ← usually quoted |
 | **cross-subject** | **1.9% (7.6%)** ← robust | 4.8% (14.3%) |
 
-*(measured, 2-subject mean; chance 0.5%.)* Two independent leaks stack: seeing the test *person*
-(within→cross, 4.0→1.9%) and averaging test *repeats* (single→avg, 1.9→4.8%) — together an **8.0× gap**
-(14.8% vs 1.9%, +12.9 pts) between the commonly-quoted headline and the defensible number. Same
-subject-generalization story as motor imagery, now in perception.
-
-**Zero-shot is verified, not assumed** — the train/test concept sets are checked to be disjoint on concept
-*names* (1,654 train / 200 test / **0 overlap**; comparing split-local indices would have falsely flagged all
-200). **Confidence calibration** ([`evaluation/retrieval.py`](neuroscan/evaluation/retrieval.py)) asks the
-deployable question the top-k can't: when the retrieval is confident, is it right? — ECE + a hit-vs-miss
-confidence gap.
-
-**Cross-dataset zero-shot** ([`cross_dataset_eval.py`](neuroscan/tasks/visual/cross_dataset_eval.py)) — the
-hardest test: train on **THINGS-EEG1** (Grootswagers ds003825 — 50 subj, 63-ch, [adapter](core/data/eeg/things_eeg1.py)
-real-data validated), retrieve on **THINGS-EEG2** — different people, different rig, same 1,854 concepts; EEG2's
-test concepts held out of EEG1 ([bridge](neuroscan/evaluation/cross_dataset.py)) so it's cross-dataset *and*
-concept-zero-shot *and* cross-subject at once. **Result: a measured null.** The EEG1 encoder learns
-(within-EEG1 val 2.4%, ~5× chance) but transfers at chance (0.5% top-1), and **montage-aligning the 62 shared
-electrodes doesn't rescue it** (`common_channel_order`/`align_channels` — the rigs share all but Fz/Cz, in
-scrambled order). So it's not a channel-order artifact; the datasets are just too far apart (reference, 10 vs
-5 Hz RSVP, EEG1's weaker single-shot SNR). *Caveat: reference/filtering aren't harmonized either, so this is
-"naive transfer fails," not "impossible" — a common-reference re-projection is the untested next step.*
-
-→ **[neuroscan/tasks/visual/](neuroscan/tasks/visual/)**
+*(measured, 2-subject mean; chance 0.5%.)* Two independent leaks stack — seeing the test *person* and averaging
+test *repeats* — for an **8.0× gap** (14.8% vs 1.9%, +12.9 pts) between the quoted headline and the defensible
+number. Same subject-generalization story as motor imagery, now in perception. The zero-shot disjointness
+check, the confidence calibration, and the hardest test — cross-dataset EEG1→EEG2 transfer, a **measured null**
+that montage-alignment doesn't rescue → **[neuroscan/tasks/visual/](neuroscan/tasks/visual/)**.
 
 ## Limits (measured, not assumed)
 Competent on a public benchmark, **not** a finished system:
@@ -323,14 +260,6 @@ uv run pytest -q
 ```
 Runs log to a local MLflow (`uv run mlflow ui --backend-store-uri sqlite:///mlflow.db`) and write
 `runs/<name>/` with an aggregate, a model card, and the run id.
-
-## How motor imagery decodes — the ERD signature
-The decodable signal is **event-related desynchronization (ERD)**: imagining a movement *suppresses* mu
-(8–12 Hz) and beta (13–30 Hz) rhythms over the **contralateral** sensorimotor cortex — left-hand imagery
-desynchronizes the right hemisphere (C4), right-hand the left (C3). CSP learns spatial filters that
-maximize this variance contrast (its patterns localize over C3/C4, visible in neuroviz); deep nets learn
-it end-to-end. The signature is **subject-specific** — the spatial pattern, the responsive band, and the
-SNR all vary per person — which is precisely why cross-subject transfer collapses.
 
 ## Tests
 ```bash
