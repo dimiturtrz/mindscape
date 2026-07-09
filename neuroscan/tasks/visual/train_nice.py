@@ -85,6 +85,8 @@ class TrainConfig(BaseModel):
     amp: bool = True             # bf16 autocast on cuda; False = fp32 (the naive arm of the parity test, bd 9s5)
     recenter: bool = False       # per-subject signal re-centering M^-1/2 X before the encoder (bd dpi) —
                                  # the Stage-1/2 cross-subject transfer template (unsupervised, deployment-safe)
+    recenter_shrinkage: float = 0.0   # shrink M toward scaled-I before whitening (bd 36g dig): full whitening
+                                      # amplifies noise on ill-conditioned M (cond~1500); >0 aligns signal only
 
 
 def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
@@ -93,11 +95,12 @@ def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
     return np.stack([by_file[name] for name in image_files]).astype(np.float32)
 
 
-def _load_split(subjects: list[int], split: str, resample: float, *, recenter: bool = False):
+def _load_split(subjects: list[int], split: str, resample: float, *, recenter: bool = False,
+                shrinkage: float = 0.0):
     epochs, concept, image_files, meta = things.get_epochs(
         subjects, things.ThingsEpochCfg(split=split, resample=resample))
     if recenter:
-        epochs = recenter_signals(epochs, meta["subject"].to_numpy())   # per-subject M^-1/2 X (bd dpi)
+        epochs = recenter_signals(epochs, meta["subject"].to_numpy(), shrinkage=shrinkage)   # per-subj M^-1/2 X
     return epochs, concept, _clip_targets(image_files, split)
 
 
@@ -260,8 +263,9 @@ def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dic
     logger.info(f"regime={regime}  train={train_subjects}  test={test_subject}  device={device}")
 
     train_eeg, train_concept, train_targets = _load_split(
-        train_subjects, "training", cfg.resample, recenter=cfg.recenter)
-    test_eeg, test_concept, _ = _load_split([test_subject], "test", cfg.resample, recenter=cfg.recenter)
+        train_subjects, "training", cfg.resample, recenter=cfg.recenter, shrinkage=cfg.recenter_shrinkage)
+    test_eeg, test_concept, _ = _load_split(
+        [test_subject], "test", cfg.resample, recenter=cfg.recenter, shrinkage=cfg.recenter_shrinkage)
     test_bank = clip_targets.concept_prototypes("test")
     logger.info(f"train {train_eeg.shape} -> CLIP {train_targets.shape} | "
           f"test {test_eeg.shape} ({int(test_concept.max())+1} concepts)")

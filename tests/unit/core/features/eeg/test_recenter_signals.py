@@ -38,3 +38,17 @@ def test_single_group_is_still_whitened():
     y = recenter_signals(x, np.zeros(25))
     cov = np.einsum("nct,ndt->ncd", y, y) / y.shape[2]
     np.testing.assert_allclose(mean_riemann(cov), np.eye(5), atol=1e-4)
+
+
+def test_shrinkage_keeps_output_off_identity_and_finite():
+    """shrinkage > 0 must NOT whiten fully to identity (it aligns only the dominant directions, leaving the
+    noise floor un-boosted) — so the residual covariance stays off-identity, and finite."""
+    rng = np.random.default_rng(2)
+    x = _mixed(rng, rng.standard_normal((6, 6)), 40, 90)
+    g = np.zeros(40)
+    full = np.einsum("nct,ndt->ncd", recenter_signals(x, g), recenter_signals(x, g)) / 90
+    shr = recenter_signals(x, g, shrinkage=0.5)
+    cov = np.einsum("nct,ndt->ncd", shr, shr) / 90
+    assert np.isfinite(shr).all()
+    np.testing.assert_allclose(mean_riemann(full), np.eye(6), atol=1e-4)         # full -> identity
+    assert np.abs(mean_riemann(cov) - np.eye(6)).mean() > 1e-2                    # shrunk -> not identity
