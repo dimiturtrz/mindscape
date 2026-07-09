@@ -93,6 +93,8 @@ class TrainConfig(BaseModel):
     adversarial: bool = False    # domain-adversarial subject-invariance (bd 36g): GRL + subject discriminator
     adv_lambda: float = 1.0      # gradient-reversal strength (how hard the encoder is pushed to be invariant)
     adv_weight: float = 1.0      # weight of the subject-CE adversary term in the total loss
+    adv_lambda_ramp: bool = False  # DANN schedule: ramp lambda 0->adv_lambda over training so the adversary
+                                   # doesn't destabilize the still-random early encoder (bd 36g dose-response)
 
 
 def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
@@ -222,6 +224,14 @@ def _build_optim(nice_cfg: NiceConfig, n_subjects: int, cfg: TrainConfig, device
     return encoder, logit_scale, discriminator, torch.optim.AdamW(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
 
 
+def _dann_lambda(progress: float, max_lambda: float, gamma: float = 10.0) -> float:
+    """DANN gradient-reversal schedule (Ganin & Lempitsky 2015): ramp 0 -> `max_lambda` as
+    `2/(1+exp(-gamma·p)) - 1` over training progress `p ∈ [0,1]`, so the adversary engages gradually once the
+    encoder has structure instead of fighting the random early features (constant high lambda flattened the
+    dose-response — w1.0 fell back to baseline)."""
+    return max_lambda * (2.0 / (1.0 + np.exp(-gamma * progress)) - 1.0)
+
+
 def train_encoder(data: TrainData, cfg: TrainConfig, device: str):
     """Contrastive-fit a NICE encoder with leak-free early stopping on held-out TRAIN concepts, returning the
     best-val checkpoint. Dataset-agnostic core shared by the within/cross-subject EEG2 runs (train()) and the
@@ -250,6 +260,8 @@ def train_encoder(data: TrainData, cfg: TrainConfig, device: str):
     fit_data = _FitArrays(train_eeg, train_targets, train_concept, fit_indices, subject)
     best_val, best_state, best_epoch, since_improved = -1.0, None, -1, 0
     for epoch in range(cfg.epochs):
+        lam = (_dann_lambda(epoch / max(1, cfg.epochs - 1), cfg.adv_lambda)
+               if cfg.adv_lambda_ramp else cfg.adv_lambda)
         steps = _epoch_steps(fit_data, neighbor_groups, cfg, rng, epoch_n)
         encoder.train()
         total_loss, n_batches = 0.0, 0
@@ -262,7 +274,7 @@ def train_encoder(data: TrainData, cfg: TrainConfig, device: str):
                 z = encoder(eeg_batch)
                 loss = clip_infonce(z, target_batch, logit_scale.exp().clamp(max=100), hard_beta=cfg.hard_beta)
                 if discriminator is not None:              # push encoder to be subject-invariant (GRL, bd 36g)
-                    subj_logits = discriminator(z, cfg.adv_lambda)
+                    subj_logits = discriminator(z, lam)
                     loss = loss + cfg.adv_weight * F.cross_entropy(subj_logits, subj_batch.to(device))
             loss.backward()                                # bf16 autocast needs no GradScaler (unlike fp16)
             optimizer.step()
