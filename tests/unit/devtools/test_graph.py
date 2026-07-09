@@ -3,6 +3,7 @@ detection on a hand-built graph — no grimp / no repo scan. networkx-guarded so
 networkx) skips; runs under the devtools extra."""
 import pytest
 
+pytest.importorskip("grimp")            # devtools extra; networkx is present transitively, grimp is not
 nx = pytest.importorskip("networkx")
 
 from devtools.graph import _top, report  # noqa: E402
