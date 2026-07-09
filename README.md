@@ -205,18 +205,22 @@ viewed image's CLIP embedding (InfoNCE), then retrieves zero-shot among the 200 
 (chance **0.5%**). The contribution is **not** a leaderboard top-k — it's a bias audit of *how much the field's
 usual numbers inflate*.
 
-**The inflation grid** ([`retrieval_audit.py`](neuroscan/tasks/visual/retrieval_audit.py)) — the same encoder
-scored four ways, the commonly-quoted cell vs the defensible one:
+**The models tried** — cross-subject retrieval on THINGS, the defensible regime (chance 0.5%, 2-subject mean;
+frozen = test-5 probe):
 
-| top-1 (top-5) | single-trial | concept-averaged |
+| encoder (cross-subject) | single-trial top-1 (top-5) | concept-avg top-1 (top-5) |
 |---|---|---|
-| **within-subject** | 4.0% (14.5%) | **14.8% (39.5%)** ← usually quoted |
-| **cross-subject** | **2.2% (9.1%)** ← robust | 4.8% (14.3%) |
+| NICE — from-scratch, 693k | 1.6% (7.3%) | 4.3% (17.3%) |
+| CBraMod — frozen probe | 0.6% (3.0%) | 1.0% (5.0%) |
+| **CBraMod — fine-tuned, 4.9M** | **2.2% (9.1%)** | **5.3% (19.5%)** |
 
-*(measured, 2-subject mean; chance 0.5%.)* Two independent leaks stack — seeing the test *person* and averaging
-test *repeats* — for a **6.7× gap** (14.8% vs 2.2%, +12.6 pts) between the quoted headline and the defensible
-number. That top-left cell *is* the field's usual headline (NICE-family range); the deployment-real
-cross-subject single-trial number is ~7× lower. Same subject-generalization story as motor imagery, now in
+Frozen < from-scratch < fine-tuned — only the *adapted* pretrained backbone
+([CBraMod](https://github.com/wjq-learning/CBraMod), TUEG-pretrained) beats NICE, the first method here to move
+the cross-subject single-trial number (three from-scratch levers before it — input-alignment, domain-adversarial,
+concept-aware InfoNCE — all null). The over-reporting audit
+([`retrieval_audit.py`](neuroscan/tasks/visual/retrieval_audit.py)) still holds: the field's usual headline is
+the *within-subject concept-averaged* cell (**14.8%**), ~7× the deployment-real cross-subject single-trial
+(**2.2%**) — two leaks, seeing the test *person* + averaging test *repeats*. Same subject-generalization story as motor imagery, now in
 perception. The zero-shot disjointness
 check, the confidence calibration, and the hardest test — cross-dataset EEG1→EEG2 transfer, a **measured null**
 that montage-alignment doesn't rescue → **[neuroscan/tasks/visual/](neuroscan/tasks/visual/)**.
