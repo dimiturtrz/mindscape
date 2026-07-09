@@ -211,12 +211,12 @@ scored four ways, the commonly-quoted cell vs the defensible one:
 | top-1 (top-5) | single-trial | concept-averaged |
 |---|---|---|
 | **within-subject** | 4.0% (14.5%) | **14.8% (39.5%)** ← usually quoted |
-| **cross-subject** | **1.9% (7.6%)** ← robust | 4.8% (14.3%) |
+| **cross-subject** | **2.2% (9.1%)** ← robust | 4.8% (14.3%) |
 
 *(measured, 2-subject mean; chance 0.5%.)* Two independent leaks stack — seeing the test *person* and averaging
-test *repeats* — for an **8.0× gap** (14.8% vs 1.9%, +12.9 pts) between the quoted headline and the defensible
+test *repeats* — for a **6.7× gap** (14.8% vs 2.2%, +12.6 pts) between the quoted headline and the defensible
 number. That top-left cell *is* the field's usual headline (NICE-family range); the deployment-real
-cross-subject single-trial number is 8× lower. Same subject-generalization story as motor imagery, now in
+cross-subject single-trial number is ~7× lower. Same subject-generalization story as motor imagery, now in
 perception. The zero-shot disjointness
 check, the confidence calibration, and the hardest test — cross-dataset EEG1→EEG2 transfer, a **measured null**
 that montage-alignment doesn't rescue → **[neuroscan/tasks/visual/](neuroscan/tasks/visual/)**.
@@ -224,7 +224,7 @@ that montage-alignment doesn't rescue → **[neuroscan/tasks/visual/](neuroscan/
 *Grounding — data [THINGS-EEG2](https://osf.io/3jk45/) ·
 [THINGS-EEG1 (ds003825)](https://openneuro.org/datasets/ds003825) · method/SOTA NICE (Song et al., ICLR 2024) —
 the claimed numbers are the within-subject / concept-averaged cell (14.8 %); our measured cross-subject
-single-trial is 1.9 % · homework:
+single-trial is 2.2 % · homework:
 [EEG→image datasets + the leakage-trap landscape](research/deep_dives/2026-07-07_eeg_visual_semantic_decoding_datasets.md).*
 
 ## Limits (measured, not assumed)
