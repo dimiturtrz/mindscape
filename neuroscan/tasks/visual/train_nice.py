@@ -24,6 +24,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -271,21 +272,26 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--train", type=int, nargs="+", default=[1], help="training subject id(s)")
     ap.add_argument("--test", type=int, default=1, help="held-out test subject id")
-    ap.add_argument("--epochs", type=int, default=TrainConfig().epochs)
-    ap.add_argument("--batch", type=int, default=TrainConfig().batch, help="<=1024 (cuDNN cap on this shape)")
-    ap.add_argument("--lr", type=float, default=TrainConfig().lr)
-    ap.add_argument("--resample", type=float, default=TrainConfig().resample)
-    ap.add_argument("--seed", type=int, default=TrainConfig().seed)
-    ap.add_argument("--patience", type=int, default=TrainConfig().patience)
+    ap.add_argument("--config", default=None,
+                    help="JSON file of TrainConfig fields (the recipe home; e.g. the balanced+clip_hard "
+                         "perception config). Explicit flags below override it.")
+    ap.add_argument("--epochs", type=int, default=None)
+    ap.add_argument("--batch", type=int, default=None, help="<=1024 (cuDNN cap on this shape)")
+    ap.add_argument("--lr", type=float, default=None)
+    ap.add_argument("--resample", type=float, default=None)
+    ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument("--patience", type=int, default=None)
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    cfg = TrainConfig(epochs=args.epochs, batch=args.batch, lr=args.lr,
-                      resample=args.resample, seed=args.seed, patience=args.patience)
+    base = json.loads(Path(args.config).read_text()) if args.config else {}
+    overrides = {k: v for k, v in vars(args).items()
+                 if k in TrainConfig.model_fields and v is not None}
+    cfg = TrainConfig(**{**base, **overrides})
     result = train(args.train, args.test, cfg)
     logger.info(json.dumps(result, indent=2))
     if args.out:
-        with open(args.out, "w") as f:
+        with Path(args.out).open("w") as f:
             json.dump(result, f, indent=2)
 
 
