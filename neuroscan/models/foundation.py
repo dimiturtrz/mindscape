@@ -99,7 +99,12 @@ class CBraModEncoder(nn.Module):
 
 
 def _build_cbramod(spec: EncoderSpec) -> nn.Module:
-    return CBraModEncoder(spec)
+    return CBraModEncoder(spec, FoundationConfig(freeze_backbone=True))
 
 
-register("cbramod", _build_cbramod)   # pretrained EEG foundation encoder (Wang et al. ICLR 2025)
+def _build_cbramod_ft(spec: EncoderSpec) -> nn.Module:
+    return CBraModEncoder(spec, FoundationConfig(freeze_backbone=False))
+
+
+register("cbramod", _build_cbramod)       # frozen backbone + head (linear probe of pretrained features)
+register("cbramod_ft", _build_cbramod_ft)  # unfrozen — fine-tune the backbone on perception (capacity test)
