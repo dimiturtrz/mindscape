@@ -32,6 +32,25 @@ def recenter_covariances(C: np.ndarray) -> np.ndarray:
     return np.einsum("ij,njk,kl->nil", W, C, W)
 
 
+def recenter_signals(X: np.ndarray, groups: np.ndarray) -> np.ndarray:
+    """Whiten raw multichannel *signals* per domain by that domain's mean covariance: `X -> M^{-1/2} X`, with
+    `M` the Riemannian mean of the domain's per-trial channel covariances. The time-series analog of
+    `recenter_covariances` — it removes the per-subject spatial displacement from the SIGNALS an encoder
+    consumes (not just from covariance features), so a contrastive EEG->image encoder sees each subject in a
+    common spatial frame. Unsupervised (no labels) → applies to a held-out subject at deployment.
+    `X [n, ch, t]`, `groups [n]` (subject id per trial) -> `[n, ch, t]`."""
+    X = np.asarray(X, dtype=np.float64)
+    groups = np.asarray(groups)
+    out = np.empty_like(X)
+    for g in np.unique(groups):
+        idx = groups == g
+        Xg = X[idx]
+        C = np.einsum("nct,ndt->ncd", Xg, Xg) / Xg.shape[2]        # per-trial channel covariance [n,ch,ch]
+        W = invsqrtm(mean_riemann(C))
+        out[idx] = np.einsum("ij,njt->nit", W, Xg)
+    return out.astype(np.float32)
+
+
 def scale_to_identity(C: np.ndarray, target_disp: float = 1.0) -> np.ndarray:
     """Normalize dispersion (RPA step 2): after re-centering to the identity, stretch each covariance so the
     mean squared Riemannian distance to I equals `target_disp` — matches the domains' *spread*, not just
