@@ -98,6 +98,13 @@ The mean understates it: per subject, cross-subject accuracy spans **0.24–0.55
 **below chance** on a person it never saw (two more within a few points of it). A "working" motor-imagery
 BCI is near-useless on several unseen users — the trap the field underreports and any deployment hits first.
 
+**vs published SOTA — below, deliberately.** Our within-subject **0.60** (CSP+LDA) / **0.62** (ATCNet) sits
+under the published bar — FBCSP 0.65 · EEGNet 0.71 · ShallowConvNet 0.74 · ATCNet **0.81** · transformer 0.88
+(cross-subject SOTA 0.74) — because our robust train→eval-session protocol is harder than the pooled
+within-session CV those report, at a single seed with no per-model tuning. Not leaderboard-chasing: the
+contribution is the measured OOD gap + calibration + edge-efficiency. The primary-source recipe diff (what
+SOTA does that we don't, confirmed against repos) → [motor_imagery/](neuroscan/tasks/motor_imagery/).
+
 **Calibration under shift.** Temperature scaling fit on an in-session validation split, ECE measured
 before/after on the *cross-session* test (ATCNet): test ECE **0.113 → 0.084**. We report the *transfer* —
 whether an in-session calibration fix survives the session shift — not a single in-distribution ECE.
@@ -186,8 +193,10 @@ per-trial oracle picking the right modality would hit **<!--r:fusion_cross_subje
 (**+17 pts**, near-independent errors φ ≈ 0.11), so the complementarity is **real and large**. Yet every
 output-space combiner we swept (product best, +1.5 pp) and an input-level gate capture almost none of it —
 lifting the weak modality is closed (fNIRS at the physiological ceiling), leaving **boundary-aware routing and
-source-space fusion** the open routes. Full combiner sweep, the gate, the z-score confirmation, and the
-literature caveats → **[workload/](neuroscan/tasks/workload/)**.
+source-space fusion** the open routes. **vs published SOTA:** every quoted Shin-fusion number (96–98 %) is
+within-subject; the one leakage-free LOSO figure *drops* 34 pts (DC-AGIN 96.98 → 62.56 %) — so our honest
+strong+weak result is the defensible comparison, not the inflated one. Full combiner sweep, the gate, the
+z-score confirmation, and the literature caveats → **[workload/](neuroscan/tasks/workload/)**.
 
 *Grounding — benchmark [BenchNIRS](https://doi.org/10.3389/fnrgo.2023.994969) · data
 [Shin 2017](https://doi.org/10.14279/depositonce-5830.2)
@@ -214,7 +223,10 @@ scored four ways, the commonly-quoted cell vs the defensible one:
 
 *(measured, 2-subject mean; chance 0.5%.)* Two independent leaks stack — seeing the test *person* and averaging
 test *repeats* — for an **8.0× gap** (14.8% vs 1.9%, +12.9 pts) between the quoted headline and the defensible
-number. Same subject-generalization story as motor imagery, now in perception. The zero-shot disjointness
+number. **vs published SOTA:** our within-subject / concept-averaged 14.8% is in the NICE-family range — but
+that top-left cell *is* the field's usual headline; the audit's whole point is that the deployment-real
+cross-subject single-trial number is **8× lower**. Same subject-generalization story as motor imagery, now in
+perception. The zero-shot disjointness
 check, the confidence calibration, and the hardest test — cross-dataset EEG1→EEG2 transfer, a **measured null**
 that montage-alignment doesn't rescue → **[neuroscan/tasks/visual/](neuroscan/tasks/visual/)**.
 
