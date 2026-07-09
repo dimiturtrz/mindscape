@@ -100,9 +100,11 @@ def fused_node_series(paired: PairedModalities, *, band="sum", fnirs=True, serie
     SIGN-ALIGNED EEG envelope × co-located fNIRS CBSI × locality COVERAGE. The EEG term is centered and flipped
     by the derived coupling sign (bd 060) so the physically-correct quadrant — ERD power DROP with an HbO RISE —
     reads as positive activation, instead of the old raw-envelope × CBSI that lit power-up + blood-up.
-    ⚠️ The prior sign-agnostic joint was DECODE NEGATIVE (0.34-0.40 vs raw-EEG 0.59); that number PREDATES the
-    sign fix and must be re-measured (`fusion_riemann_eval`) before re-claiming. `fnirs=False` returns the EEG
-    strength alone (isolates the lossy representation from the lossy combiner). `series` -> channel_series."""
+    ⚠️ Still DECODE NEGATIVE after the sign fix: re-measured 0.386 vs EEG-only 0.580 (Δ −0.194, fair null).
+    The ERD sign was not why output-space fusion fails — the MULTIPLICATIVE join is (clean EEG × weak fNIRS,
+    phase dropped). Kept physically-correct + documented; source-space/generative fusion is the real lever
+    (Stage-4). `fnirs=False` returns the EEG strength alone (isolates the rep from the combiner). `series` ->
+    channel_series."""
     eeg, neural, _, coupling = channel_series(paired.eeg, paired.fnirs, series)
     pos_e, pos_f = paired.pos_eeg, paired.pos_fnirs
     ok = np.isfinite(pos_e).all(1)
