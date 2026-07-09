@@ -34,7 +34,8 @@ from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.covariance import recenter_signals
-from neuroscan.models.nice import NiceConfig, NiceEncoder, SubjectDiscriminator, clip_infonce, retrieval_topk
+from neuroscan.models.encoders import EncoderSpec, build_encoder
+from neuroscan.models.nice import SubjectDiscriminator, clip_infonce, retrieval_topk
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tasks.visual.sampling import (
     BatchSpec,
@@ -71,6 +72,8 @@ class _EpochDataset(Dataset):
 
 class TrainConfig(BaseModel):
     """Training hyperparameters (data-independent; the encoder's data-dependent shape is derived at fit)."""
+    model: str = "nice"          # encoder name in the models registry (bd bji): "nice" (from-scratch conv
+                                 # baseline) | a pretrained foundation backbone — swapped behind one contract
     epochs: int = 40
     batch: int = 512
     lr: float = 3e-4
@@ -213,14 +216,15 @@ class TrainData:
     subject: np.ndarray | None = None
 
 
-def _build_optim(nice_cfg: NiceConfig, n_subjects: int, cfg: TrainConfig, device: str):
-    """Encoder + logit-scale + (optional) subject discriminator, all under one AdamW."""
-    encoder = NiceEncoder(nice_cfg).to(device)
+def _build_optim(spec: EncoderSpec, n_subjects: int, cfg: TrainConfig, device: str):
+    """Encoder (by `cfg.model`, from the registry) + logit-scale + (optional) subject discriminator, all under
+    one AdamW."""
+    encoder = build_encoder(cfg.model, spec).to(device)
     logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
     params = [*encoder.parameters(), logit_scale]
     discriminator = None
     if cfg.adversarial:
-        discriminator = SubjectDiscriminator(nice_cfg.embed_dim, n_subjects).to(device)
+        discriminator = SubjectDiscriminator(spec.embed_dim, n_subjects).to(device)
         params += [*discriminator.parameters()]
         logger.info(f"domain-adversarial: {n_subjects} subjects, lambda {cfg.adv_lambda}, weight {cfg.adv_weight}")
     return encoder, logit_scale, discriminator, torch.optim.AdamW(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
@@ -251,8 +255,8 @@ def train_encoder(data: TrainData, cfg: TrainConfig, device: str):
     logger.info(f"early-stop val: {len(val_bank)} held-out train concepts, {int(val_mask.sum())} epochs; "
           f"fit {len(fit_indices)} trials, {epoch_n}/epoch (train_frac {cfg.train_frac})")
 
-    nice_cfg = NiceConfig(n_channels=train_eeg.shape[1], n_times=train_eeg.shape[2], embed_dim=train_targets.shape[1])
-    encoder, logit_scale, discriminator, optimizer = _build_optim(nice_cfg, int(subject.max()) + 1, cfg, device)
+    spec = EncoderSpec(n_channels=train_eeg.shape[1], n_times=train_eeg.shape[2], embed_dim=train_targets.shape[1])
+    encoder, logit_scale, discriminator, optimizer = _build_optim(spec, int(subject.max()) + 1, cfg, device)
 
     neighbor_groups = None
     if cfg.sampling == "clip_hard":                        # CLIP-prior hard-negative neighbours (bd 4ru)
@@ -339,6 +343,7 @@ def main():
     ap.add_argument("--config", default=None,
                     help="JSON file of TrainConfig fields (the recipe home; e.g. the balanced+clip_hard "
                          "perception config). Explicit flags below override it.")
+    ap.add_argument("--model", default=None, help="encoder name (registry): 'nice' | a foundation backbone")
     ap.add_argument("--epochs", type=int, default=None)
     ap.add_argument("--batch", type=int, default=None, help="<=1024 (cuDNN cap on this shape)")
     ap.add_argument("--lr", type=float, default=None)
