@@ -74,8 +74,8 @@ def _cv_calib_half(F, y, g, subs, rng):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     rng = np.random.default_rng(_SEED)
     me = store.load("shin2017_nback_eeg", _EEG_CFG)
     mf = store.load("shin2017_nback", FnirsCfg())

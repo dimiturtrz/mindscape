@@ -31,8 +31,8 @@ def _cov(X):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     me = store.load("shin2017_nback_eeg", _EEG_CFG)
     subs = sorted(me["subject"].unique().to_list())
     Cs, ys, gs = [], [], []

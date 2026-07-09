@@ -112,8 +112,8 @@ def _stability(per_seed_importances, families, topn=5):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", default=None, help="study config (default: optuna.yaml beside this module)")
     ap.add_argument("--trials", type=int, default=None, help="override n_trials (the one common knob)")

@@ -44,8 +44,8 @@ def _canonical_runs():
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--cross-only", action="store_true", help="skip within-subject runs")
     ap.add_argument("--only", default=None,

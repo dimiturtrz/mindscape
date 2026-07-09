@@ -127,8 +127,8 @@ def gather(df: pl.DataFrame) -> tuple[np.ndarray, np.ndarray]:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     import argparse
 
     ap = argparse.ArgumentParser(description="consolidate a dataset into processed/<ds>/<epochkey>/")

@@ -46,8 +46,8 @@ def _fmt(n):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     rows = [profile(cfg["cls"]) for cfg in MODELS.values()]
     logger.info(f"\n=== params + FLOPs (input {N_CHANS}ch x {N_TIMES} samples, batch 1) ===")
     logger.info(f"{'model':16} {'params':>10} {'FLOPs':>10}")

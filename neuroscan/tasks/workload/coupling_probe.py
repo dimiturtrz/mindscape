@@ -51,8 +51,8 @@ def _global_series(subject_frames):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     me = store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
     mf = store.load("shin2017_nback", FnirsCfg())
     subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))

@@ -117,8 +117,8 @@ def run_audit(cfg: AuditConfig, ckpt_dir: str = "runs/retrieval_audit_ckpt") -> 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--subjects", type=int, nargs="+", required=True, help="subjects to hold out one at a time")
     ap.add_argument("--epochs", type=int, default=AuditConfig(subjects=(1,)).epochs)

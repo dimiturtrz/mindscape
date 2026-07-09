@@ -113,8 +113,8 @@ def run(cfg: CrossDatasetConfig) -> dict:
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--eeg1-subjects", type=int, nargs="+", required=True)
     ap.add_argument("--eeg2-subjects", type=int, nargs="+", default=[1, 2])

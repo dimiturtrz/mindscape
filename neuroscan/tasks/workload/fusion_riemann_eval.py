@@ -64,8 +64,8 @@ def _build_all(band="sum"):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     C, y, g = _build_all()
     logger.info(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
     accs, kaps = [], []

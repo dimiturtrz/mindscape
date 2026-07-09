@@ -42,8 +42,8 @@ for _agg in ("mean", "max", "lse"):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     meta = store.load(_DATASET, FnirsCfg())
     X, y = store.gather(meta)
     groups = meta["subject"].to_numpy()

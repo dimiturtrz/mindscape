@@ -30,8 +30,8 @@ def _acc(build, data: CvData, config: CvConfig):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     meta = store.load(_DATASET, FnirsCfg())                          # clean=None (no filter, as requested)
     X, y = store.gather(meta)
     data = CvData(X, y, meta["subject"].to_numpy())

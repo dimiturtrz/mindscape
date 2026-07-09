@@ -132,8 +132,8 @@ def record(run_dir: Path | str, out_path: Path = _OUT) -> str | None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     p = write()
     n = len(json.loads(p.read_text())["runs"])
     logger.info(f"wrote {p.relative_to(REPO)} — {n} run(s)")
