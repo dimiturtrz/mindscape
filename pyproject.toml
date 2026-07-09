@@ -98,6 +98,7 @@ omit = [
     "neuroscan/tasks/visual/train_nice.py", "neuroscan/tasks/visual/retrieval_audit.py",
     "neuroscan/tasks/visual/cross_dataset_eval.py",   # cross-dataset EEG1->EEG2 GPU runner
     "neuroscan/models/decoders.py", "neuroscan/models/eegnet.py",
+    "neuroscan/models/foundation.py",   # CBraMod wrapper: external backbone + device + out-of-repo weights (contract-test skip-guarded)
     "neuroscan/models/profile.py",   # fvcore params+FLOPs (model on device)
     "neuroscan/tasks/workload/feature_importance/optuna_search.py",   # Optuna study runner (entrypoint)
     "neuroscan/tasks/workload/feature_importance/differentiable.py",  # torch/GPU differentiable feature-selection runner
