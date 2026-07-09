@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _GRID, _FPS, _TEND = 16, 10.0, 20.0                # hemodynamic lag derived per subject (no fixed shift)
-_SEEDS, _K = [0, 1, 2], 5
+_SEEDS, _K = [0], 5          # 1 seed default (escalate-on-signal, bd); k-fold = validity not rigor
 _FNIRS_BASELINE_ACC = 0.595   # EEG best-single reference (0.580) + margin; beat it to claim fusion cashed a gain
 
 
@@ -51,8 +51,8 @@ def _build_all():
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     X, y, g = _build_all()
     logger.info(f"brain-camera fusion · {X.shape[0]} blocks · {len(set(g))} subj · tensor {X.shape[1:]} · "
           f"grid {_GRID} fps {_FPS} lag derived/subj · chance {1/(y.max()+1):.3f}")

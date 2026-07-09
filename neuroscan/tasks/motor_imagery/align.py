@@ -111,8 +111,8 @@ def _run_fold(s, tr, te, cfg: AlignConfig):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--exp", default="mi_align_recenter",
                     help="named transfer experiment in experiments.yaml (task: align)")

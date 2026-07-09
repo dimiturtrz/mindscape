@@ -14,7 +14,6 @@ from scipy.signal import butter, filtfilt
 
 # canonical n-back workload classes (load level) — shared by the fNIRS and EEG n-back adapters
 CANONICAL_NBACK: dict[str, int] = {"0-back": 0, "2-back": 1, "3-back": 2}
-CANONICAL_NBACK_NAMES: dict[int, str] = {v: k for k, v in CANONICAL_NBACK.items()}
 
 
 def bandpass(X: np.ndarray, l_freq: float, h_freq: float, fs: float, order: int = 4) -> np.ndarray:

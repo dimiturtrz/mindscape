@@ -18,7 +18,6 @@ from pydantic import BaseModel
 from core.data.fnirs.clean import clean_key
 from core.data.signal import (  # noqa: F401
     CANONICAL_NBACK,
-    CANONICAL_NBACK_NAMES,
     BlockedRecording,
     bandpass,
     block_epochs,

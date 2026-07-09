@@ -24,14 +24,17 @@ import json
 import logging
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from pydantic import BaseModel
 from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
-from neuroscan.models.nice import NiceConfig, NiceEncoder, clip_infonce, retrieval_topk
+from core.features.eeg.covariance import recenter_signals
+from neuroscan.models.nice import NiceConfig, NiceEncoder, SubjectDiscriminator, clip_infonce, retrieval_topk
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tasks.visual.sampling import (
     BatchSpec,
@@ -52,8 +55,9 @@ class _EpochDataset(Dataset):
     of a much larger epoch pile). Together these keep a full 9-subject LOSO (~38 GB of epochs) in RAM instead
     of OOM-ing on the doubled copies (torch tensor + boolean-mask slice)."""
 
-    def __init__(self, eeg: np.ndarray, targets: np.ndarray, indices: np.ndarray | None = None):
-        self.eeg, self.targets = eeg, targets
+    def __init__(self, eeg: np.ndarray, targets: np.ndarray, indices: np.ndarray | None = None,
+                 subject: np.ndarray | None = None):
+        self.eeg, self.targets, self.subject = eeg, targets, subject
         self.indices = indices
 
     def __len__(self) -> int:
@@ -61,7 +65,8 @@ class _EpochDataset(Dataset):
 
     def __getitem__(self, idx: int):
         row = int(self.indices[idx]) if self.indices is not None else idx
-        return torch.from_numpy(self.eeg[row]), torch.from_numpy(self.targets[row])
+        subj = 0 if self.subject is None else int(self.subject[row])
+        return torch.from_numpy(self.eeg[row]), torch.from_numpy(self.targets[row]), subj
 
 
 class TrainConfig(BaseModel):
@@ -79,7 +84,19 @@ class TrainConfig(BaseModel):
     concepts_per_batch: int = 64  # sampling="balanced": concepts × samples = effective batch (64×8=512)
     samples_per_concept: int = 8  # strict equal per-concept representation each batch (bd 2j2)
     hard_beta: float = 0.0        # >0 = online hard-negative weighting in the InfoNCE loss (bd fww)
+    soft_tau: float = 0.0         # >0 = concept-aware soft InfoNCE targets from CLIP-target sim (bd lbd) —
+                                  # same-concept pairs become partial positives, not false negatives
     val_every: int = 1           # eval the (big) held-out val set every N epochs — strides its per-epoch cost
+    amp: bool = True             # bf16 autocast on cuda; False = fp32 (the naive arm of the parity test, bd 9s5)
+    recenter: bool = False       # per-subject signal re-centering M^-1/2 X before the encoder (bd dpi) —
+                                 # the Stage-1/2 cross-subject transfer template (unsupervised, deployment-safe)
+    recenter_shrinkage: float = 0.0   # shrink M toward scaled-I before whitening (bd 36g dig): full whitening
+                                      # amplifies noise on ill-conditioned M (cond~1500); >0 aligns signal only
+    adversarial: bool = False    # domain-adversarial subject-invariance (bd 36g): GRL + subject discriminator
+    adv_lambda: float = 1.0      # gradient-reversal strength (how hard the encoder is pushed to be invariant)
+    adv_weight: float = 1.0      # weight of the subject-CE adversary term in the total loss
+    adv_lambda_ramp: bool = False  # DANN schedule: ramp lambda 0->adv_lambda over training so the adversary
+                                   # doesn't destabilize the still-random early encoder (bd 36g dose-response)
 
 
 def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
@@ -88,10 +105,13 @@ def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
     return np.stack([by_file[name] for name in image_files]).astype(np.float32)
 
 
-def _load_split(subjects: list[int], split: str, resample: float):
-    epochs, concept, image_files, _ = things.get_epochs(
+def _load_split(subjects: list[int], split: str, resample: float, *, recenter: bool = False,
+                shrinkage: float = 0.0):
+    epochs, concept, image_files, meta = things.get_epochs(
         subjects, things.ThingsEpochCfg(split=split, resample=resample))
-    return epochs, concept, _clip_targets(image_files, split)
+    if recenter:
+        epochs = recenter_signals(epochs, meta["subject"].to_numpy(), shrinkage=shrinkage)   # per-subj M^-1/2 X
+    return epochs, concept, _clip_targets(image_files, split), meta["subject"].to_numpy().astype(np.int64)
 
 
 @dataclass
@@ -155,11 +175,13 @@ class _FitArrays:
     targets: np.ndarray
     concept: np.ndarray
     fit_indices: np.ndarray
+    subject: np.ndarray          # per-row subject index (0-based, for the adversary); zeros when unused
 
 
 def _epoch_steps(data: _FitArrays, neighbor_groups, cfg: TrainConfig, rng, epoch_n: int):
-    """This epoch's (eeg, target) batch iterator per `cfg.sampling`: strict balanced / CLIP-hard (bd 2j2/4ru),
-    round-robin stratified (bd ewd), or uniform DataLoader. train_frac subsamples (bd kqa/pqh)."""
+    """This epoch's (eeg, target, subject) batch iterator per `cfg.sampling`: strict balanced / CLIP-hard
+    (bd 2j2/4ru), round-robin stratified (bd ewd), or uniform DataLoader. train_frac subsamples (bd kqa/pqh).
+    Every source yields the subject index too (dummy zeros unless adversarial) so the loop has one shape."""
     fit = data.fit_indices
     epoch_idx = fit if cfg.train_frac >= 1.0 else rng.choice(fit, epoch_n, replace=False)
     if cfg.sampling in ("balanced", "clip_hard"):
@@ -170,55 +192,93 @@ def _epoch_steps(data: _FitArrays, neighbor_groups, cfg: TrainConfig, rng, epoch
                        if cfg.sampling == "clip_hard" else balanced_batches(data.concept[fit], spec, rng))
         # generator, NOT a list: build+free each batch's tensors on demand (a list materializes the whole
         # epoch of copied tensors at once -> OOM on the 240k-trial cross set).
-        return ((torch.from_numpy(data.eeg[fit[pos]]), torch.from_numpy(data.targets[fit[pos]])) for pos in pos_batches)
+        return ((torch.from_numpy(data.eeg[fit[pos]]), torch.from_numpy(data.targets[fit[pos]]),
+                 torch.from_numpy(data.subject[fit[pos]])) for pos in pos_batches)
     if cfg.sampling == "stratified":
-        return ((torch.from_numpy(data.eeg[epoch_idx[pos]]), torch.from_numpy(data.targets[epoch_idx[pos]]))
+        return ((torch.from_numpy(data.eeg[epoch_idx[pos]]), torch.from_numpy(data.targets[epoch_idx[pos]]),
+                 torch.from_numpy(data.subject[epoch_idx[pos]]))
                 for pos in stratified_batches(data.concept[epoch_idx], cfg.batch, rng) if len(pos) > 1)
-    return DataLoader(_EpochDataset(data.eeg, data.targets, epoch_idx),
+    return DataLoader(_EpochDataset(data.eeg, data.targets, epoch_idx, data.subject),
                       batch_size=cfg.batch, shuffle=True, drop_last=True)
 
 
-def train_encoder(train_eeg: np.ndarray, train_targets: np.ndarray, train_concept: np.ndarray,
-                  cfg: TrainConfig, device: str):
+@dataclass
+class TrainData:
+    """The training inputs for `train_encoder`: epochs + per-trial CLIP targets + concept ids (for the
+    leak-free val split) + optional per-row subject id (for the domain-adversary). One bundle so the core
+    trainer stays a 3-arg (data, cfg, device) signature across its callers."""
+    eeg: np.ndarray
+    targets: np.ndarray
+    concept: np.ndarray
+    subject: np.ndarray | None = None
+
+
+def _build_optim(nice_cfg: NiceConfig, n_subjects: int, cfg: TrainConfig, device: str):
+    """Encoder + logit-scale + (optional) subject discriminator, all under one AdamW."""
+    encoder = NiceEncoder(nice_cfg).to(device)
+    logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
+    params = [*encoder.parameters(), logit_scale]
+    discriminator = None
+    if cfg.adversarial:
+        discriminator = SubjectDiscriminator(nice_cfg.embed_dim, n_subjects).to(device)
+        params += [*discriminator.parameters()]
+        logger.info(f"domain-adversarial: {n_subjects} subjects, lambda {cfg.adv_lambda}, weight {cfg.adv_weight}")
+    return encoder, logit_scale, discriminator, torch.optim.AdamW(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
+
+
+def _dann_lambda(progress: float, max_lambda: float, gamma: float = 10.0) -> float:
+    """DANN gradient-reversal schedule (Ganin & Lempitsky 2015): ramp 0 -> `max_lambda` as
+    `2/(1+exp(-gamma·p)) - 1` over training progress `p ∈ [0,1]`, so the adversary engages gradually once the
+    encoder has structure instead of fighting the random early features (constant high lambda flattened the
+    dose-response — w1.0 fell back to baseline)."""
+    return max_lambda * (2.0 / (1.0 + np.exp(-gamma * progress)) - 1.0)
+
+
+def train_encoder(data: TrainData, cfg: TrainConfig, device: str):
     """Contrastive-fit a NICE encoder with leak-free early stopping on held-out TRAIN concepts, returning the
     best-val checkpoint. Dataset-agnostic core shared by the within/cross-subject EEG2 runs (train()) and the
-    cross-dataset EEG1 run (cross_dataset_eval) — the caller supplies epochs + per-trial CLIP targets +
-    per-trial concept ids (only used to carve the leak-free val split)."""
+    cross-dataset EEG1 run (cross_dataset_eval). `data.subject` (per-row 0-based id) drives the optional
+    domain-adversarial head (bd 36g); None -> a single dummy domain, adversary off."""
+    train_eeg, train_targets, train_concept = data.eeg, data.targets, data.concept
     fit_mask, val_mask, val_labels, val_bank = _val_split(
         train_concept, train_targets, cfg.seed, cfg.val_fraction)
     fit_indices = np.where(fit_mask)[0]            # view, not a copy — fit is the bulk of the epoch pile
     val_eeg = train_eeg[val_mask]                  # small (one split fraction), copy is fine
+    subject = np.zeros(len(train_eeg), dtype=np.int64) if data.subject is None else data.subject.astype(np.int64)
     rng = np.random.default_rng(cfg.seed)
     epoch_n = (len(fit_indices) if cfg.train_frac >= 1.0
                else min(len(fit_indices), max(cfg.batch, int(len(fit_indices) * cfg.train_frac))))
     logger.info(f"early-stop val: {len(val_bank)} held-out train concepts, {int(val_mask.sum())} epochs; "
           f"fit {len(fit_indices)} trials, {epoch_n}/epoch (train_frac {cfg.train_frac})")
 
-    encoder = NiceEncoder(NiceConfig(n_channels=train_eeg.shape[1], n_times=train_eeg.shape[2],
-                                     embed_dim=train_targets.shape[1])).to(device)
-    logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
-    optimizer = torch.optim.AdamW([*encoder.parameters(), logit_scale],
-                                  lr=cfg.lr, weight_decay=cfg.weight_decay)
+    nice_cfg = NiceConfig(n_channels=train_eeg.shape[1], n_times=train_eeg.shape[2], embed_dim=train_targets.shape[1])
+    encoder, logit_scale, discriminator, optimizer = _build_optim(nice_cfg, int(subject.max()) + 1, cfg, device)
 
     neighbor_groups = None
     if cfg.sampling == "clip_hard":                        # CLIP-prior hard-negative neighbours (bd 4ru)
         neighbor_groups = _concept_neighbor_groups(
             train_targets[fit_indices], train_concept[fit_indices], cfg.concepts_per_batch)
 
-    data = _FitArrays(train_eeg, train_targets, train_concept, fit_indices)
+    fit_data = _FitArrays(train_eeg, train_targets, train_concept, fit_indices, subject)
     best_val, best_state, best_epoch, since_improved = -1.0, None, -1, 0
     for epoch in range(cfg.epochs):
-        steps = _epoch_steps(data, neighbor_groups, cfg, rng, epoch_n)
+        lam = (_dann_lambda(epoch / max(1, cfg.epochs - 1), cfg.adv_lambda)
+               if cfg.adv_lambda_ramp else cfg.adv_lambda)
+        steps = _epoch_steps(fit_data, neighbor_groups, cfg, rng, epoch_n)
         encoder.train()
         total_loss, n_batches = 0.0, 0
         epoch_start = time.perf_counter()
-        for eeg_batch, target_batch in steps:
+        for eeg_batch, target_batch, subj_batch in steps:
             eeg_batch = eeg_batch.to(device)
             target_batch = torch.nn.functional.normalize(target_batch.to(device), dim=-1)
             optimizer.zero_grad()
-            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda")):
-                loss = clip_infonce(encoder(eeg_batch), target_batch, logit_scale.exp().clamp(max=100),
-                                    hard_beta=cfg.hard_beta)
+            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda" and cfg.amp)):
+                z = encoder(eeg_batch)
+                loss = clip_infonce(z, target_batch, logit_scale.exp().clamp(max=100),
+                                    hard_beta=cfg.hard_beta, soft_tau=cfg.soft_tau)
+                if discriminator is not None:              # push encoder to be subject-invariant (GRL, bd 36g)
+                    subj_logits = discriminator(z, lam)
+                    loss = loss + cfg.adv_weight * F.cross_entropy(subj_logits, subj_batch.to(device))
             loss.backward()                                # bf16 autocast needs no GradScaler (unlike fp16)
             optimizer.step()
             total_loss += loss.item()
@@ -252,13 +312,18 @@ def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dic
     regime = "within" if train_subjects == [test_subject] else "cross"
     logger.info(f"regime={regime}  train={train_subjects}  test={test_subject}  device={device}")
 
-    train_eeg, train_concept, train_targets = _load_split(train_subjects, "training", cfg.resample)
-    test_eeg, test_concept, _ = _load_split([test_subject], "test", cfg.resample)
+    train_eeg, train_concept, train_targets, train_subj = _load_split(
+        train_subjects, "training", cfg.resample, recenter=cfg.recenter, shrinkage=cfg.recenter_shrinkage)
+    test_eeg, test_concept, _, _ = _load_split(
+        [test_subject], "test", cfg.resample, recenter=cfg.recenter, shrinkage=cfg.recenter_shrinkage)
+    subj_map = {s: i for i, s in enumerate(sorted(set(train_subjects)))}
+    subj_idx = np.array([subj_map[int(s)] for s in train_subj], dtype=np.int64) if cfg.adversarial else None
     test_bank = clip_targets.concept_prototypes("test")
     logger.info(f"train {train_eeg.shape} -> CLIP {train_targets.shape} | "
           f"test {test_eeg.shape} ({int(test_concept.max())+1} concepts)")
 
-    encoder, stats = train_encoder(train_eeg, train_targets, train_concept, cfg, device)
+    encoder, stats = train_encoder(
+        TrainData(train_eeg, train_targets, train_concept, subj_idx), cfg, device)
     test = evaluate(encoder, RetrievalSet(test_eeg, test_concept, test_bank), device)
     return {"regime": regime, "train": train_subjects, "test": test_subject, **stats,
             "chance_top1": 1 / (int(test_concept.max()) + 1), **test}
@@ -266,26 +331,31 @@ def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dic
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--train", type=int, nargs="+", default=[1], help="training subject id(s)")
     ap.add_argument("--test", type=int, default=1, help="held-out test subject id")
-    ap.add_argument("--epochs", type=int, default=TrainConfig().epochs)
-    ap.add_argument("--batch", type=int, default=TrainConfig().batch, help="<=1024 (cuDNN cap on this shape)")
-    ap.add_argument("--lr", type=float, default=TrainConfig().lr)
-    ap.add_argument("--resample", type=float, default=TrainConfig().resample)
-    ap.add_argument("--seed", type=int, default=TrainConfig().seed)
-    ap.add_argument("--patience", type=int, default=TrainConfig().patience)
+    ap.add_argument("--config", default=None,
+                    help="JSON file of TrainConfig fields (the recipe home; e.g. the balanced+clip_hard "
+                         "perception config). Explicit flags below override it.")
+    ap.add_argument("--epochs", type=int, default=None)
+    ap.add_argument("--batch", type=int, default=None, help="<=1024 (cuDNN cap on this shape)")
+    ap.add_argument("--lr", type=float, default=None)
+    ap.add_argument("--resample", type=float, default=None)
+    ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument("--patience", type=int, default=None)
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    cfg = TrainConfig(epochs=args.epochs, batch=args.batch, lr=args.lr,
-                      resample=args.resample, seed=args.seed, patience=args.patience)
+    base = json.loads(Path(args.config).read_text()) if args.config else {}
+    overrides = {k: v for k, v in vars(args).items()
+                 if k in TrainConfig.model_fields and v is not None}
+    cfg = TrainConfig(**{**base, **overrides})
     result = train(args.train, args.test, cfg)
     logger.info(json.dumps(result, indent=2))
     if args.out:
-        with open(args.out, "w") as f:
+        with Path(args.out).open("w") as f:
             json.dump(result, f, indent=2)
 
 

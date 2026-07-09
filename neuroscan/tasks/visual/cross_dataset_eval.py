@@ -24,7 +24,7 @@ from core.data.eeg import things_eeg1, things_eeg2
 from neuroscan.evaluation import cross_dataset as bridge
 from neuroscan.evaluation.retrieval import retrieval_calibration, retrieval_metrics
 from neuroscan.tasks.visual import clip_targets
-from neuroscan.tasks.visual.train_nice import RetrievalSet, TrainConfig, evaluate, train_encoder
+from neuroscan.tasks.visual.train_nice import RetrievalSet, TrainConfig, TrainData, evaluate, train_encoder
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ def run(cfg: CrossDatasetConfig) -> dict:
     logger.info(f"EEG1 train: {len(e1_names)} epochs, {len(name_id)} concepts (EEG2-test held out) "
           f"-> CLIP {targets.shape}")
 
-    encoder, stats = train_encoder(e1_eeg, targets, concept_ids, train_cfg, device)
+    encoder, stats = train_encoder(TrainData(e1_eeg, targets, concept_ids), train_cfg, device)
 
     e2_eeg, e2_concept, _, _ = things_eeg2.get_epochs(
         list(cfg.eeg2_subjects), things_eeg2.ThingsEpochCfg(split="test", resample=cfg.resample))
@@ -113,8 +113,8 @@ def run(cfg: CrossDatasetConfig) -> dict:
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--eeg1-subjects", type=int, nargs="+", required=True)
     ap.add_argument("--eeg2-subjects", type=int, nargs="+", default=[1, 2])

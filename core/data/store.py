@@ -25,7 +25,6 @@ from core.data.registry import get_adapter
 
 logger = logging.getLogger(__name__)
 
-META_FIELDS = ["dataset", "subject", "session", "run", "label_id", "label", "epoch", "file"]
 _SCHEMA = {
     "dataset": pl.Utf8, "subject": pl.Utf8, "session": pl.Utf8, "run": pl.Utf8,
     "label_id": pl.Int64, "label": pl.Utf8, "epoch": pl.Int64, "file": pl.Utf8,
@@ -127,8 +126,8 @@ def gather(df: pl.DataFrame) -> tuple[np.ndarray, np.ndarray]:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     import argparse
 
     ap = argparse.ArgumentParser(description="consolidate a dataset into processed/<ds>/<epochkey>/")

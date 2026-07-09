@@ -124,6 +124,6 @@ def concept_prototypes(split: str) -> np.ndarray:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     compute(sys.argv[1] if len(sys.argv) > 1 else "test")

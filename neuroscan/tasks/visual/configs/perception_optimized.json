@@ -1,0 +1,11 @@
+{
+  "epochs": 40,
+  "batch": 512,
+  "lr": 3e-4,
+  "patience": 8,
+  "train_frac": 0.2,
+  "sampling": "clip_hard",
+  "concepts_per_batch": 64,
+  "samples_per_concept": 8,
+  "hard_beta": 0.5
+}

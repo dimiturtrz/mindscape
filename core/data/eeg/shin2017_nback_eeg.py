@@ -41,7 +41,7 @@ class Shin2017NbackEegAdapter:
         self.n_classes = 3
         self.label_map = dict(CANONICAL_NBACK)          # '0-back'/'2-back'/'3-back' -> 0/1/2
 
-    def _index(self) -> dict[int, object]:
+    def _index(self) -> dict[int, object]:                # pragma: no cover — filesystem glob (disk shell)
         """{subject int -> VP dir holding cnt_nback.mat}, discovered on disk (naming-robust)."""
         out: dict[int, object] = {}
         for f in sorted((raw_dir() / _ROOT).glob("**/cnt_nback.mat")):
@@ -50,10 +50,10 @@ class Shin2017NbackEegAdapter:
                 out[int(m.group(1))] = f.parent
         return out
 
-    def subjects(self) -> list[int]:
+    def subjects(self) -> list[int]:                      # pragma: no cover — wraps the disk index
         return sorted(self._index())
 
-    def channels(self) -> list[str]:
+    def channels(self) -> list[str]:                      # pragma: no cover — reads clab from disk (.mat)
         """The 28 EEG channel names (BBCI `cnt.clab`, dropping the 2 trailing EOG) — standard 10-05 labels,
         montage-mappable. Read from the first subject; the montage is fixed across the set."""
         d = next(iter(self._index().values()))

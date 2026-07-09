@@ -31,6 +31,7 @@ dev = ["pytest", "pytest-cov", "fvcore"]   # fvcore: params + FLOPs profiling (n
 export = ["onnx", "onnxruntime", "onnxscript"]   # ONNX export + parity check (Stage 2; core/export_onnx.py)
 data = ["osfclient", "openneuro-py"]   # dataset fetch (Stage-3 EEG->image: OSF / OpenNeuro); not a runtime dep
 devtools = ["grimp", "networkx"]   # one-shot import-graph diagnostic (bd 2r9; devtools/graph.py)
+source = ["nibabel"]   # EEG->cortex source localization: MNE fsaverage forward/inverse (bd 728; core.features.eeg.source)
 all = ["pytest", "onnx", "onnxruntime"]
 
 [tool.pytest.ini_options]
@@ -102,7 +103,6 @@ omit = [
     "baselines/fusion/gate.py", "baselines/fusion/spatiotemporal.py", "core/data/eeg/braindecode_pre.py",
     # data adapters: filesystem read / OSF+OpenNeuro download
     "core/data/*/registry.py", "core/data/eeg/things_eeg2.py", "core/data/fnirs/shin2017.py",
-    "core/data/eeg/shin2017_nback_eeg.py",   # BBCI .mat disk read (its pure epoching lives in core.data.signal)
     "core/data/eeg/things_eeg1.py",   # BrainVision disk read (its pure epochs_from_events is unit-tested)
     "core/features/fnirs/montage.py",   # fnirs_positions loads .mat (disk); pure _to_unit_disk tested in features/eeg/montage
     # workload/fusion runners: load -> fit -> record orchestration (their logic lives in combine/base/_eval,

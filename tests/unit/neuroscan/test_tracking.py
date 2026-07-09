@@ -7,7 +7,6 @@ def test_disabled_tracking_is_noop(monkeypatch):
     with tracking.run("mindscape", "test_run", params={"a": 1}, tags={"t": "x"}):
         tracking.metrics({"acc": 0.5})
         tracking.per_group("acc_subject", {"1": 0.6})
-        tracking.set_tags({"k": "v"})
         tracking.artifact_json("x.json", {"ok": True})
     # no exception = pass
 

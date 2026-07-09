@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import time
 from pathlib import Path
 
 from core import config
@@ -43,8 +44,8 @@ def _canonical_runs():
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--cross-only", action="store_true", help="skip within-subject runs")
     ap.add_argument("--only", default=None,
@@ -70,14 +71,16 @@ def main():
         run_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"\n=== {name} · {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
         method_obj = harness.Method(method, fit_fn, score_fn, n_classes, regime)
+        cell_start = time.perf_counter()
         res = harness.run(method_obj, folds, n_jobs=n_jobs,
                           tracking_cfg=harness.TrackConfig(
                               params={"exp": name, "method": method, "regime": regime, "dataset": dataset},
                               run_dir=run_dir))
+        elapsed = time.perf_counter() - cell_start
         (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
         results.record(run_dir)
         logger.info(f"  -> acc {res['fold_mean']['acc']:.3f}  kappa {res['fold_mean']['kappa']:.3f}  "
-              f"(chance {1/n_classes:.3f})")
+              f"(chance {1/n_classes:.3f})  [{elapsed:.1f}s, {elapsed/len(folds):.2f}s/fold]")
     logger.info("\nreproduce_all done — regenerated results.json. Run `align --exp mi_align_recenter` (+ "
           "`--exp mi_align_recenter_acm`) for recentering, then `sync_numbers` to update the README.")
 

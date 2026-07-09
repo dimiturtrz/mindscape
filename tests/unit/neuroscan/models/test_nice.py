@@ -22,6 +22,16 @@ def test_clip_infonce_hard_beta_zero_is_exact_standard():
     assert torch.allclose(clip_infonce(eeg, img, scale, hard_beta=0.0), std)   # bd fww: off by default
 
 
+def test_clip_infonce_soft_tau_limit_is_standard_and_finite():
+    """soft_tau -> 0 collapses the CLIP-similarity soft target back to the hard one-hot (standard loss); a
+    moderate tau stays finite (bd lbd). The concept-aware BEHAVIOUR — same-concept pairs as partial positives
+    — is validated in training, not here; this pins the numerics."""
+    eeg, img, scale = _pair()
+    assert torch.allclose(clip_infonce(eeg, img, scale, soft_tau=0.02),
+                          clip_infonce(eeg, img, scale), atol=1e-3)   # tiny tau -> one-hot limit
+    assert torch.isfinite(clip_infonce(eeg, img, scale, soft_tau=0.3))   # moderate tau: valid loss
+
+
 def test_clip_infonce_hard_beta_raises_loss_on_hard_negatives():
     eeg, img, scale = _pair()
     base = clip_infonce(eeg, img, scale, hard_beta=0.0)

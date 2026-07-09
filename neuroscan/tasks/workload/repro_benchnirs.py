@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     from benchnirs.learn import machine_learn  # noqa: PLC0415
     from benchnirs.load import load_dataset  # noqa: PLC0415
     from benchnirs.process import extract_features, process_epochs  # noqa: PLC0415

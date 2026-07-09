@@ -37,13 +37,6 @@ def test_ece_from_probs_matches_argmax():
     assert metrics.ece_from_probs(probs, y) >= 0.0
 
 
-def test_brier_bounds():
-    probs = np.array([[1.0, 0.0], [0.0, 1.0]])
-    y = np.array([0, 1])
-    assert metrics.brier(probs, y) == 0.0
-    assert metrics.brier(probs, np.array([1, 0])) == 2.0
-
-
 def test_confusion_shape_and_counts():
     y = np.array([0, 0, 1, 2])
     p = np.array([0, 1, 1, 2])

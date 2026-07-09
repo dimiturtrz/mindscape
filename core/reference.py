@@ -35,8 +35,8 @@ def compare(our_acc: float, dataset: str, regime: str, method: str | None = None
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for _n in ("mne", "moabb", "braindecode"):
-        logging.getLogger(_n).setLevel(logging.WARNING)
+    for lib_name in ("mne", "moabb", "braindecode"):
+        logging.getLogger(lib_name).setLevel(logging.WARNING)
     import argparse
     ap = argparse.ArgumentParser(description="print reference ceilings")
     ap.add_argument("--dataset", default="bnci2014_001")

@@ -21,7 +21,6 @@ from pydantic import BaseModel
 from core.config import configure_moabb_download
 
 CANONICAL_MI: dict[str, int] = {"left_hand": 0, "right_hand": 1, "feet": 2, "tongue": 3}
-CANONICAL_MI_NAMES: dict[int, str] = {v: k for k, v in CANONICAL_MI.items()}
 
 
 class EpochCfg(BaseModel):

@@ -69,3 +69,6 @@ neuroviz/web/data/
 elevator.txt
 .coverage
 .claude/
+
+# Ephemeral session launch/watcher scripts (belong in the scratchpad dir, not the repo)
+scratch_*.sh

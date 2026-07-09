@@ -25,22 +25,43 @@ test subject/concepts never touch checkpoint selection (best-val checkpoint). Ch
 | top5 | 35.5% | 10.5% | 25.0% |
 | single-trial top1 | 4.06% | 1.45% | 1.94% |
 
-**The point is the gap — and that it moves with subject count.** Within-subject concept-avg top1 (15%, 30×
-chance) craters cross-subject, but the crater *shrinks as training subjects are added*: 2% (train-1) → **6%**
-(train-4 LOSO), top5 10.5% → 25%. Single-trial stays near the floor (~2%) — that's the genuinely hard part.
-Same shape as motor imagery (0.71→0.36): a *subject-specific* EEG→semantic map that transfers better the more
-subjects it sees. Within-subject is comparable to the NICE family; the honest cross-subject number **and its
-subject-count scaling** is the contribution the field under-reports. (A full train-9 LOSO is one run away —
-the DataLoader is numpy-backed + index-viewed so 9 subjects' epochs fit in RAM without the doubled copy.)
+**The point is the gap.** Within-subject concept-avg top1 (15%, 30× chance) craters cross-subject. Concept-avg
+lifts with training subjects (2% train-1 → 6% train-4 LOSO), but **single-trial — the deployment-real metric —
+stays pinned near the floor (~1.9%, ≈4× chance)** no matter what. Within-subject is comparable to the NICE
+family; the honest, leak-free cross-subject single-trial number is what the field under-reports.
+
+## Closing the cross-subject gap — levers tried (honest negative)
+
+Stages 1-2 closed their cross-subject gaps by removing per-subject *distribution displacement* (MI: Riemannian
+re-centering; workload: per-subject z-score). We transplanted that logic here and tested it under **3-seed**
+rigor (train-4 → test-5, matched config). It does **not** transfer to the single-trial headline:
+
+| lever (single-trial top1) | axis · mechanism | result |
+|---|---|---|
+| baseline | — | **1.87 ± 0.14 %** |
+| per-subject signal re-centering | *input space* · whiten each subject's epochs `M⁻¹ᐟ² X` ([`covariance.py`](../../../core/features/eeg/covariance.py)) | ~1.71 (flat; concept-avg *hurt*) |
+| domain-adversarial | *embedding space* · GRL + subject discriminator ([`nice.py`](../../../neuroscan/models/nice.py)) | 2.00 ± 0.06 (**Δ +0.13, within noise**) |
+| concept-aware soft InfoNCE | *loss* · CLIP-similarity soft targets ([`nice.py`](../../../neuroscan/models/nice.py)) | 1.73 (washes) |
+
+Three levers on **three different axes** — input alignment, embedding invariance, loss quality — and none moves
+the single-trial-top1 number beyond noise. That breadth is the point: it's not one idea failing. *Why they
+fail, diagnosed:* re-centering whitens an **ill-conditioned** per-subject covariance (cond ≈ 1500), amplifying
+noise channels ~38× and *hurting* the averaged metric while leaving single-trial flat (a shrinkage-regularised
+variant recovers the loss but not a gain); the adversary *does* act (consistent val-drop, a weak **top5** +0.43
+pp ≈ 2.5 σ) but subject-invariance isn't the missing piece, and a λ-ramp doesn't rescue it; soft-negatives fix a
+real false-negative but don't lift transfer. **Conclusion: the single-trial cross-subject gap is a genuine hard
+floor for this compact encoder at this scale — bounded by single-trial SNR / capacity, not by a fixable
+subject-shift or loss bug.** The remaining untested axis is *capacity* (a bigger encoder / longer schedule) — a
+different question (representation power, not transfer). All three operators are kept opt-in + documented
+(`TrainConfig.recenter`, `.adversarial`, `.soft_tau`); the negative is the finding.
 
 ## Critique / limitations (what's weak, on purpose visible)
 
-- **Subject count** — the train-4 LOSO (6%) already shows cross lifts off the train-1 floor (2%); the full
-  train-9 LOSO (all 10 downloaded) is the remaining stronger number, one memory-fixed run away.
+- **The single-trial floor is the honest ceiling** — not closed by the transfer-alignment levers above; the
+  remaining untested angles are *capacity* (bigger encoder / longer schedule — 693k params, early-stops ~ep 9-15)
+  and a loss-quality fix (below), not another subject-invariance trick.
 - **InfoNCE false negatives** — same-concept-different-image pairs in a batch are treated as negatives though
-  their CLIP targets are ~0.7 similar; a concept-aware batch sampler or soft targets would help. Not yet done.
-- **Compact encoder, short training** — 693k params, early-stops ~ep 9; a bigger encoder / more epochs / LR
-  schedule would raise the within number (the gap is the story, so not chased here).
+  their CLIP targets are ~0.7 similar; a concept-aware batch sampler or soft targets would help. Not yet tested.
 - **Concept-averaged retrieval** averages 80 test reps — reported alongside single-trial (the deployment-real
   one), never instead of it. Single-trial is the honest headline metric.
 

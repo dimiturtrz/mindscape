@@ -30,8 +30,11 @@ class CvConfig(BaseModel):
     binary (b -> 1) for a per-boundary probe."""
     model_config = {"arbitrary_types_allowed": True}
     grouped: bool
-    seeds: tuple[int, ...] = (0, 1, 2)
-    k: int = 5
+    seeds: tuple[int, ...] = (0,)     # ONE seed by default — a first pass answers most questions (a clear
+                                      # null/win shows at 1 seed × k-fold). Add seeds only to CONFIRM a small Δ
+                                      # sitting near the fold noise floor (escalate-on-signal, not by reflex).
+    k: int = 5                        # k-fold is for VALIDITY (held-out subjects when grouped), not rigor;
+                                      # 5 gives a usable SE-of-mean. Not a knob to inflate.
     classes: tuple[int, ...] | None = None
 
 

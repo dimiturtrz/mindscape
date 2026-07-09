@@ -67,7 +67,7 @@ class NiceEncoder(nn.Module):
 
 
 def clip_infonce(eeg: torch.Tensor, img: torch.Tensor, logit_scale: torch.Tensor,
-                 hard_beta: float = 0.0) -> torch.Tensor:
+                 hard_beta: float = 0.0, soft_tau: float = 0.0) -> torch.Tensor:
     """Symmetric InfoNCE (CLIP loss) between L2-normalized EEG and image embeddings in a batch.
 
     Positives = matched (eeg_i, img_i); negatives = every other image in the batch. Symmetric over both
@@ -77,13 +77,49 @@ def clip_infonce(eeg: torch.Tensor, img: torch.Tensor, logit_scale: torch.Tensor
     boosted by `hard_beta ×` its own (detached) similarity, so high-similarity negatives contribute more to
     the softmax denominator and get a stronger push-down gradient. Rides this same forward pass — no extra
     inference — and self-sharpens as the encoder improves. `hard_beta = 0` is the exact standard CLIP loss.
+
+    `soft_tau` > 0 replaces the hard one-hot target with a SOFT one — `softmax(img·imgᵀ / soft_tau)` — so a
+    same-concept-different-image pair (CLIP targets ~0.7 similar) is a partial positive, not a false negative
+    (bd lbd). Diagonal-dominant (self-sim = 1), tail set by `soft_tau`. Mutually exclusive with `hard_beta`.
     """
     logits = logit_scale * eeg @ img.t()                   # [B,B]
     if hard_beta > 0:
         off_diag = ~torch.eye(eeg.shape[0], dtype=torch.bool, device=eeg.device)
         logits = logits + hard_beta * logits.detach() * off_diag
+    if soft_tau > 0:                                        # concept-aware soft targets (bd lbd)
+        soft = F.softmax((img @ img.t()).detach() / soft_tau, dim=1)
+        return -0.5 * ((soft * F.log_softmax(logits, dim=1)).sum(1).mean()
+                       + (soft * F.log_softmax(logits.t(), dim=1)).sum(1).mean())
     target = torch.arange(eeg.shape[0], device=eeg.device)
     return 0.5 * (F.cross_entropy(logits, target) + F.cross_entropy(logits.t(), target))
+
+
+class _GradReverse(torch.autograd.Function):
+    """Identity forward, sign-flipped (× λ) gradient backward — the DANN gradient-reversal layer. Placed
+    before the subject discriminator so that minimizing the total loss trains the discriminator to name the
+    subject while pushing the ENCODER to make that impossible (subject-invariant embedding)."""
+
+    @staticmethod
+    def forward(ctx, x: torch.Tensor, lambd: float) -> torch.Tensor:
+        ctx.lambd = lambd
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad: torch.Tensor):
+        return -ctx.lambd * grad, None
+
+
+class SubjectDiscriminator(nn.Module):
+    """Adversary that predicts which subject an embedding came from, through a gradient-reversal layer (bd
+    36g). If the encoder's cross-subject collapse is because the embedding still encodes *who*, forcing it to
+    fool this head should make the EEG->image map subject-invariant and transfer better."""
+
+    def __init__(self, embed_dim: int, n_subjects: int, hidden: int = 256):
+        super().__init__()
+        self.net = nn.Sequential(nn.Linear(embed_dim, hidden), nn.ReLU(), nn.Linear(hidden, n_subjects))
+
+    def forward(self, z: torch.Tensor, lambd: float) -> torch.Tensor:
+        return self.net(_GradReverse.apply(z, lambd))
 
 
 @torch.no_grad()
