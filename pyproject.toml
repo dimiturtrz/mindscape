@@ -65,8 +65,9 @@ paths = ["core", "neuroscan", "baselines"]
 exclude = ["neuroviz", "runs", "mlruns"]
 min_confidence = 60
 # framework false positives (used implicitly, not dead): torch nn.Module.forward (called via __call__),
-# onnxruntime SessionOptions.intra_op_num_threads (read by the ORT session).
-ignore_names = ["model_config", "forward", "intra_op_num_threads"]
+# onnxruntime SessionOptions.intra_op_num_threads (read by the ORT session), CBraMod.proj_out (set to
+# Identity to expose the backbone's pre-projection features — an external attribute vulture can't trace).
+ignore_names = ["model_config", "forward", "intra_op_num_threads", "proj_out"]
 ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
 
 # Coverage (pytest-cov). Denominator is LIBRARY LOGIC, not dependency glue: we test our input/output logic,

@@ -9,7 +9,8 @@ one builder + one `register` line, no trainer change.
 """
 from __future__ import annotations
 
-from typing import Callable, Protocol
+from collections.abc import Callable
+from typing import Protocol
 
 from pydantic import BaseModel
 from torch import Tensor, nn

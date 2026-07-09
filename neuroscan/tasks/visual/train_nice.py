@@ -34,6 +34,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.covariance import recenter_signals
+from neuroscan.models import foundation  # noqa: F401 — registers the "cbramod" encoder in the registry
 from neuroscan.models.encoders import EncoderSpec, build_encoder
 from neuroscan.models.nice import SubjectDiscriminator, clip_infonce, retrieval_topk
 from neuroscan.tasks.visual import clip_targets
