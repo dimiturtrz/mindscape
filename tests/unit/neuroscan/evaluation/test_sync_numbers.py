@@ -5,10 +5,16 @@
 """
 import pytest
 
-from neuroscan.evaluation.sync_numbers import _lookup, _markers, _render
-
+from neuroscan.evaluation.sync_numbers import _README, _SKIP_DIRS, _doc_files, _lookup, _markers, _render
 
 _RUNS = {"csp_lda": {"acc": 0.598, "kappa": 0.464}, "eegnet": {"acc": 0.512}}
+
+
+def test_doc_files_root_first_and_skips_vendored():
+    files = _doc_files()
+    assert files[0] == _README                                  # landing page synced first
+    assert all(f.name == "README.md" for f in files)            # only READMEs
+    assert not any(_SKIP_DIRS & set(f.parts) for f in files[1:])  # no .venv/external/generated trees
 
 
 def test_render_single_value():
