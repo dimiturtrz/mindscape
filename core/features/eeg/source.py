@@ -59,13 +59,26 @@ def _cache_key(ch_names: list[str], sfreq: float, cfg: SourceConfig) -> str:
     return hashlib.sha1(payload.encode()).hexdigest()[:16]
 
 
+def build_forward(ch_names: list[str], sfreq: float, cfg: SourceConfig | None = None):  # pragma: no cover
+    """The fsaverage template forward solution (lead field) + its `Info` for a montage. The expensive step —
+    shared by the dSPM inverse (`build_inverse`, 728) and the fNIRS-informed weighted inverse (4so)."""
+    cfg = cfg or SourceConfig()
+    fs, subjects_dir = _fsaverage_dir()
+    info = _montage_info(ch_names, sfreq)
+    src = mne.setup_source_space("fsaverage", spacing=cfg.spacing, subjects_dir=subjects_dir,
+                                 add_dist=False, verbose=False)
+    bem = os.path.join(fs, "bem", "fsaverage-5120-5120-5120-bem-sol.fif")
+    fwd = mne.make_forward_solution(info, trans="fsaverage", src=src, bem=bem, eeg=True, meg=False, verbose=False)
+    return fwd, info
+
+
 def build_inverse(ch_names: list[str], sfreq: float, cfg: SourceConfig | None = None):  # pragma: no cover
     """Build (or load from cache) the dSPM inverse operator + cortical labels for a montage.
 
     Returns `(inverse_operator, labels)`. The fsaverage forward solution is computed once per
     (montage, sfreq, config) and the inverse cached to `processed_dir()/source_operators/<key>-inv.fif`."""
     cfg = cfg or SourceConfig()
-    fs, subjects_dir = _fsaverage_dir()
+    _, subjects_dir = _fsaverage_dir()
     labels = [lbl for lbl in mne.read_labels_from_annot("fsaverage", cfg.parcellation,
                                                         subjects_dir=subjects_dir, verbose=False)
               if "unknown" not in lbl.name]
@@ -76,11 +89,7 @@ def build_inverse(ch_names: list[str], sfreq: float, cfg: SourceConfig | None = 
         return mne.minimum_norm.read_inverse_operator(str(inv_path), verbose=False), labels
 
     logger.info(f"building fsaverage forward+inverse for {len(ch_names)} ch @ {sfreq} Hz ({cfg.spacing})")
-    info = _montage_info(ch_names, sfreq)
-    src = mne.setup_source_space("fsaverage", spacing=cfg.spacing, subjects_dir=subjects_dir,
-                                 add_dist=False, verbose=False)
-    bem = os.path.join(fs, "bem", "fsaverage-5120-5120-5120-bem-sol.fif")
-    fwd = mne.make_forward_solution(info, trans="fsaverage", src=src, bem=bem, eeg=True, meg=False, verbose=False)
+    fwd, info = build_forward(ch_names, sfreq, cfg)
     inverse = mne.minimum_norm.make_inverse_operator(info, fwd, mne.make_ad_hoc_cov(info), verbose=False)
     mne.minimum_norm.write_inverse_operator(str(inv_path), inverse, verbose=False)
     return inverse, labels
