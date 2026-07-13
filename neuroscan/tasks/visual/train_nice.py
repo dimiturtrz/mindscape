@@ -261,7 +261,8 @@ class TrainNice:
               f"fit {len(fit_indices)} trials, {epoch_n}/epoch (train_frac {cfg.train_frac})")
 
         spec = EncoderSpec(n_channels=train_eeg.shape[1], n_times=train_eeg.shape[2], embed_dim=train_targets.shape[1])
-        encoder, logit_scale, discriminator, optimizer = TrainNice._build_optim(spec, int(subject.max()) + 1, cfg, device)
+        encoder, logit_scale, discriminator, optimizer = TrainNice._build_optim(
+            spec, int(subject.max()) + 1, cfg, device)
 
         neighbor_groups = None
         if cfg.sampling == "clip_hard":                        # CLIP-prior hard-negative neighbours (bd 4ru)
@@ -295,14 +296,16 @@ class TrainNice:
 
             train_s = time.perf_counter() - epoch_start
             if epoch % cfg.val_every == 0 or epoch == cfg.epochs - 1:      # stride the big val eval (bd)
-                val_top1 = TrainNice.evaluate(encoder, RetrievalSet(val_eeg, val_labels, val_bank), device)["single_trial"][1]
+                val_top1 = TrainNice.evaluate(
+                    encoder, RetrievalSet(val_eeg, val_labels, val_bank), device)["single_trial"][1]
                 if val_top1 > best_val:
                     best_val, best_epoch, since_improved = val_top1, epoch, 0
                     best_state = {k: v.detach().cpu().clone() for k, v in encoder.state_dict().items()}
                 else:
                     since_improved += 1
                 if epoch % 5 == 0 or epoch == cfg.epochs - 1:
-                    logger.info(f"ep {epoch:3d}  loss {total_loss / max(1, n_batches):.3f}  val-top1 {val_top1*100:.2f}%"
+                    logger.info(f"ep {epoch:3d}  loss {total_loss / max(1, n_batches):.3f}  "
+                          f"val-top1 {val_top1*100:.2f}%"
                           f"  {train_s:.1f}s ({n_batches / train_s:.0f} batch/s)")
                 if since_improved >= cfg.patience:
                     logger.info(f"early stop at ep {epoch} (best val = ep {best_epoch})")

@@ -36,7 +36,8 @@ _RECIPES = {
     "dynamics":     ("dynamics (slope + early/late-slope)",   ["slope", "early_slope", "late_slope"]),
     "mean_only":    ("mean only",                             ["mean"]),
     "peak_only":    ("peak only",                             ["peak"]),
-    "all_but_slope": ("all but slope",                        [f for f in DescriptorBank.family_names() if f != "slope"]),
+    "all_but_slope": ("all but slope",
+                      [f for f in DescriptorBank.family_names() if f != "slope"]),
 }
 _SEEDS = [0, 1, 2]
 _K = 5
@@ -89,8 +90,10 @@ def main():
         accs[key] = acc
         Recipes._record(key, acc, kap, n_classes)
         logger.info(f"  {label:<22}{acc:>7.3f} {sd:>6.3f} {kap:>7.3f}  {len(fams)}")
+    verdict = ("slope alone matches/beats the triple" if accs["slope_only"] >= accs["amplitude"] - 0.01
+               else "triple beats slope alone")
     logger.info(f"\n  slope-only vs amplitude-baseline: {accs['slope_only'] - accs['amplitude']:+.3f}  "
-          f"({'slope alone matches/beats the triple' if accs['slope_only'] >= accs['amplitude'] - 0.01 else 'triple beats slope alone'})")
+          f"({verdict})")
     logger.info("  recorded to results.json — run `sync_numbers` to push into the README")
 
 

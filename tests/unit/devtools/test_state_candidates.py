@@ -3,7 +3,7 @@ two skip rules (already-stateful __init__, CLI command classes) that keep it fro
 import ast
 import textwrap
 
-from devtools.state_candidates import analyze, shared_state
+from devtools.state_candidates import analyze, scan, shared_state
 
 
 def _cls(src: str) -> ast.ClassDef:
@@ -75,6 +75,33 @@ def test_pydantic_config_class_is_skipped():
             @staticmethod
             def b(vol, shrink, fwhm): ...
     """)) == {}
+
+
+def test_autograd_function_is_skipped():
+    """A torch.autograd.Function threads `ctx` by the framework API (forward/backward) — a contract, not
+    promotable instance state -> skipped like the pydantic config."""
+    assert shared_state(_cls("""
+        class GradReverse(Function):
+            @staticmethod
+            def forward(ctx, x, lambd): ...
+            @staticmethod
+            def backward(ctx, grad): ...
+    """)) == {}
+
+
+def test_scan_skips_coverage_omit_shells(tmp_path, monkeypatch):
+    """scan() reuses [tool.coverage] omit — a runner/adapter shell's shared params are its data, not object
+    identity, so an omitted file is not flagged; a non-omitted logic file with the same shape is."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "pyproject.toml").write_text('[tool.coverage.run]\nomit = ["pkg/runner.py"]\n')
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    shape = "class C:\n    @staticmethod\n    def a(model, x): ...\n    @staticmethod\n    def b(model, y): ...\n"
+    (pkg / "runner.py").write_text(shape)     # declared an omit shell -> skipped
+    (pkg / "logic.py").write_text(shape)      # logic module -> flagged
+    files = [r[2].replace("\\", "/") for r in scan(["pkg"])]
+    assert any("logic.py" in f for f in files)
+    assert not any("runner.py" in f for f in files)
 
 
 def test_single_method_class_has_no_shared_state():

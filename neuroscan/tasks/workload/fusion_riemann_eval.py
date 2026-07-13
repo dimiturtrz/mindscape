@@ -55,7 +55,8 @@ class FusionRiemannEval:
         for s in subs:
             Xe, ye = store.Store.gather(me.filter(me["subject"] == s))
             Xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
-            assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
+            if not np.array_equal(ye, yf):
+                raise ValueError(f"subject {s} EEG/fNIRS misaligned")
             if _CSD:
                 Xe = bc.CSD.csd_transform(Xe, ch_e, 100.0)                 # spatial deblur before fusion
             pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter()._subject_dir(int(s)))
@@ -70,7 +71,8 @@ class FusionRiemannEval:
 def main():
     Cli.setup_logging()
     C, y, g = FusionRiemannEval._build_all()
-    logger.info(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
+    logger.info(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · "
+                f"cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
     accs, kaps = [], []
     for seed in _SEEDS:
         for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(C, y, g):
@@ -81,10 +83,12 @@ def main():
             accs.append(metrics.Metrics.accuracy(y[te], pred))
             kaps.append(metrics.Metrics.kappa(y[te], pred))
     a, k = float(np.mean(accs)), float(np.mean(kaps))
-    logger.info(f"\n  fused-only (joint EEG×fNIRS×coverage) · re-centered tangent · cross-subject {len(_SEEDS)}x{_K}-fold: "
+    logger.info(f"\n  fused-only (joint EEG×fNIRS×coverage) · re-centered tangent · "
+          f"cross-subject {len(_SEEDS)}x{_K}-fold: "
           f"acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
     logger.info("  reference (same protocol, EEG-only re-centered Riemann): best-single 0.580")
-    logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {'FUSION CASHED something' if a > _FNIRS_BASELINE_ACC else 'fair null (fusion adds nothing decodable)'}")
+    verdict = "FUSION CASHED something" if a > _FNIRS_BASELINE_ACC else "fair null (fusion adds nothing decodable)"
+    logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {verdict}")
 
 
 if __name__ == "__main__":

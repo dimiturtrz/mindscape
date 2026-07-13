@@ -67,10 +67,10 @@ class SourcePrior:
         """`(g [n_ch, n_src], aggregator [n_labels, n_src])` for a montage — the fixed-orientation lead field and
         the Desikan-Killiany parcel-averaging matrix. The expensive forward is built once here so a per-subject
         decode can vary only the prior `w` (`weighted_min_norm_inverse`) without rebuilding it (4so batch decode)."""
-        cfg = cfg or SourceConfig()
-        fwd, _ = Source.build_forward(ch_names, sfreq, cfg)
+        src = Source(ch_names, sfreq, cfg or SourceConfig())
+        fwd, _ = src.build_forward()
         fwd = mne.convert_forward_solution(fwd, force_fixed=True, use_cps=True, verbose=False)
-        return fwd["sol"]["data"], SourcePrior._parcel_aggregator(fwd["src"], Source.cortical_labels(cfg))
+        return fwd["sol"]["data"], SourcePrior._parcel_aggregator(fwd["src"], src.cortical_labels())
 
     @staticmethod
     def parcels_from_leadfield(epochs: np.ndarray, leadfield: np.ndarray, aggregator: np.ndarray,

@@ -33,6 +33,10 @@ _MIN_SPLIT = 2            # LCOM4 >= this = disjoint state groups = split candid
 # bases that don't make a class a domain interface-impl (so it's still eligible for scoring)
 _BUILTIN_BASES = {"object", "BaseModel", "Enum", "IntEnum", "StrEnum", "Protocol", "ABC", "ABCMeta",
                   "TypedDict", "NamedTuple", "Exception"}
+# the sklearn/transform contract — fit + an apply method. fit stores fitted state (or is a stateless no-op)
+# and the apply reads/ignores it, so the two legitimately share no field: their LCOM split IS the interface.
+_TRANSFORMER_METHODS = {"fit", "transform", "fit_transform", "predict", "predict_proba",
+                        "inverse_transform", "__call__"}
 
 
 def _is_static(fn: ast.FunctionDef) -> bool:
@@ -115,10 +119,17 @@ def lcom4(cls: ast.ClassDef) -> tuple[int, list[list[str]]]:
     return len(comps), comps
 
 
+def _is_transformer(cls: ast.ClassDef) -> bool:
+    """A class whose behaviour methods are exactly the sklearn/transform contract (`fit` + an apply method,
+    nothing else) — the split is the interface (fit/transform share no field by design), not a fused class."""
+    names = {m.name for m in _instance_methods(cls)}
+    return "fit" in names and names <= _TRANSFORMER_METHODS
+
+
 def _is_split_candidate(cls: ast.ClassDef) -> tuple[int, list[list[str]]] | None:
     """(lcom4, components) if `cls` is a concrete stateful class that genuinely splits, else None."""
     methods = _instance_methods(cls)
-    if (len(methods) < _MIN_METHODS or _is_impl(cls) or _is_abstract(cls)
+    if (len(methods) < _MIN_METHODS or _is_impl(cls) or _is_abstract(cls) or _is_transformer(cls)
             or all(_is_trivial(m) for m in methods)):
         return None
     score, comps = lcom4(cls)

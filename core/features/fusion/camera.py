@@ -122,7 +122,8 @@ class BrainCamera:
             return strength.astype(np.float32), coupling                          # isolate the rep from the combiner
         s2 = (0.20 ** 2) * 2
         pf = pos_f[np.isfinite(pos_f).all(1)]
-        d2 = ((pos_e[ok][:, None, :] - pf[None, :, :]) ** 2).sum(-1).min(1)         # dist² each EEG node -> nearest fNIRS
+        # dist² each EEG node -> nearest fNIRS
+        d2 = ((pos_e[ok][:, None, :] - pf[None, :, :]) ** 2).sum(-1).min(1)
         cov_e = np.exp(-d2 / s2)                                                    # locality coverage per node [n_e]
         # ERD physics (bd 060): EEG band-power ANTI-correlates with HbO — cortical activation is power DOWN +
         # blood UP, so the raw envelope (≥0) × CBSI lights the WRONG quadrant (power-up + blood-up). Align the EEG

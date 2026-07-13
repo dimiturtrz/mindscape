@@ -129,7 +129,8 @@ class Config:
         downloads once leaked into the repo as a stray `D-/` dir (a drive-letter mangle). We also persist
         it to MNE's own config (set_config), not just the env, so a child process can't fall back."""
         cache = Config.raw_dir().resolve()
-        assert cache.is_absolute(), f"data root must be absolute, got {cache!r} (fix paths.yaml)"
+        if not cache.is_absolute():
+            raise ValueError(f"data root must be absolute, got {cache!r} (fix paths.yaml)")
         cache.mkdir(parents=True, exist_ok=True)
         native = os.fspath(cache)                          # native Windows path (no forward-slash mangling)
         os.environ["MNE_DATA"] = native                   # overwrite, don't setdefault — be authoritative

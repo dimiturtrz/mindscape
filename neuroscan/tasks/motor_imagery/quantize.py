@@ -83,7 +83,8 @@ class Quantize:
         logger.info(f"  size MB   fp32 {rep['size_mb']['fp32']}"
               + (f" -> int8 {rep['size_mb']['int8']} ({rep['size_mb']['ratio']}x)" if "int8" in rep["size_mb"] else ""))
         lat = rep["latency_ms_cpu"]
-        logger.info(f"  latency   fp32 {lat['fp32']} ms" + (f" -> int8 {lat['int8']} ms ({lat['speedup']}x)" if "int8" in lat else ""))
+        logger.info(f"  latency   fp32 {lat['fp32']} ms"
+              + (f" -> int8 {lat['int8']} ms ({lat['speedup']}x)" if "int8" in lat else ""))
         logger.info(f"-> {out}/{method}_sub{sub}.json")
 
 
@@ -115,9 +116,11 @@ def main():
     # parity gate on a batch of crops (the unit the net actually consumes)
     Xc = decoders._crops(Xte_std, crop_len, clf.n_test_crops)[0] if crop_len else Xte_std
     gap = export_onnx.OnnxExport.parity(clf.net, fp32_path, Xc[:128], device="cpu")
-    assert gap < _ONNX_PARITY_TOL, f"ONNX parity failed: max|Δlogit| = {gap:.2e}"
+    if gap >= _ONNX_PARITY_TOL:
+        raise RuntimeError(f"ONNX parity failed: max|Δlogit| = {gap:.2e}")
 
-    acc_fp32 = metrics.Metrics.accuracy(yte, Quantize._onnx_trial_proba(fp32_path, Xte_std, crop_len, clf.n_test_crops).argmax(1))
+    acc_fp32 = metrics.Metrics.accuracy(
+        yte, Quantize._onnx_trial_proba(fp32_path, Xte_std, crop_len, clf.n_test_crops).argmax(1))
 
     rep = {"method": args.method, "subject": str(sub), "n_chans": n_chans, "crop_len": crop_len,
            "parity_max_dlogit": gap,

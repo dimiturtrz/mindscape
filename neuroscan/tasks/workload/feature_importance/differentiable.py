@@ -46,6 +46,7 @@ _DEV = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 _EPS = 1e-12            # drop numerically-zero simplex weights before the entropy / effective-#-features sum
 _KEEP_WEIGHT_MIN = 0.05  # family weight above this is reported in the knee subset (the kept features)
+_KEEP_WEIGHT_DP = 3      # decimal places the kept-subset weights are rounded to for the report
 _CFG = Path(__file__).with_name("subset.yaml")            # study config lives beside the code (config-as-data)
 
 
@@ -99,7 +100,8 @@ class Differentiable:
         Xt = torch.as_tensor(Xtr, dtype=torch.float32, device=_DEV)
         yt = torch.as_tensor(ytr, dtype=torch.long, device=_DEV)
         norm = math.log(max(spec.n_groups, 2))                       # normalise entropy by log K so lambda is
-        model.train()                                               # grain-invariant (same meaning at 15 or 1080 weights)
+        # grain-invariant (same meaning at 15 or 1080 weights)
+        model.train()
         for _ in range(hp["epochs"]):
             opt.zero_grad()
             loss = F.cross_entropy(model(Xt), yt) + lam * model.entropy() / norm
@@ -197,14 +199,16 @@ def main():
         sweep.append({"lam": float(lam), "acc": acc, "eff_n": Differentiable._effective_n(w), "family_weights": fw})
         top = sorted(fw.items(), key=lambda kv: -kv[1])[:4]
         logger.info(f"  λ={float(lam):<5} acc {acc:.3f} · eff-#feat {sweep[-1]['eff_n']:.2f} · "
-              f"top {[(f, round(v, 2)) for f, v in top]}")
+              f"top {[(feature_family, round(weight, 2)) for feature_family, weight in top]}")
 
     knee = Differentiable._knee(sweep)
     # leakage-free: refit at the knee lambda on ALL search subjects, score the sealed holdout
     Xtr, Xte = Differentiable._standardise(Fs, Fb[seal_idx])
     m = Differentiable._fit(Xtr, ys, spec, knee["lam"], hp)
     sealed = float((Differentiable._predict(m, Xte) == y[seal_idx]).mean())
-    kept = {f: round(v, 3) for f, v in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1]) if v > _KEEP_WEIGHT_MIN}
+    kept = {feature_family: round(weight, _KEEP_WEIGHT_DP)
+            for feature_family, weight in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1])
+            if weight > _KEEP_WEIGHT_MIN}
     logger.info(f"\nknee λ={knee['lam']}: eff-#feat {knee['eff_n']:.2f} · search-acc {knee['acc']:.3f} (optimistic) "
           f"· SEALED-acc {sealed:.3f} (unbiased)")
     logger.info(f"knee subset (family weight>0.05): {kept}")

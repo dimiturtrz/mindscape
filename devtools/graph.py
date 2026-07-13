@@ -21,12 +21,13 @@ from __future__ import annotations
 
 import argparse
 import logging
-import re
 import tomllib
 from pathlib import Path
 
 import grimp
 import networkx as nx
+
+from devtools.omit import coverage_omit, matches_omit
 
 log = logging.getLogger("devtools.graph")
 
@@ -91,25 +92,6 @@ def _chokepoints(g: nx.DiGraph, mx: float) -> list[str]:
             for n, v in nx.betweenness_centrality(g).items() if v > mx]
 
 
-def _coverage_omit(pyproject: str = "pyproject.toml") -> list[str]:
-    """The [tool.coverage.run] omit globs — the 'not logic' set (runners, adapters, GPU/CLI/download/viz glue)
-    the test-mirror rule reuses as its exemption, so the two gates agree on what a shell is."""
-    p = Path(pyproject)
-    if not p.exists():
-        return []
-    return tomllib.loads(p.read_text(encoding="utf-8")).get("tool", {}).get("coverage", {}).get("run", {}).get(
-        "omit", [])
-
-
-def _matches_omit(path: str, patterns: list[str]) -> bool:
-    path = path.replace("\\", "/")
-    for pat in patterns:
-        rx = "^" + re.escape(pat.replace("\\", "/")).replace(r"\*\*", ".*").replace(r"\*", "[^/]*") + "$"
-        if re.match(rx, path):
-            return True
-    return False
-
-
 def unmirrored(packages: list[str], test_root: str = "tests/unit") -> list[str]:
     """LOGIC source modules with no STRICT path-mirror test — BLOCKING (bd 888, cardioseg way). A source
     `<pkg>/<path>/foo.py` is mirrored iff `tests/unit/<path>/test_foo.py` EXISTS on disk — the test tree mirrors
@@ -118,11 +100,11 @@ def unmirrored(packages: list[str], test_root: str = "tests/unit") -> list[str]:
     the one deliberate deviation from pure cardioseg (which exempts only __init__/__main__): mindscape has ~35
     genuinely-non-unit-testable shells, and forcing a stub test for each violates the no-stubs rule, so the same
     'not logic' set the coverage gate omits is exempt here too (`_matches_omit` on `[tool.coverage] omit`)."""
-    omit = _coverage_omit()
+    omit = coverage_omit()
     out = []
     for pkg in packages:
         for f in sorted(Path(pkg).rglob("*.py")):
-            if f.name in _STRUCTURAL or _matches_omit(f.as_posix(), omit):
+            if f.name in _STRUCTURAL or matches_omit(f.as_posix(), omit):
                 continue
             mirror = Path(test_root) / f.parent / f"test_{f.name}"
             if not mirror.exists():

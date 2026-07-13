@@ -9,7 +9,6 @@ nx = pytest.importorskip("networkx")
 from devtools.graph import (  # noqa: E402
     _DEFAULTS,
     _god_modules,
-    _matches_omit,
     _oversized,
     _top,
     assert_fitness,
@@ -112,12 +111,3 @@ def test_unmirrored_exempts_coverage_omit_shells(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _mirror_tree(tmp_path, omit_bar=True)                    # bar unmirrored BUT declared an omit shell
     assert unmirrored(["pkg"]) == []                         # the omit carve exempts it — no false gap
-
-
-def test_matches_omit_globs_the_coverage_patterns():
-    pats = ["core/data/*/registry.py", "neuroscan/tasks/cli.py", "neuroscan/tasks/**"]
-    assert _matches_omit("core/data/eeg/registry.py", pats)          # single-* matches one segment
-    assert _matches_omit("neuroscan/tasks/cli.py", pats)             # exact
-    assert _matches_omit("neuroscan/tasks/workload/run.py", pats)    # ** matches across segments
-    assert not _matches_omit("core/features/eeg/bandpower.py", pats)  # logic module — not omitted
-    assert not _matches_omit("core/data/registry.py", pats)          # single-* needs the middle segment

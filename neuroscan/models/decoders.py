@@ -31,11 +31,16 @@ from neuroscan.models.transforms import Transforms
 # preprocessing); `crop_frac`: None = feed the FULL trial (for nets with their OWN internal window
 # augmentation — ATCNet, EEGConformer); 0.5 = external 2s sliding-window crops (for nets without it).
 MODELS: dict[str, dict] = {
-    "eegnet":        {"cls": "EEGNetv4",        "epochs": 750, "lr": 1e-3,   "batch": 128, "patience": 80, "crop_frac": 0.5,  "standardize": "ems"},
-    "shallow_fbcsp": {"cls": "ShallowFBCSPNet", "epochs": 750, "lr": 6.5e-4, "batch": 128, "patience": 80, "crop_frac": 0.5,  "standardize": "ems"},
-    "deep4":         {"cls": "Deep4Net",        "epochs": 750, "lr": 1e-3,   "batch": 128, "patience": 80, "crop_frac": 0.5,  "standardize": "ems"},
-    "atcnet":        {"cls": "ATCNet",          "epochs": 750, "lr": 1e-3,   "batch": 128, "patience": 80, "crop_frac": None, "standardize": "ems"},
-    "eegconformer":  {"cls": "EEGConformer",    "epochs": 750, "lr": 1e-3,   "batch": 128, "patience": 80, "crop_frac": None, "standardize": "ems"},
+    "eegnet":        {"cls": "EEGNetv4",        "epochs": 750, "lr": 1e-3,   "batch": 128,
+                      "patience": 80, "crop_frac": 0.5,  "standardize": "ems"},
+    "shallow_fbcsp": {"cls": "ShallowFBCSPNet", "epochs": 750, "lr": 6.5e-4, "batch": 128,
+                      "patience": 80, "crop_frac": 0.5,  "standardize": "ems"},
+    "deep4":         {"cls": "Deep4Net",        "epochs": 750, "lr": 1e-3,   "batch": 128,
+                      "patience": 80, "crop_frac": 0.5,  "standardize": "ems"},
+    "atcnet":        {"cls": "ATCNet",          "epochs": 750, "lr": 1e-3,   "batch": 128,
+                      "patience": 80, "crop_frac": None, "standardize": "ems"},
+    "eegconformer":  {"cls": "EEGConformer",    "epochs": 750, "lr": 1e-3,   "batch": 128,
+                      "patience": 80, "crop_frac": None, "standardize": "ems"},
 }
 DEFAULTS = {"n_train_crops": 16, "n_test_crops": 8, "log_every": 100, "val_frac": 0.2,
             "crop_frac": 0.5, "standardize": "ems"}
@@ -162,7 +167,8 @@ class BraindecodeClf:
                 else:
                     bad += 1
                 if self.log_every and (ep + 1) % self.log_every == 0:
-                    logger.info(f"    ep {ep + 1}/{self.epochs}  lr {sched.get_last_lr()[0]:.2e}  val {vl:.3f}  (best {best_loss:.3f}, bad {bad})")
+                    logger.info(f"    ep {ep + 1}/{self.epochs}  lr {sched.get_last_lr()[0]:.2e}  "
+                                f"val {vl:.3f}  (best {best_loss:.3f}, bad {bad})")
                 if bad >= self.patience:
                     logger.info(f"    early stop @ ep {ep + 1} (val {best_loss:.3f})")
                     break

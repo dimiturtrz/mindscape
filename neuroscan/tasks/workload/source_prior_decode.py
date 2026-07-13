@@ -71,16 +71,18 @@ class SourcePriorDecode:
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
         ch_e = eegmod.Shin2017NbackEegAdapter.adapter().channels()
         g, agg = SourcePrior.prior_leadfield(ch_e, _SFREQ)
-        src2d = EegMontage._to_unit_disk(Source.source_positions(ch_e, _SFREQ)[:, :2])       # source flatmap
+        src = Source(ch_e, _SFREQ)
+        src2d = EegMontage._to_unit_disk(src.source_positions()[:, :2])       # source flatmap
         arms = {"sensor": [], "dSPM": [], "uniform": [], "fNIRS": []}
         ys, gs = [], []
         for s in subs:
             xe, ye = store.Store.gather(me.filter(me["subject"] == s))
             xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
-            assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
+            if not np.array_equal(ye, yf):
+                raise ValueError(f"subject {s} EEG/fNIRS misaligned")
             w = SourcePriorDecode._fnirs_prior(xf, fnmod.Shin2017NirsAdapter.adapter()._subject_dir(int(s)), src2d)
             arms["sensor"].append(Riemann.cov(xe))
-            arms["dSPM"].append(Riemann.cov(Source.to_parcels(xe, ch_e, _SFREQ)))
+            arms["dSPM"].append(Riemann.cov(src.to_parcels(xe)))
             arms["uniform"].append(Riemann.cov(SourcePrior.parcels_from_leadfield(xe, g, agg, None)))
             arms["fNIRS"].append(Riemann.cov(SourcePrior.parcels_from_leadfield(xe, g, agg, w)))
             ys.append(ye)
