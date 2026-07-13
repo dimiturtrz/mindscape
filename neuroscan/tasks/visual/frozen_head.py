@@ -48,16 +48,21 @@ _GRID = 16            # topo_cnn: scalp interpolation grid (H=W)
 _RBF_SIGMA = 0.2      # topo_cnn: RBF interp width on the unit-disk montage
 _NHEAD = 4            # pos_attn: transformer heads (d_model=200 divisible)
 _K_GCN = 8            # gcn: electrode-adjacency kNN degree (each electrode links its 8 nearest)
+_TOPO_GRIDS = (12, 16, 24)         # topo mini-sweep (bd m69x.2): scalp-image resolution
+_TOPO_SIGMAS = (0.1, 0.2, 0.35)    # topo mini-sweep: RBF interpolation width on the unit-disk montage
 
 
 @dataclass
 class HeadSpec:
     """One head arm: how to pool the C·S token grid + the MLP depth. `pool`: mean | attn | flat.
-    `hidden=0` = a bare linear map (the probe floor)."""
+    `hidden=0` = a bare linear map (the probe floor). `grid`/`rbf_sigma` tune the topo scalp-image resolution
+    + RBF interpolation width (only used by pool='topo'; swept in the topo mini-sweep, bd m69x.2)."""
     name: str
     pool: str
     hidden: int = 512
     dropout: float = 0.5
+    grid: int = _GRID
+    rbf_sigma: float = _RBF_SIGMA
 
 
 @dataclass
@@ -96,7 +101,8 @@ class Head(nn.Module):
                                                   dropout=spec.dropout, batch_first=True, activation="gelu")
             self.mlp = FrozenHead._mlp(d, spec.hidden, spec.dropout)
         elif spec.pool == "topo":
-            self.register_buffer("wtopo", FrozenHead._topo_weights(pos))                 # [H·W, C]
+            self.grid = spec.grid
+            self.register_buffer("wtopo", FrozenHead._topo_weights(pos, spec.grid, spec.rbf_sigma))  # [H·W, C]
             self.conv = nn.Sequential(
                 nn.Conv2d(d, 64, 3, padding=1), nn.GELU(),
                 nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.GELU(), nn.AdaptiveAvgPool2d(1))
@@ -124,8 +130,8 @@ class Head(nn.Module):
             z = h.mean(dim=1)                                                            # readout over electrodes
         else:                                                                            # topo
             b, _, d = f.shape
-            grid = torch.einsum("hc,bcd->bhd", self.wtopo, f)                            # [B, H·W, d]
-            z = self.conv(grid.transpose(1, 2).reshape(b, d, _GRID, _GRID)).flatten(1)
+            interp = torch.einsum("hc,bcd->bhd", self.wtopo, f)                          # [B, H·W, d]
+            z = self.conv(interp.transpose(1, 2).reshape(b, d, self.grid, self.grid)).flatten(1)
         return F.normalize(self.mlp(z), dim=-1)
 
 
@@ -149,6 +155,13 @@ class FrozenHead:
     architecture on the cached features."""
 
     @staticmethod
+    def _topo_arms() -> list[HeadSpec]:
+        """The topo grid×sigma mini-sweep arms (bd m69x.2) — confirm topo_cnn's ~1.68 isn't left on the table
+        by the interpolation resolution. Rides the disk cache (head-only fits, no backbone forward)."""
+        return [HeadSpec(f"topo_g{g}_s{str(s).replace('.', '')}", "topo", grid=g, rbf_sigma=s)
+                for g in _TOPO_GRIDS for s in _TOPO_SIGMAS]
+
+    @staticmethod
     def _mlp(in_dim: int, hidden: int, dropout: float) -> nn.Module:
         """Shared head tail: bare linear (hidden=0) or one GELU-MLP block → CLIP dim."""
         if hidden == 0:
@@ -156,14 +169,14 @@ class FrozenHead:
         return nn.Sequential(nn.Linear(in_dim, hidden), nn.GELU(), nn.Dropout(dropout), nn.Linear(hidden, _EMBED))
 
     @staticmethod
-    def _topo_weights(pos: np.ndarray) -> torch.Tensor:
-        """Fixed RBF interpolation operator `[H·W, C]` mapping the C electrode features onto a `_GRID×_GRID` scalp
-        image (Bashivan 2016). Computed once from the montage; applied per batch as one einsum."""
-        axis = np.linspace(-1.0, 1.0, _GRID)
+    def _topo_weights(pos: np.ndarray, grid: int, sigma: float) -> torch.Tensor:
+        """Fixed RBF interpolation operator `[H·W, C]` mapping the C electrode features onto a `grid×grid` scalp
+        image (Bashivan 2016), RBF width `sigma`. Computed once from the montage; applied per batch as one einsum."""
+        axis = np.linspace(-1.0, 1.0, grid)
         gx, gy = np.meshgrid(axis, axis)
-        grid = np.stack([gx.ravel(), gy.ravel()], axis=1)                    # [H·W, 2]
-        d2 = ((grid[:, None, :] - pos[None, :, :]) ** 2).sum(-1)             # [H·W, C]
-        w = np.exp(-d2 / (2 * _RBF_SIGMA ** 2))
+        cells = np.stack([gx.ravel(), gy.ravel()], axis=1)                   # [H·W, 2]
+        d2 = ((cells[:, None, :] - pos[None, :, :]) ** 2).sum(-1)            # [H·W, C]
+        w = np.exp(-d2 / (2 * sigma ** 2))
         w = w / (w.sum(1, keepdims=True) + 1e-8)
         return torch.tensor(w, dtype=torch.float32)
 
@@ -320,16 +333,18 @@ def main():
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--topo-sweep", action="store_true", help="sweep topo grid×sigma instead of the head zoo")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     cache = FrozenHead._build_cache(args.train, args.test, device, args.backbone)
     fit = FitCfg(epochs=args.epochs, lr=args.lr, seed=args.seed)
+    arms = FrozenHead._topo_arms() if args.topo_sweep else _ARMS
     logger.info(f"\nhead sweep · backbone={args.backbone} train={args.train} test={args.test} · "
                 f"{args.epochs}ep lr{args.lr} · chance {1 / (int(cache.test_concept.max()) + 1):.3f}")
     results = []
-    for spec in _ARMS:
+    for spec in arms:
         r = FrozenHead._train_arm(spec, cache, device, fit)
         s, a = r["single_trial"], r["concept_avg"]
         logger.info(f"  {spec.name:9s} (val {r['val_top1']*100:.2f}% ep{r['best_val_epoch']:2d})  "
