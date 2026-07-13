@@ -34,6 +34,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.covariance import Covariance
+from neuroscan.evaluation.invariants import Invariants
 from neuroscan.evaluation.metrics import Metrics
 from neuroscan.models.encoders import EncoderRegistry, EncoderSpec
 from neuroscan.models.nice import Nice, SubjectDiscriminator
@@ -275,6 +276,7 @@ class TrainNice:
 
         fit_data = _FitArrays(train_eeg, train_targets, train_concept, fit_indices, subject)
         best_val, best_state, best_epoch, since_improved = -1.0, None, -1, 0
+        run_start = time.perf_counter()                        # total-run ETA so a long fit reveals its cost live
         for epoch in range(cfg.epochs):
             lam = (TrainNice._dann_lambda(epoch / max(1, cfg.epochs - 1), cfg.adv_lambda)
                    if cfg.adv_lambda_ramp else cfg.adv_lambda)
@@ -308,9 +310,10 @@ class TrainNice:
                 else:
                     since_improved += 1
                 if epoch % 5 == 0 or epoch == cfg.epochs - 1:
+                    eta = (time.perf_counter() - run_start) / (epoch + 1) * (cfg.epochs - epoch - 1)
                     logger.info(f"ep {epoch:3d}  loss {total_loss / max(1, n_batches):.3f}  "
                           f"val-top1 {val_top1*100:.2f}%"
-                          f"  {train_s:.1f}s ({n_batches / train_s:.0f} batch/s)")
+                          f"  {train_s:.1f}s ({n_batches / train_s:.0f} batch/s)  ~{eta:.0f}s left")
                 if since_improved >= cfg.patience:
                     logger.info(f"early stop at ep {epoch} (best val = ep {best_epoch})")
                     break
@@ -341,8 +344,10 @@ class TrainNice:
         encoder, stats = TrainNice.train_encoder(
             TrainData(train_eeg, train_targets, train_concept, subj_idx), cfg, device)
         test = TrainNice.evaluate(encoder, RetrievalSet(test_eeg, test_concept, test_bank), device)
-        return {"regime": regime, "train": train_subjects, "test": test_subject, **stats,
-                "chance_top1": 1 / (int(test_concept.max()) + 1), **test}
+        result = {"regime": regime, "train": train_subjects, "test": test_subject, **stats,
+                  "chance_top1": 1 / (int(test_concept.max()) + 1), **test}
+        Invariants.check(result)                               # fail loud on a silently-inconsistent number
+        return result
 
 
 def main():
