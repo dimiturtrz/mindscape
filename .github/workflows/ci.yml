@@ -43,11 +43,24 @@ jobs:
         if: always()
         run: uv run coverage report --fail-under=95 || true
       # Architecture fitness (bd 3nn): the METRIC arch axis import-linter's categorical layer contracts can't
-      # express — god-module (fan-in AND fan-out both >8) / import-cycle / god-file (>750 lines) BLOCK;
-      # line-floor / betweenness-chokepoint / test-mirror are advisory (logged, never block). Needs the devtools
-      # extra (grimp+networkx). Thresholds in [tool.structure]; clean today, ratchets only tighter.
+      # express — god-module (fan-in AND fan-out both >8) / import-cycle / god-file (>750 lines) / test-mirror
+      # (a logic module with no strict path-mirror test) BLOCK; line-floor / betweenness-chokepoint are advisory
+      # (logged, never block). Needs the devtools extra (grimp+networkx). Thresholds in [tool.structure]; clean
+      # today, ratchets only tighter.
       - name: Architecture fitness — enforced (graph.py --assert)
         run: uv run python -m devtools.graph --assert
+      # Class-shape smells — advisory (devtools AST detectors, bd 0hl). The three smells the in-a-class
+      # migration can leave behind: state_candidates (namespace-class with latent shared state -> __init__),
+      # data_clumps (params travelling together -> Introduce Parameter Object), lcom (LCOM4 disjoint-state class
+      # -> split). ADVISORY, never blocking — each has a legitimately non-zero floor on a strategy-pattern
+      # codebase (the functional core's namespace bags, sklearn fit/transform interface pairs). A regression
+      # radar (a NEW smell shows in the log), not a gate.
+      - name: Class-shape smells — advisory (namespace / data-clump / LCOM)
+        continue-on-error: true
+        run: |
+          uv run python -m devtools.state_candidates
+          uv run python -m devtools.data_clumps
+          uv run python -m devtools.lcom
 
   # Static-analysis ratchet (bd mindscape-y63): the two axes that don't need the test env — ruff (style/bugs)
   # + vulture (dead code). ENFORCED steps block on the graduated ruff families + vulture conf>=80; ADVISORY

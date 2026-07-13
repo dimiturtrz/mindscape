@@ -125,6 +125,14 @@ reads `[tool.coverage] omit`). **Advisory** (logged, never blocks): line-floor +
 live in `[tool.structure]`, chosen clean against today's graph — they **ratchet only tighter, never relax**.
 Runs in the CI `tests` job (needs the `[devtools]` extra).
 
+### Class-shape smell explorers — advisory (bd 0hl)
+
+`devtools/{state_candidates,data_clumps,lcom}.py` — pure-AST detectors run **advisory** in CI (never block):
+namespace-class with latent shared state (→ `__init__`), param data-clumps (→ Introduce Parameter Object),
+LCOM4 disjoint-state classes (→ split). A **regression radar** — each has a legitimate non-zero floor on a
+strategy-pattern codebase (the functional core's namespace bags, sklearn `fit`/`transform` interface pairs),
+so they surface a NEW smell in the log, not a gate. `python -m devtools.<name> core neuroscan`.
+
 ### Module shape — ast-grep gate (bd ylq)
 
 Semantic AST rules ruff's token linters can't express (`devtools/sgconfig.yml` → `devtools/sg-rules/`,
