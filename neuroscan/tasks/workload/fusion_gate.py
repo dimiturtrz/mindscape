@@ -60,7 +60,8 @@ class FusionGate:
         qf = mf.filter(mf["subject"].is_in(subs))
         Xe, ye = store.Store.gather(qe)
         Xf, yf = store.Store.gather(qf)
-        assert np.array_equal(ye, yf), "EEG/fNIRS blocks misaligned — fusion invalid"
+        if not np.array_equal(ye, yf):
+            raise ValueError("EEG/fNIRS blocks misaligned — fusion invalid")
         groups = qe["subject"].to_numpy()
         Fe = BandPower.band_powers(Xe, _EEG_CFG.resample).astype(np.float32)   # [n, 28*3]
         Ff = Amplitude.amplitude_features(Xf).astype(np.float32)               # [n, ch*3]

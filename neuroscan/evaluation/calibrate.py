@@ -106,7 +106,8 @@ class Calibrate:
                  "test_ece_uncal": ts.ece(lt, yte, T=1.0), "test_ece_temp": ts.ece(lt, yte),
                  "test_acc": metrics.Metrics.accuracy(yte, lt.argmax(1))}
             rows.append(r)
-            logger.info(f"  s{r['subject']}  T {ts.T:.2f} | val ECE {r['val_ece_uncal']:.3f}->{r['val_ece_temp']:.3f} | "
+            logger.info(f"  s{r['subject']}  T {ts.T:.2f} | "
+                  f"val ECE {r['val_ece_uncal']:.3f}->{r['val_ece_temp']:.3f} | "
                   f"test ECE {r['test_ece_uncal']:.3f}->{r['test_ece_temp']:.3f}  (acc {r['test_acc']:.3f})")
         return rows
 
@@ -130,8 +131,10 @@ class Calibrate:
     def _report(summary, method, val_fix, test_fix):
         """Log the val->test ECE transfer and store the verdict on `summary`."""
         logger.info(f"\n=== {method} temperature scaling (in-session val -> cross-session test) ===")
-        logger.info(f"  val  ECE {summary['val_ece']['uncal']:.3f} -> {summary['val_ece']['temp']:.3f}  (fixed {val_fix:+.3f})")
-        logger.info(f"  test ECE {summary['test_ece']['uncal']:.3f} -> {summary['test_ece']['temp']:.3f}  (fixed {test_fix:+.3f})")
+        logger.info(f"  val  ECE {summary['val_ece']['uncal']:.3f} -> "
+                    f"{summary['val_ece']['temp']:.3f}  (fixed {val_fix:+.3f})")
+        logger.info(f"  test ECE {summary['test_ece']['uncal']:.3f} -> "
+                    f"{summary['test_ece']['temp']:.3f}  (fixed {test_fix:+.3f})")
         tr = summary["transfer_ratio"]
         if tr is None:
             verdict = "val already calibrated — nothing to transfer"

@@ -103,7 +103,8 @@ class Harness:
             if models_out is not None:
                 models_out.append((name, clf))
             per.append(row)
-            logger.info(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  ece {row['ece']:.3f}  (n={row['n']})")
+            logger.info(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  "
+                        f"ece {row['ece']:.3f}  (n={row['n']})")
             P.append(probs)
             Y.append(yte)
             G.append(np.full(len(yte), name))

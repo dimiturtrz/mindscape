@@ -11,7 +11,7 @@ nox.options.sessions = ["lint", "test", "fitness", "dup"]   # `dup` (jscpd) need
 
 _RUFF = "ruff@0.15.13"
 _VULTURE = "vulture@2.16"
-_SELECT = "W,F,I,B,T20,E7,PLR2004,PLC0415,FBT,C901,PLR0912,PLR0915,BLE001,S110,PLR0913,RUF100"
+_SELECT = "W,F,I,B,T20,E7,E501,PLR2004,PLC0415,FBT,C901,PLR0912,PLR0915,BLE001,S101,S110,PLR0913,RUF100"
 _PKGS = ("core", "neuroscan")
 
 

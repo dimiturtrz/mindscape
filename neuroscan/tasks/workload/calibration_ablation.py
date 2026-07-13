@@ -52,7 +52,8 @@ class CalibrationAblation:
         for tr, te in GroupKFold(_K).split(subs, groups=subs):
             mtr, mte = np.isin(g, subs[tr]), np.isin(g, subs[te])
             Fz = SubjectNorm.zscore_per_subject(F, g) if zt else F
-            accs.append(metrics.Metrics.accuracy(y[mte], CalibrationAblation._lda().fit(Fz[mtr], y[mtr]).predict(Fz[mte])))
+            accs.append(metrics.Metrics.accuracy(
+                y[mte], CalibrationAblation._lda().fit(Fz[mtr], y[mtr]).predict(Fz[mte])))
         return float(np.mean(accs))
 
     @staticmethod
@@ -87,7 +88,8 @@ def main():
     qf = mf.filter(mf["subject"].is_in([str(s) for s in subs]))
     Xe, y = store.Store.gather(qe)
     Xf, yf = store.Store.gather(qf)
-    assert np.array_equal(y, yf), "EEG/fNIRS blocks misaligned"
+    if not np.array_equal(y, yf):
+        raise ValueError("EEG/fNIRS blocks misaligned")
     ge = qe["subject"].to_numpy()
     Fe, Ff = BandPower.band_powers(Xe, _EEG_CFG.resample), Amplitude.amplitude_features(Xf)
 

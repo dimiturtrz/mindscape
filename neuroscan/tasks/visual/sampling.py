@@ -64,7 +64,8 @@ class Sampling:
         batches = []
         for _ in range(n_batches):
             chosen = rng.choice(concepts, size=per_batch, replace=False)
-            idx = [i for concept in chosen for i in Sampling._draw(by_concept[int(concept)], spec.samples_per_concept, rng)]
+            idx = [i for concept in chosen
+                   for i in Sampling._draw(by_concept[int(concept)], spec.samples_per_concept, rng)]
             batches.append(np.asarray(idx))
         return batches
 
@@ -92,7 +93,8 @@ class Sampling:
         batches = []
         for _ in range(n_batches):
             seed = int(rng.choice(present))
-            group = list(dict.fromkeys([seed, *(c for c in neighbor_groups.get(seed, []) if c in by_concept)]))[:per_batch]
+            group = list(dict.fromkeys(
+                [seed, *(c for c in neighbor_groups.get(seed, []) if c in by_concept)]))[:per_batch]
             while len(group) < per_batch:                      # pad if the seed has too few present neighbours
                 extra = int(rng.choice(present))
                 if extra not in group:

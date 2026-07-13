@@ -53,7 +53,8 @@ class Shin2017NirsAdapter:
         fs = float(oxy.fs)
         cont = np.concatenate([np.asarray(oxy.x).T, np.asarray(deoxy.x).T], axis=0)   # [72, T]
         onsets = np.round(np.asarray(mrk.time) / 1000.0 * fs).astype(int)             # ms -> samples
-        src_idx = np.asarray(mrk.y).argmax(0)                                          # class per event (className order)
+        # class per event (className order)
+        src_idx = np.asarray(mrk.y).argmax(0)
         names = [str(c).split()[0] for c in np.asarray(mrk.className)]                # '0-back session' -> '0-back'
         y = np.array([self.label_map[names[i]] for i in src_idx], dtype=np.int64)
         return cont, fs, onsets, y

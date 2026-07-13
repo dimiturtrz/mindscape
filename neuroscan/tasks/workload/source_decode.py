@@ -45,7 +45,8 @@ class SourceDecode:
             c_source.append(Riemann.cov(Source.to_parcels(x, ch, _CFG.resample)))   # [n,68,t] cortical parcels
             ys.append(y)
             gs.append(np.array([s] * len(y)))
-            logger.info(f"  subject {s}: {len(y)} blocks -> sensor {c_sensor[-1].shape[1:]}, source {c_source[-1].shape[1:]}")
+            logger.info(f"  subject {s}: {len(y)} blocks -> "
+                        f"sensor {c_sensor[-1].shape[1:]}, source {c_source[-1].shape[1:]}")
         return (np.concatenate(c_sensor), np.concatenate(c_source),
                 np.concatenate(ys), np.concatenate(gs))
 

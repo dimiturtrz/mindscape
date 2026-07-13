@@ -77,7 +77,8 @@ class SourcePriorDecode:
         for s in subs:
             xe, ye = store.Store.gather(me.filter(me["subject"] == s))
             xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
-            assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
+            if not np.array_equal(ye, yf):
+                raise ValueError(f"subject {s} EEG/fNIRS misaligned")
             w = SourcePriorDecode._fnirs_prior(xf, fnmod.Shin2017NirsAdapter.adapter()._subject_dir(int(s)), src2d)
             arms["sensor"].append(Riemann.cov(xe))
             arms["dSPM"].append(Riemann.cov(Source.to_parcels(xe, ch_e, _SFREQ)))

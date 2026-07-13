@@ -38,14 +38,16 @@ class FusionCameraEval:
     @staticmethod
     def _build_all():
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
-        mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=32.0))     # past _TEND so read-forward (τ+lag) fills the tail
+        # past _TEND so read-forward (τ+lag) fills the tail
+        mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=32.0))
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
         pos_e = bc.EegMontage.eeg_positions(eegmod.Shin2017NbackEegAdapter.adapter().channels())
         Xs, ys, gs = [], [], []
         for s in subs:
             Xe, ye = store.Store.gather(me.filter(me["subject"] == s))
             Xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
-            assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
+            if not np.array_equal(ye, yf):
+                raise ValueError(f"subject {s} EEG/fNIRS misaligned")
             pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter()._subject_dir(int(s)))
             Xs.append(bc.BrainCamera.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=_GRID,
                                       series=bc.SeriesConfig(fps=_FPS, t_end=_TEND)))
@@ -67,9 +69,12 @@ def main():
             accs.append(metrics.Metrics.accuracy(y[te], pred))
             kaps.append(metrics.Metrics.kappa(y[te], pred))
     a, k = float(np.mean(accs)), float(np.mean(kaps))
-    logger.info(f"\n  brain-camera 3D-CNN · cross-subject {len(_SEEDS)}x{_K}-fold: acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
-    logger.info("  reference (per-subject-z features -> LDA): best-single 0.580 · late 0.587 · feature 0.564 · oracle 0.752")
-    logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {'CASHED something' if a > _FNIRS_BASELINE_ACC else 'null'}")
+    logger.info(f"\n  brain-camera 3D-CNN · cross-subject {len(_SEEDS)}x{_K}-fold: "
+                f"acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
+    logger.info("  reference (per-subject-z features -> LDA): best-single 0.580 · late 0.587 "
+                "· feature 0.564 · oracle 0.752")
+    logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  "
+                f"{'CASHED something' if a > _FNIRS_BASELINE_ACC else 'null'}")
     logger.info("  NOTE: not a fair representation test — this is a raw 3D-CNN (no per-subject re-centering) on 702 "
           "cross-subject samples (overfits); the 0.580 ref had per-subject-z + LDA. Fair test = re-center + a "
           "readout that doesn't overfit. The null is the METHOD, not proof the representation is empty.")

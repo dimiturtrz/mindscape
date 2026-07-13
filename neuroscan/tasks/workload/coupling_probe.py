@@ -59,7 +59,8 @@ def main():
     me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
     mf = store.Store.load("shin2017_nback", FnirsCfg())
     subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
-    frames = [(s, (store.Store.gather(me.filter(me["subject"] == s))[0], store.Store.gather(mf.filter(mf["subject"] == s))[0]))
+    frames = [(s, (store.Store.gather(me.filter(me["subject"] == s))[0],
+                   store.Store.gather(mf.filter(mf["subject"] == s))[0]))
               for s in subs]
     drives, resps, _ = CouplingProbe._global_series(frames)
     D, R = np.concatenate(drives), np.concatenate(resps)
@@ -79,7 +80,8 @@ def main():
     lag, decay, beta = bc.Coupling.estimate_coupling(D, R, _FPS)
     logger.info(f"\nPOOLED gamma fit: lag {lag:.1f}s · decay {decay:.2f}s · β {beta:.2g}")
     per = np.array([bc.Coupling.estimate_coupling(dv, rp, _FPS)[0] for dv, rp in zip(drives, resps, strict=True)])
-    logger.info(f"per-subject lag: mean {per.mean():.1f}s · std {per.std():.1f}s · range [{per.min():.1f}, {per.max():.1f}] "
+    logger.info(f"per-subject lag: mean {per.mean():.1f}s · std {per.std():.1f}s · "
+          f"range [{per.min():.1f}, {per.max():.1f}] "
           f"-> {'STABLE' if per.std() < _LAG_STABLE_STD_S else 'UNSTABLE (pool instead)'}")
 
 

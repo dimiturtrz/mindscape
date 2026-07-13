@@ -99,7 +99,8 @@ class Differentiable:
         Xt = torch.as_tensor(Xtr, dtype=torch.float32, device=_DEV)
         yt = torch.as_tensor(ytr, dtype=torch.long, device=_DEV)
         norm = math.log(max(spec.n_groups, 2))                       # normalise entropy by log K so lambda is
-        model.train()                                               # grain-invariant (same meaning at 15 or 1080 weights)
+        # grain-invariant (same meaning at 15 or 1080 weights)
+        model.train()
         for _ in range(hp["epochs"]):
             opt.zero_grad()
             loss = F.cross_entropy(model(Xt), yt) + lam * model.entropy() / norm
@@ -204,7 +205,8 @@ def main():
     Xtr, Xte = Differentiable._standardise(Fs, Fb[seal_idx])
     m = Differentiable._fit(Xtr, ys, spec, knee["lam"], hp)
     sealed = float((Differentiable._predict(m, Xte) == y[seal_idx]).mean())
-    kept = {f: round(v, 3) for f, v in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1]) if v > _KEEP_WEIGHT_MIN}
+    kept = {f: round(v, 3) for f, v in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1])
+            if v > _KEEP_WEIGHT_MIN}
     logger.info(f"\nknee λ={knee['lam']}: eff-#feat {knee['eff_n']:.2f} · search-acc {knee['acc']:.3f} (optimistic) "
           f"· SEALED-acc {sealed:.3f} (unbiased)")
     logger.info(f"knee subset (family weight>0.05): {kept}")

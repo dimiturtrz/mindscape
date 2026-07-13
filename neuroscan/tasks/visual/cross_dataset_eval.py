@@ -88,7 +88,8 @@ class CrossDatasetEval:
         e1_eeg, e1_concept, _, _ = things_eeg1.ThingsEeg1.get_epochs(
             list(cfg.eeg1_subjects), things_eeg1.ThingsEeg1EpochCfg(resample=cfg.resample))
         e1_eeg = bridge.CrossDataset.align_channels(e1_eeg, e1_ch, common_ch)   # reorder EEG1 to the shared montage
-        keep = bridge.CrossDataset.holdout_mask(e1_concept, holdout) & np.array([n in name_to_proto for n in e1_concept])
+        keep = (bridge.CrossDataset.holdout_mask(e1_concept, holdout)
+                & np.array([n in name_to_proto for n in e1_concept]))
         e1_eeg, e1_names = e1_eeg[keep], e1_concept[keep]
         targets = np.stack([name_to_proto[name] for name in e1_names]).astype(np.float32)
         name_id = {name: i for i, name in enumerate(sorted(set(e1_names)))}      # concept ids for the val split
@@ -100,7 +101,8 @@ class CrossDatasetEval:
 
         e2_eeg, e2_concept, _, _ = things_eeg2.ThingsEeg2.get_epochs(
             list(cfg.eeg2_subjects), things_eeg2.ThingsEpochCfg(split="test", resample=cfg.resample))
-        e2_eeg = bridge.CrossDataset.align_channels(e2_eeg, e2_ch, common_ch)   # same shared montage the encoder trained on
+        # same shared montage the encoder trained on
+        e2_eeg = bridge.CrossDataset.align_channels(e2_eeg, e2_ch, common_ch)
         test_bank = clip_targets.ClipTargets.concept_prototypes("test")
         topk = TrainNice.evaluate(encoder, RetrievalSet(e2_eeg, e2_concept, test_bank), device)
 

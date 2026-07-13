@@ -160,8 +160,10 @@ def main():
     for f in sorted(families, key=lambda f: cons_imp[f], reverse=True):
         logger.info(f"  {f:<14} importance {cons_imp[f]:.3f}  ·  mean top-trial weight {cons_topw[f]:.2f} "
               f"(±{topw_sd[f]:.2f})")
+    verdict = ("STABLE — trust the ranking" if stab["mean_jaccard"] >= _STABLE_JACCARD
+               else "UNSTABLE — importance is search noise")
     logger.info(f"\nstability: top-{stab['topn']} families agree across seeds at Jaccard {stab['mean_jaccard']:.2f} "
-          f"({'STABLE — trust the ranking' if stab['mean_jaccard'] >= _STABLE_JACCARD else 'UNSTABLE — importance is search noise'})")
+          f"({verdict})")
     logger.info(f"peak-acc range {min(peaks):.3f}-{max(peaks):.3f} (optimistic; not a generalisation estimate)")
 
     (out / "importance.json").write_text(json.dumps({
@@ -169,7 +171,8 @@ def main():
         "consensus_importance": cons_imp, "consensus_top_weight": cons_topw, "top_weight_sd": topw_sd,
         "stability": stab, "peak_acc_per_seed": peaks, "best_params_per_seed": bests,
     }, indent=2))
-    logger.info(f"-> {out}/importance.json (reproducible artifact — the README importance table is generated from this)")
+    logger.info(f"-> {out}/importance.json "
+                f"(reproducible artifact — the README importance table is generated from this)")
 
 
 if __name__ == "__main__":

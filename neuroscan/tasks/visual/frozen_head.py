@@ -224,7 +224,8 @@ class FrozenHead:
     @staticmethod
     def _train_arm(spec: HeadSpec, cache: Cache, device: str, cfg: FitCfg) -> dict:
         torch.manual_seed(cfg.seed)
-        fit_mask, val_mask, val_lab, val_bank = FrozenHead._val_concepts(cache.tr_concept, cache.tr_tgt.numpy(), cfg.seed, 0.1)
+        fit_mask, val_mask, val_lab, val_bank = FrozenHead._val_concepts(
+            cache.tr_concept, cache.tr_tgt.numpy(), cfg.seed, 0.1)
         fit_idx = np.where(fit_mask)[0]
         val_feat, val_bank_t = cache.tr_feat[val_mask], torch.tensor(val_bank)
         head = Head(spec, cache.n_tok, cache.d, cache.pos).to(device)

@@ -77,8 +77,8 @@ class RunFusion:
         q_f = meta_f.filter(meta_f["subject"].is_in([str(s) for s in subs]))
         eeg, y_eeg = store.Store.gather(q_e)
         fnirs, y_fnirs = store.Store.gather(q_f)
-        assert len(y_eeg) == len(y_fnirs) and np.array_equal(y_eeg, y_fnirs), \
-            "EEG/fNIRS blocks misaligned — fusion invalid"
+        if len(y_eeg) != len(y_fnirs) or not np.array_equal(y_eeg, y_fnirs):
+            raise ValueError("EEG/fNIRS blocks misaligned — fusion invalid")
         return FusionData(eeg=eeg, fnirs=fnirs, y=y_eeg, groups=q_e["subject"].to_numpy())
 
     @staticmethod
@@ -140,14 +140,17 @@ class RunFusion:
         for role in ("eeg", "fnirs", "late", "feature"):
             logger.info(f"  {role:>8}: {mean[role]:.3f}")
         best_uni = comp["best_single"]
-        logger.info(f"  fusion vs best-unimodal: late {mean['late']-best_uni:+.3f} | feature {mean['feature']-best_uni:+.3f}")
-        logger.info(f"  ORACLE (either correct) {comp['oracle_either']:.3f}  (+{comp['oracle_either']-best_uni:.3f} headroom) "
+        logger.info(f"  fusion vs best-unimodal: late {mean['late']-best_uni:+.3f} | "
+                    f"feature {mean['feature']-best_uni:+.3f}")
+        logger.info(f"  ORACLE (either correct) {comp['oracle_either']:.3f}  "
+              f"(+{comp['oracle_either']-best_uni:.3f} headroom) "
               f"| err-corr {comp['err_corr']:+.3f} | both-wrong {comp['both_wrong']:.3f}")
         logger.info("  aggregation sweep (all output-space combiners vs best-single "
               f"{best_uni:.3f}, oracle {comp['oracle_either']:.3f}):")
         for key in combine.SWEEP_KEYS:
             logger.info(f"    {key:>16} {agg[key]:.3f}  ({agg[key]-best_uni:+.3f})")
-        logger.info(f"    conf-gap (correct-wrong max-prob): eeg {agg['eeg_conf_gap']:+.3f} | fnirs {agg['fnirs_conf_gap']:+.3f}"
+        logger.info(f"    conf-gap (correct-wrong max-prob): eeg {agg['eeg_conf_gap']:+.3f} | "
+              f"fnirs {agg['fnirs_conf_gap']:+.3f}"
               "  <- ~0 => confidence does not predict correctness => output-space fusion cannot select")
 
     @staticmethod

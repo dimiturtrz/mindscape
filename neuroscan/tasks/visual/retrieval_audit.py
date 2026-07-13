@@ -114,12 +114,15 @@ class RetrievalAudit:
             logger.info(f"[{i}/{len(cfg.subjects)}] subject {test_subject}: training within + cross ...")
             within = TrainNice.train([test_subject], test_subject, train_cfg)
             cross = TrainNice.train(others, test_subject, train_cfg)
-            row = {**RetrievalAudit._cells_from_result(within, "within"), **RetrievalAudit._cells_from_result(cross, "cross")}
+            row = {**RetrievalAudit._cells_from_result(within, "within"),
+                   **RetrievalAudit._cells_from_result(cross, "cross")}
             row_path.write_text(json.dumps(row))                       # checkpoint before moving on
             rows.append(row)
             logger.info(f"[{i}/{len(cfg.subjects)}] subject {test_subject}: within-avg-top1 "
-                  f"{within['concept_avg'][1]*100:.1f}% -> robust cross-single-top1 {cross['single_trial'][1]*100:.1f}%")
-        return {"disjoint": RetrievalAudit.verify_concept_disjoint(), **RetrievalAudit.summarize(rows), "per_subject": rows}
+                  f"{within['concept_avg'][1]*100:.1f}% -> "
+                  f"robust cross-single-top1 {cross['single_trial'][1]*100:.1f}%")
+        return {"disjoint": RetrievalAudit.verify_concept_disjoint(),
+                **RetrievalAudit.summarize(rows), "per_subject": rows}
 
 
 def main():
