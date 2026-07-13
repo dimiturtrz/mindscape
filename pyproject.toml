@@ -98,6 +98,7 @@ omit = [
     "neuroscan/tasks/visual/train_nice.py", "neuroscan/tasks/visual/retrieval_audit.py",
     "neuroscan/tasks/visual/cross_dataset_eval.py",   # cross-dataset EEG1->EEG2 GPU runner
     "neuroscan/tasks/visual/loso_eval.py",   # leave-one-subject-out GPU runner (loops train_nice.train)
+    "neuroscan/tasks/visual/frozen_head.py",   # frozen-backbone head sweep (external backbone + device, bd nm5)
     "neuroscan/models/decoders.py", "neuroscan/models/eegnet.py",
     "neuroscan/models/foundation.py",   # CBraMod wrapper: external backbone + device + out-of-repo weights (contract-test skip-guarded)
     "neuroscan/models/profile.py",   # fvcore params+FLOPs (model on device)
