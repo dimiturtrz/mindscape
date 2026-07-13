@@ -9,7 +9,7 @@ import pytest
 
 from baselines.eeg import bandpower as bp_module
 from baselines.eeg.bandpower import EegBandpower
-from core.features import band_powers as _bandpower
+from core.features import BandPower
 
 FS = 100.0
 N_CH = 4
@@ -33,7 +33,7 @@ def _band_dataset(n_per_class=40, seed=0):
 
 def test_bandpower_shape_is_three_bands_per_channel():
     X, _ = _band_dataset(n_per_class=3)
-    F = _bandpower(X, FS)
+    F = BandPower.band_powers(X, FS)
     assert F.shape == (6, N_CH * 3)           # [n, ch * (theta,alpha,beta)]
 
 
@@ -41,8 +41,8 @@ def test_relative_mode_is_scale_invariant():
     """relative=True divides each band by the epoch's total band-power, so scaling the signal leaves the
     features (near) unchanged — unlike absolute log-power, which shifts by log(scale**2)."""
     X, _ = _band_dataset(n_per_class=5)
-    abs_1, abs_2 = _bandpower(X, FS, relative=False), _bandpower(2 * X, FS, relative=False)
-    rel_1, rel_2 = _bandpower(X, FS, relative=True), _bandpower(2 * X, FS, relative=True)
+    abs_1, abs_2 = BandPower.band_powers(X, FS, relative=False), BandPower.band_powers(2 * X, FS, relative=False)
+    rel_1, rel_2 = BandPower.band_powers(X, FS, relative=True), BandPower.band_powers(2 * X, FS, relative=True)
     assert not np.allclose(abs_1, abs_2, atol=0.1)            # absolute power moves with scale
     assert np.allclose(rel_1, rel_2, atol=1e-6)               # relative power does not
 

@@ -1,6 +1,6 @@
 """store channel-name persistence — the processed cache is self-describing (one format).
 
-`build` writes a channels.json when the adapter exposes `channels()`; `store.channels()` reads it back, and
+`build` writes a channels.json when the adapter exposes `channels()`; `store.Store.channels()` reads it back, and
 returns None for adapters that don't expose names. Uses a tiny fake adapter (no real data / raw files).
 """
 import numpy as np
@@ -30,21 +30,21 @@ class _FakeAdapter:
 
 
 def _wire(monkeypatch, tmp_path, adapter):
-    monkeypatch.setattr(store, "processed_dir", lambda: tmp_path)
-    monkeypatch.setattr(store, "get_adapter", lambda name: adapter)
+    monkeypatch.setattr(store.Config, "processed_dir", staticmethod(lambda: tmp_path))
+    monkeypatch.setattr(store.Registry, "get_adapter", staticmethod(lambda name: adapter))
 
 
 def test_build_persists_channels_when_adapter_exposes_them(monkeypatch, tmp_path):
     a = _FakeAdapter(NAMES)
     a.channels = lambda: NAMES                                # adapter exposes names
     _wire(monkeypatch, tmp_path, a)
-    store.build("fake", CFG)
-    assert store.channels("fake", CFG) == NAMES
-    assert (store.dataset_dir("fake", CFG) / "channels.json").exists()
+    store.Store.build("fake", CFG)
+    assert store.Store.channels("fake", CFG) == NAMES
+    assert (store.Store.dataset_dir("fake", CFG) / "channels.json").exists()
 
 
 def test_channels_is_none_without_adapter_support(monkeypatch, tmp_path):
     _wire(monkeypatch, tmp_path, _FakeAdapter())              # no .channels attribute
-    store.build("fake", CFG)
-    assert store.channels("fake", CFG) is None
-    assert not (store.dataset_dir("fake", CFG) / "channels.json").exists()
+    store.Store.build("fake", CFG)
+    assert store.Store.channels("fake", CFG) is None
+    assert not (store.Store.dataset_dir("fake", CFG) / "channels.json").exists()

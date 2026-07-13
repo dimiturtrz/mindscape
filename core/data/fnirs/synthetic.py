@@ -35,42 +35,47 @@ class SynthConfig(BaseModel):
     noise_std: float = 0.08        # independent per-channel measurement noise
 
 
-def double_gamma_hrf(fs: float, cfg: SynthConfig | None = None) -> np.ndarray:
-    """SPM canonical double-gamma HRF sampled at `fs`, peak-normalized. Positive lobe minus a weighted
-    undershoot — the independent forward shape (cf. our single-gamma *estimator* in fusion.coupling)."""
-    cfg = cfg or SynthConfig()
-    t = np.arange(0, cfg.hrf_len_s, 1.0 / fs)
-    h = gamma.pdf(t, cfg.hrf_peak) - cfg.hrf_ratio * gamma.pdf(t, cfg.hrf_under)
-    return h / np.abs(h).max()
+class Synthetic:
+    """Physics-forward synthetic fNIRS generator — the free helpers folded in as staticmethods (public names
+    kept), so the independent double-gamma forward model has one home."""
 
+    @staticmethod
+    def double_gamma_hrf(fs: float, cfg: SynthConfig | None = None) -> np.ndarray:
+        """SPM canonical double-gamma HRF sampled at `fs`, peak-normalized. Positive lobe minus a weighted
+        undershoot — the independent forward shape (cf. our single-gamma *estimator* in fusion.coupling)."""
+        cfg = cfg or SynthConfig()
+        t = np.arange(0, cfg.hrf_len_s, 1.0 / fs)
+        h = gamma.pdf(t, cfg.hrf_peak) - cfg.hrf_ratio * gamma.pdf(t, cfg.hrf_under)
+        return h / np.abs(h).max()
 
-def _systemic(n: int, length: int, fs: float, cfg: SynthConfig, rng: np.random.Generator) -> np.ndarray:
-    """Common-mode systemic physiology [n, T] — Mayer/respiration/cardiac oscillations at random phase, plus a
-    slow drift. Added identically to HbO and HbR so CBSI cancels it."""
-    t = np.arange(length) / fs
-    out = np.zeros((n, length))
-    for hz in (cfg.mayer_hz, cfg.resp_hz, cfg.cardiac_hz):
-        phase = rng.uniform(0, 2 * np.pi, (n, 1))
-        out += np.sin(2 * np.pi * hz * t[None, :] + phase)
-    out += rng.standard_normal((n, 1)) * t[None, :] / t[-1]        # slow linear drift, per-trial
-    return cfg.systemic_amp * out / 3.0
+    @staticmethod
+    def _systemic(n: int, length: int, fs: float, cfg: SynthConfig, rng: np.random.Generator) -> np.ndarray:
+        """Common-mode systemic physiology [n, T] — Mayer/respiration/cardiac oscillations at random phase, plus
+        a slow drift. Added identically to HbO and HbR so CBSI cancels it."""
+        t = np.arange(length) / fs
+        out = np.zeros((n, length))
+        for hz in (cfg.mayer_hz, cfg.resp_hz, cfg.cardiac_hz):
+            phase = rng.uniform(0, 2 * np.pi, (n, 1))
+            out += np.sin(2 * np.pi * hz * t[None, :] + phase)
+        out += rng.standard_normal((n, 1)) * t[None, :] / t[-1]        # slow linear drift, per-trial
+        return cfg.systemic_amp * out / 3.0
 
+    @staticmethod
+    def synthesize_paired(neural_drive: np.ndarray, fs: float, cfg: SynthConfig | None = None,
+                          seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
+        """Forward-generate paired (HbO, HbR) `[n, T]` from a neural drive `[n, T]`.
 
-def synthesize_paired(neural_drive: np.ndarray, fs: float, cfg: SynthConfig | None = None,
-                      seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
-    """Forward-generate paired (HbO, HbR) `[n, T]` from a neural drive `[n, T]`.
-
-    `HbO = (neural ⊛ HRF) + systemic + noise`, `HbR = -hbr_ratio·(neural ⊛ HRF) + systemic + noise`. The
-    neurovascular delay is the HRF's center of mass (~`hrf_peak`), the ground-truth lag `estimate_coupling`
-    should recover; the anti-correlated neural + common-mode systemic are the ground truth CBSI must separate."""
-    cfg = cfg or SynthConfig()
-    rng = np.random.default_rng(seed)
-    drive = np.asarray(neural_drive, dtype=np.float64)
-    hrf = double_gamma_hrf(fs, cfg)
-    response = fftconvolve(drive, hrf[None, :], axes=1)[:, :drive.shape[1]]
-    n, length = drive.shape
-    sys_o = _systemic(n, length, fs, cfg, rng)
-    sys_r = sys_o + _systemic(n, length, fs, cfg, rng) * 0.15      # near-common-mode (slight de-correlation)
-    hbo = response + sys_o + rng.standard_normal((n, length)) * cfg.noise_std
-    hbr = -cfg.hbr_ratio * response + sys_r + rng.standard_normal((n, length)) * cfg.noise_std
-    return hbo.astype(np.float32), hbr.astype(np.float32)
+        `HbO = (neural ⊛ HRF) + systemic + noise`, `HbR = -hbr_ratio·(neural ⊛ HRF) + systemic + noise`. The
+        neurovascular delay is the HRF's center of mass (~`hrf_peak`), the ground-truth lag `estimate_coupling`
+        should recover; the anti-correlated neural + common-mode systemic are the ground truth CBSI separates."""
+        cfg = cfg or SynthConfig()
+        rng = np.random.default_rng(seed)
+        drive = np.asarray(neural_drive, dtype=np.float64)
+        hrf = Synthetic.double_gamma_hrf(fs, cfg)
+        response = fftconvolve(drive, hrf[None, :], axes=1)[:, :drive.shape[1]]
+        n, length = drive.shape
+        sys_o = Synthetic._systemic(n, length, fs, cfg, rng)
+        sys_r = sys_o + Synthetic._systemic(n, length, fs, cfg, rng) * 0.15   # near-common-mode (slight de-corr)
+        hbo = response + sys_o + rng.standard_normal((n, length)) * cfg.noise_std
+        hbr = -cfg.hbr_ratio * response + sys_r + rng.standard_normal((n, length)) * cfg.noise_std
+        return hbo.astype(np.float32), hbr.astype(np.float32)

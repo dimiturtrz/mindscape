@@ -1,0 +1,4 @@
+# ast-grep config (bd ylq) — semantic/syntactic gate the token-level linters (ruff) can't express.
+# Rules live in sg-rules/; run: `ast-grep scan -c devtools/sgconfig.yml core neuroscan`.
+ruleDirs:
+  - sg-rules

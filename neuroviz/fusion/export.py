@@ -33,31 +33,31 @@ def main():
     ap.add_argument("--block", type=int, default=0)
     args = ap.parse_args()
 
-    me = store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
-    mf = store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))     # past 20 s so the read-forward tail has blood
+    me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
+    mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))     # past 20 s so the read-forward tail has blood
     s = str(args.subject)
-    Xe, ye = store.gather(me.filter(me["subject"] == s))
-    Xf, yf = store.gather(mf.filter(mf["subject"] == s))
+    Xe, ye = store.Store.gather(me.filter(me["subject"] == s))
+    Xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
     assert np.array_equal(ye, yf), "EEG/fNIRS misaligned"
-    ch_e = eegmod.adapter().channels()
+    ch_e = eegmod.Shin2017NbackEegAdapter.adapter().channels()
     if _CSD:
-        Xe = bc.csd_transform(Xe, ch_e, _FS_E)                   # spatial deblur before fusion (scalp-space)
+        Xe = bc.CSD.csd_transform(Xe, ch_e, _FS_E)               # spatial deblur before fusion (scalp-space)
     b = args.block
-    pos_e = bc.eeg_positions(ch_e)
-    pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(args.subject))
+    pos_e = bc.EegMontage.eeg_positions(ch_e)
+    pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter()._subject_dir(args.subject))
 
     # single source of truth: core computes the fused representation (band-power envelopes + CBSI neural,
     # lag-aligned) and the locality-coverage kernel. The viz just displays them — no fusion logic in JS.
     # Derive the hemodynamic coupling (offset + decay) over ALL the subject's blocks (robust), then export the
     # requested block aligned by that derived lag — no fixed 5 s.
-    *_, coupling = bc.channel_series(Xe, Xf, bc.SeriesConfig(fs_e=_FS_E, fs_f=_FS_F, tmin_f=_TMIN_F,
-                                                             fps=_FPS, t_end=_TEND))
-    eeg_s, neural_s, t_dst, _ = bc.channel_series(
+    *_, coupling = bc.Series.channel_series(Xe, Xf, bc.SeriesConfig(fs_e=_FS_E, fs_f=_FS_F, tmin_f=_TMIN_F,
+                                                                    fps=_FPS, t_end=_TEND))
+    eeg_s, neural_s, t_dst, _ = bc.Series.channel_series(
         Xe[b:b + 1], Xf[b:b + 1],
         bc.SeriesConfig(fs_e=_FS_E, fs_f=_FS_F, tmin_f=_TMIN_F, fps=_FPS, t_end=_TEND, lag_s=coupling["lag"]))
     eeg = {name: _disp(eeg_s[name][0]).T.tolist() for name in eeg_s}          # {band: [T, ch_e]}
     fnirs = {"neural": _disp(neural_s[0]).T.tolist()}                          # [T, ch_f]
-    cov = bc.coverage_map(pos_e, pos_f, _COV_GRID)                            # [g, g] locality confidence
+    cov = bc.BrainCamera.coverage_map(pos_e, pos_f, _COV_GRID)                # [g, g] locality confidence
 
     out = {
         "subject": args.subject, "block": args.block, "label": int(ye[b]),

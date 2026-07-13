@@ -1,6 +1,6 @@
 """fNIRS feature-importance studies — *which* descriptor families carry the n-back workload signal.
 
-Three angles on one question, sharing the wide descriptor bank (`core.features.extract_bank`) and the
+Three angles on one question, sharing the wide descriptor bank (`core.features.DescriptorBank`) and the
 subject-grouped CV plumbing (`._cv`):
 
   - `optuna_search`   — Optuna as a wrapper feature-selector: per-family weights, fANOVA importance + top-trial

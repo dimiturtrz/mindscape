@@ -21,7 +21,7 @@ import mne
 import numpy as np
 from pydantic import BaseModel
 
-from core.config import processed_dir
+from core.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -35,91 +35,97 @@ class SourceConfig(BaseModel):
     label_mode: str = "mean_flip"  # sign-flip-aware label aggregation (cancels within-label cancellation)
 
 
-def _fsaverage_dir() -> tuple[str, str]:   # pragma: no cover — needs the fsaverage template data
-    """(fsaverage path, subjects_dir), fetched/cached by MNE under the data root."""
-    fs = mne.datasets.fetch_fsaverage(verbose=False)
-    return fs, os.path.dirname(fs)
+class Source:
+    """EEG → cortical source space (bd 728) — the lead-field + inverse operator (free helpers folded in as
+    staticmethods, public names kept). `build_inverse` / `to_parcels` are the entry points."""
 
+    @staticmethod
+    def _fsaverage_dir() -> tuple[str, str]:   # pragma: no cover — needs the fsaverage template data
+        """(fsaverage path, subjects_dir), fetched/cached by MNE under the data root."""
+        fs = mne.datasets.fetch_fsaverage(verbose=False)
+        return fs, os.path.dirname(fs)
 
-def _montage_info(ch_names: list[str], sfreq: float):
-    """An average-referenced EEG `Info` with the channels placed on the standard 10-05 montage."""
-    montage = mne.channels.make_standard_montage("standard_1005")
-    known = set(montage.ch_names)
-    missing = [c for c in ch_names if c not in known]
-    if missing:
-        raise ValueError(f"channels not in standard_1005 montage: {missing}")
-    info = mne.create_info(list(ch_names), float(sfreq), "eeg")
-    info.set_montage(montage)
-    raw = mne.io.RawArray(np.zeros((len(ch_names), 1)), info, verbose=False)
-    return raw.set_eeg_reference("average", projection=True, verbose=False).info
+    @staticmethod
+    def _montage_info(ch_names: list[str], sfreq: float):
+        """An average-referenced EEG `Info` with the channels placed on the standard 10-05 montage."""
+        montage = mne.channels.make_standard_montage("standard_1005")
+        known = set(montage.ch_names)
+        missing = [c for c in ch_names if c not in known]
+        if missing:
+            raise ValueError(f"channels not in standard_1005 montage: {missing}")
+        info = mne.create_info(list(ch_names), float(sfreq), "eeg")
+        info.set_montage(montage)
+        raw = mne.io.RawArray(np.zeros((len(ch_names), 1)), info, verbose=False)
+        return raw.set_eeg_reference("average", projection=True, verbose=False).info
 
+    @staticmethod
+    def _cache_key(ch_names: list[str], sfreq: float, cfg: SourceConfig) -> str:
+        payload = "|".join(ch_names) + f"|{sfreq}|{cfg.spacing}|{cfg.method}|{cfg.snr}"
+        return hashlib.sha1(payload.encode()).hexdigest()[:16]
 
-def _cache_key(ch_names: list[str], sfreq: float, cfg: SourceConfig) -> str:
-    payload = "|".join(ch_names) + f"|{sfreq}|{cfg.spacing}|{cfg.method}|{cfg.snr}"
-    return hashlib.sha1(payload.encode()).hexdigest()[:16]
+    @staticmethod
+    def build_forward(ch_names: list[str], sfreq: float, cfg: SourceConfig | None = None):  # pragma: no cover
+        """The fsaverage template forward solution (lead field) + its `Info` for a montage. The expensive step —
+        shared by the dSPM inverse (`build_inverse`, 728) and the fNIRS-informed weighted inverse (4so)."""
+        cfg = cfg or SourceConfig()
+        fs, subjects_dir = Source._fsaverage_dir()
+        info = Source._montage_info(ch_names, sfreq)
+        src = mne.setup_source_space("fsaverage", spacing=cfg.spacing, subjects_dir=subjects_dir,
+                                     add_dist=False, verbose=False)
+        bem = os.path.join(fs, "bem", "fsaverage-5120-5120-5120-bem-sol.fif")
+        fwd = mne.make_forward_solution(info, trans="fsaverage", src=src, bem=bem, eeg=True, meg=False,
+                                        verbose=False)
+        return fwd, info
 
+    @staticmethod
+    def cortical_labels(cfg: SourceConfig | None = None):  # pragma: no cover — needs fsaverage annot
+        """The parcellation's cortical labels (unknown/medial-wall dropped) — shared by the dSPM inverse
+        (`build_inverse`, 728) and the fNIRS-priored inverse's parcel aggregation (4so)."""
+        cfg = cfg or SourceConfig()
+        _, subjects_dir = Source._fsaverage_dir()
+        return [lbl for lbl in mne.read_labels_from_annot("fsaverage", cfg.parcellation,
+                                                          subjects_dir=subjects_dir, verbose=False)
+                if "unknown" not in lbl.name]
 
-def build_forward(ch_names: list[str], sfreq: float, cfg: SourceConfig | None = None):  # pragma: no cover
-    """The fsaverage template forward solution (lead field) + its `Info` for a montage. The expensive step —
-    shared by the dSPM inverse (`build_inverse`, 728) and the fNIRS-informed weighted inverse (4so)."""
-    cfg = cfg or SourceConfig()
-    fs, subjects_dir = _fsaverage_dir()
-    info = _montage_info(ch_names, sfreq)
-    src = mne.setup_source_space("fsaverage", spacing=cfg.spacing, subjects_dir=subjects_dir,
-                                 add_dist=False, verbose=False)
-    bem = os.path.join(fs, "bem", "fsaverage-5120-5120-5120-bem-sol.fif")
-    fwd = mne.make_forward_solution(info, trans="fsaverage", src=src, bem=bem, eeg=True, meg=False, verbose=False)
-    return fwd, info
+    @staticmethod
+    def source_positions(ch_names: list[str], sfreq: float, cfg: SourceConfig | None = None) -> np.ndarray:
+        """3D positions `[n_src, 3]` of the fixed-orientation source-space vertices, in the forward's source
+        order (concatenated over hemispheres) — the frame a spatial prior (e.g. fNIRS 'where', 4so) lives in."""
+        fwd, _ = Source.build_forward(ch_names, sfreq, cfg)
+        fwd = mne.convert_forward_solution(fwd, force_fixed=True, use_cps=True, verbose=False)
+        return np.vstack([s["rr"][s["vertno"]] for s in fwd["src"]])   # [n_src, 3]
 
+    @staticmethod
+    def build_inverse(ch_names: list[str], sfreq: float, cfg: SourceConfig | None = None):  # pragma: no cover
+        """Build (or load from cache) the dSPM inverse operator + cortical labels for a montage.
 
-def cortical_labels(cfg: SourceConfig | None = None):  # pragma: no cover — needs fsaverage annot
-    """The parcellation's cortical labels (unknown/medial-wall dropped) — shared by the dSPM inverse
-    (`build_inverse`, 728) and the fNIRS-priored inverse's parcel aggregation (4so)."""
-    cfg = cfg or SourceConfig()
-    _, subjects_dir = _fsaverage_dir()
-    return [lbl for lbl in mne.read_labels_from_annot("fsaverage", cfg.parcellation,
-                                                      subjects_dir=subjects_dir, verbose=False)
-            if "unknown" not in lbl.name]
+        Returns `(inverse_operator, labels)`. The fsaverage forward solution is computed once per
+        (montage, sfreq, config) and the inverse cached to `processed_dir()/source_operators/<key>-inv.fif`."""
+        cfg = cfg or SourceConfig()
+        labels = Source.cortical_labels(cfg)
+        cache_dir = Config.processed_dir() / "source_operators"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        inv_path = cache_dir / f"{Source._cache_key(ch_names, sfreq, cfg)}-inv.fif"
+        if inv_path.exists():
+            return mne.minimum_norm.read_inverse_operator(str(inv_path), verbose=False), labels
 
+        logger.info(f"building fsaverage forward+inverse for {len(ch_names)} ch @ {sfreq} Hz ({cfg.spacing})")
+        fwd, info = Source.build_forward(ch_names, sfreq, cfg)
+        inverse = mne.minimum_norm.make_inverse_operator(info, fwd, mne.make_ad_hoc_cov(info), verbose=False)
+        mne.minimum_norm.write_inverse_operator(str(inv_path), inverse, verbose=False)
+        return inverse, labels
 
-def source_positions(ch_names: list[str], sfreq: float, cfg: SourceConfig | None = None) -> np.ndarray:
-    """3D positions `[n_src, 3]` of the fixed-orientation source-space vertices, in the forward's source
-    order (concatenated over hemispheres) — the frame a spatial prior (e.g. fNIRS 'where', 4so) lives in."""
-    fwd, _ = build_forward(ch_names, sfreq, cfg)
-    fwd = mne.convert_forward_solution(fwd, force_fixed=True, use_cps=True, verbose=False)
-    return np.vstack([s["rr"][s["vertno"]] for s in fwd["src"]])   # [n_src, 3]
-
-
-def build_inverse(ch_names: list[str], sfreq: float, cfg: SourceConfig | None = None):  # pragma: no cover
-    """Build (or load from cache) the dSPM inverse operator + cortical labels for a montage.
-
-    Returns `(inverse_operator, labels)`. The fsaverage forward solution is computed once per
-    (montage, sfreq, config) and the inverse cached to `processed_dir()/source_operators/<key>-inv.fif`."""
-    cfg = cfg or SourceConfig()
-    labels = cortical_labels(cfg)
-    cache_dir = processed_dir() / "source_operators"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    inv_path = cache_dir / f"{_cache_key(ch_names, sfreq, cfg)}-inv.fif"
-    if inv_path.exists():
-        return mne.minimum_norm.read_inverse_operator(str(inv_path), verbose=False), labels
-
-    logger.info(f"building fsaverage forward+inverse for {len(ch_names)} ch @ {sfreq} Hz ({cfg.spacing})")
-    fwd, info = build_forward(ch_names, sfreq, cfg)
-    inverse = mne.minimum_norm.make_inverse_operator(info, fwd, mne.make_ad_hoc_cov(info), verbose=False)
-    mne.minimum_norm.write_inverse_operator(str(inv_path), inverse, verbose=False)
-    return inverse, labels
-
-
-def to_parcels(epochs: np.ndarray, ch_names: list[str], sfreq: float,   # pragma: no cover — MNE fwd/inverse
-               cfg: SourceConfig | None = None) -> np.ndarray:
-    """Project sensor epochs `[n, ch, t]` to a source-space parcel series `[n, n_labels, t]` via the template
-    dSPM inverse + label-time-course extraction. Anatomically-named, montage-independent — the substrate for
-    source-space EEG↔fNIRS fusion (bd 728)."""
-    cfg = cfg or SourceConfig()
-    inverse, labels = build_inverse(ch_names, sfreq, cfg)
-    info = _montage_info(ch_names, sfreq)
-    ep = mne.EpochsArray(np.asarray(epochs, dtype=np.float64), info, verbose=False)
-    stcs = mne.minimum_norm.apply_inverse_epochs(ep, inverse, lambda2=1.0 / cfg.snr ** 2,
-                                                 method=cfg.method, verbose=False)
-    pc = mne.extract_label_time_course(stcs, labels, inverse["src"], mode=cfg.label_mode, verbose=False)
-    return np.asarray(pc, dtype=np.float32)                         # [n, n_labels, t]
+    @staticmethod
+    def to_parcels(epochs: np.ndarray, ch_names: list[str], sfreq: float,   # pragma: no cover — MNE fwd/inverse
+                   cfg: SourceConfig | None = None) -> np.ndarray:
+        """Project sensor epochs `[n, ch, t]` to a source-space parcel series `[n, n_labels, t]` via the template
+        dSPM inverse + label-time-course extraction. Anatomically-named, montage-independent — the substrate for
+        source-space EEG↔fNIRS fusion (bd 728)."""
+        cfg = cfg or SourceConfig()
+        inverse, labels = Source.build_inverse(ch_names, sfreq, cfg)
+        info = Source._montage_info(ch_names, sfreq)
+        ep = mne.EpochsArray(np.asarray(epochs, dtype=np.float64), info, verbose=False)
+        stcs = mne.minimum_norm.apply_inverse_epochs(ep, inverse, lambda2=1.0 / cfg.snr ** 2,
+                                                     method=cfg.method, verbose=False)
+        pc = mne.extract_label_time_course(stcs, labels, inverse["src"], mode=cfg.label_mode, verbose=False)
+        return np.asarray(pc, dtype=np.float32)                         # [n, n_labels, t]

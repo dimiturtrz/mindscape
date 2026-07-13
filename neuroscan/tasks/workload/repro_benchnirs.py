@@ -20,13 +20,13 @@ import logging
 
 import numpy as np
 
+from neuroscan.tasks.cli import Cli
+
 logger = logging.getLogger(__name__)
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     from benchnirs.learn import machine_learn  # noqa: PLC0415
     from benchnirs.load import load_dataset  # noqa: PLC0415
     from benchnirs.process import extract_features, process_epochs  # noqa: PLC0415

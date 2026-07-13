@@ -12,15 +12,14 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-# Cross-modality primitives (bandpass, block epoching, n-back labels) live in the neutral data layer
-# (core/data/signal) so the EEG adapter doesn't import "up" into fNIRS. Re-exported here so existing
-# `from core.data.fnirs.base import bandpass / epoch_blocks / CANONICAL_NBACK` call sites keep working.
-from core.data.fnirs.clean import clean_key
+# Cross-modality primitives (block epoching, n-back labels) live in the neutral data layer
+# (core/data/signal) so the EEG adapter doesn't import "up" into fNIRS. CANONICAL_NBACK is re-exported here
+# so existing `from core.data.fnirs.base import CANONICAL_NBACK` call sites keep working.
+from core.data.fnirs.clean import Clean
 from core.data.signal import (  # noqa: F401
     CANONICAL_NBACK,
     BlockedRecording,
-    bandpass,
-    block_epochs,
+    Signal,
 )
 
 
@@ -44,10 +43,15 @@ class FnirsCfg(BaseModel):
         def f(x):
             return str(x).replace(".", "p").replace("-", "m")
         rs = "native" if self.resample is None else f(self.resample)
-        return f"b{f(self.l_freq)}-{f(self.h_freq)}_t{f(self.tmin)}-{f(self.tmax)}_r{rs}_c{clean_key(self.clean)}"
+        return (f"b{f(self.l_freq)}-{f(self.h_freq)}_t{f(self.tmin)}-{f(self.tmax)}"
+                f"_r{rs}_c{Clean.clean_key(self.clean)}")
 
 
-def epoch_blocks(cont, onsets, y, fs: float, cfg: FnirsCfg) -> tuple:
-    """Baseline-corrected block epoching per the fNIRS recipe — a thin FnirsCfg adapter over the shared
-    `signal.block_epochs` (the modality-agnostic windowing op)."""
-    return block_epochs(BlockedRecording(cont, onsets, y), fs, cfg.tmin, cfg.tmax, cfg.baseline_s)
+class FnirsEpochs:
+    """fNIRS-recipe epoching over the shared modality-agnostic windowing op (public name kept)."""
+
+    @staticmethod
+    def epoch_blocks(cont, onsets, y, fs: float, cfg: FnirsCfg) -> tuple:
+        """Baseline-corrected block epoching per the fNIRS recipe — a thin FnirsCfg adapter over the shared
+        `Signal.block_epochs` (the modality-agnostic windowing op)."""
+        return Signal.block_epochs(BlockedRecording(cont, onsets, y), fs, cfg.tmin, cfg.tmax, cfg.baseline_s)

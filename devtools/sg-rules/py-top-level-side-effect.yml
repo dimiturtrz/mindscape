@@ -1,0 +1,19 @@
+# No import-time side effects: a top-level call expression runs at import — move it into a function/main so
+# importing a module is free of work (matplotlib.use() is the one exempt backend-selection call). Ported from
+# cardiac-seg/synthscape (bd ylq).
+id: py-top-level-side-effect
+language: python
+severity: error
+message: "top-level call runs at import — move it into a function/main (no side effects on import)"
+rule:
+  kind: expression_statement
+  has:
+    kind: call
+    stopBy: neighbor
+  inside:
+    kind: module
+    stopBy: neighbor
+  not:
+    has:
+      pattern: matplotlib.use($$$)
+      stopBy: neighbor

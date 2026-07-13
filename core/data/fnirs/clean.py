@@ -84,22 +84,27 @@ class Chain:
 _CLEANERS = {"cbsi": Cbsi, "detrend": Detrend}
 
 
-def make_cleaner(spec):
-    """`str | list[str] | None` -> a `Cleaner` (single = one-element `Chain`) or `None`. Unknown name errors."""
-    if spec is None:
-        return None
-    names = [spec] if isinstance(spec, str) else list(spec)
-    if not names:
-        return None
-    bad = [n for n in names if n not in _CLEANERS]
-    if bad:
-        raise ValueError(f"unknown cleaner(s) {bad}; known: {sorted(_CLEANERS)}")
-    return Chain([_CLEANERS[n]() for n in names])
+class Clean:
+    """fNIRS cleaner construction + cache-keying — the free helpers folded in as staticmethods (public names
+    kept). The stateful cleaners (Cbsi/Detrend/Chain) stay their own classes."""
 
+    @staticmethod
+    def make_cleaner(spec):
+        """`str | list[str] | None` -> a `Cleaner` (single = one-element `Chain`) or `None`. Unknown name errors."""
+        if spec is None:
+            return None
+        names = [spec] if isinstance(spec, str) else list(spec)
+        if not names:
+            return None
+        bad = [n for n in names if n not in _CLEANERS]
+        if bad:
+            raise ValueError(f"unknown cleaner(s) {bad}; known: {sorted(_CLEANERS)}")
+        return Chain([_CLEANERS[n]() for n in names])
 
-def clean_key(spec) -> str:
-    """Cache-key fragment for a clean spec (part of FnirsCfg.key so a cleaned cache never collides)."""
-    if spec is None:
-        return "none"
-    names = [spec] if isinstance(spec, str) else list(spec)
-    return "+".join(names) if names else "none"
+    @staticmethod
+    def clean_key(spec) -> str:
+        """Cache-key fragment for a clean spec (part of FnirsCfg.key so a cleaned cache never collides)."""
+        if spec is None:
+            return "none"
+        names = [spec] if isinstance(spec, str) else list(spec)
+        return "+".join(names) if names else "none"

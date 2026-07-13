@@ -35,8 +35,9 @@ from baselines.fusion.gate import GateConfig, GatedFusion
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
-from core.features import amplitude_features, band_powers, zscore_per_subject
+from core.features import Amplitude, BandPower, SubjectNorm
 from neuroscan.evaluation import metrics, results
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -45,35 +46,37 @@ _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _FNIRS_CFG = FnirsCfg()
 
 
-def _load_features():
-    """Return per-block EEG band-power + fNIRS mean/slope/peak features, the label, and the subject id —
-    block-aligned across the two modalities (hard guard on the label sequence)."""
-    me = store.load(_EEG, _EEG_CFG)
-    mf = store.load(_FNIRS, _FNIRS_CFG)
-    subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
-    qe = me.filter(me["subject"].is_in(subs))
-    qf = mf.filter(mf["subject"].is_in(subs))
-    Xe, ye = store.gather(qe)
-    Xf, yf = store.gather(qf)
-    assert np.array_equal(ye, yf), "EEG/fNIRS blocks misaligned — fusion invalid"
-    groups = qe["subject"].to_numpy()
-    Fe = band_powers(Xe, _EEG_CFG.resample).astype(np.float32)         # [n, 28*3]
-    Ff = amplitude_features(Xf).astype(np.float32)                     # [n, ch*3]
-    return Fe, Ff, ye.astype(np.int64), groups
+class FusionGate:
+    """Gated-fusion helpers — the free helpers folded in as staticmethods."""
+
+    @staticmethod
+    def _load_features():
+        """Return per-block EEG band-power + fNIRS mean/slope/peak features, the label, and the subject id —
+        block-aligned across the two modalities (hard guard on the label sequence)."""
+        me = store.Store.load(_EEG, _EEG_CFG)
+        mf = store.Store.load(_FNIRS, _FNIRS_CFG)
+        subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
+        qe = me.filter(me["subject"].is_in(subs))
+        qf = mf.filter(mf["subject"].is_in(subs))
+        Xe, ye = store.Store.gather(qe)
+        Xf, yf = store.Store.gather(qf)
+        assert np.array_equal(ye, yf), "EEG/fNIRS blocks misaligned — fusion invalid"
+        groups = qe["subject"].to_numpy()
+        Fe = BandPower.band_powers(Xe, _EEG_CFG.resample).astype(np.float32)   # [n, 28*3]
+        Ff = Amplitude.amplitude_features(Xf).astype(np.float32)               # [n, ch*3]
+        return Fe, Ff, ye.astype(np.int64), groups
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--out", default=None)
     ap.add_argument("--no-record", action="store_true")
     args = ap.parse_args()
 
-    Fe, Ff, y, groups = _load_features()
-    Fe, Ff = zscore_per_subject(Fe, groups), zscore_per_subject(Ff, groups)
+    Fe, Ff, y, groups = FusionGate._load_features()
+    Fe, Ff = SubjectNorm.zscore_per_subject(Fe, groups), SubjectNorm.zscore_per_subject(Ff, groups)
     subs = np.array(sorted(set(groups)))
     n_classes = int(y.max()) + 1
     logger.info(f"gated fusion: {len(y)} blocks · {len(subs)} subjects · EEG {Fe.shape[1]}d · fNIRS {Ff.shape[1]}d · "
@@ -97,7 +100,7 @@ def main():
         P.append(p)
         A.append(a)
         Y.append(y[m_te])
-        acc = metrics.accuracy(y[m_te], p.argmax(1))
+        acc = metrics.Metrics.accuracy(y[m_te], p.argmax(1))
         rows.append({"fold": str(i), "n": int(m_te.sum()), "gate_acc": acc,
                      "alpha_mean": float(a.mean())})
         logger.info(f"  fold{i}: gate {acc:.3f} | ᾱ(eeg-weight) {a.mean():.2f} (n={int(m_te.sum())})")
@@ -120,7 +123,7 @@ def main():
            "pooled_acc": gate, "acc_std": std, "per_fold": rows}
     (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
     if not args.no_record:
-        results.record(run_dir)
+        results.Results.record(run_dir)
     logger.info(f"-> {run_dir}/aggregate.json")
 
 

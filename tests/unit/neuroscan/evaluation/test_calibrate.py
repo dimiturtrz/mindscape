@@ -37,7 +37,7 @@ def _row(val_uncal, val_temp, test_uncal, test_temp, t=2.0):
 
 def test_summarize_aggregates_and_computes_transfer_ratio():
     rows = [_row(0.20, 0.05, 0.30, 0.24), _row(0.20, 0.05, 0.30, 0.24)]   # val fix 0.15, test fix 0.06
-    summary, val_fix, test_fix = calibrate._summarize(rows, "atcnet")
+    summary, val_fix, test_fix = calibrate.Calibrate._summarize(rows, "atcnet")
     assert summary["method"] == "atcnet" and summary["n"] == 2
     assert np.isclose(val_fix, 0.15) and np.isclose(test_fix, 0.06)
     assert np.isclose(summary["transfer_ratio"], 0.4)                     # 0.06 / 0.15
@@ -45,15 +45,15 @@ def test_summarize_aggregates_and_computes_transfer_ratio():
 
 def test_summarize_transfer_ratio_none_when_val_already_calibrated():
     rows = [_row(0.10, 0.10, 0.20, 0.15)]                                 # val fix ~0 -> ratio undefined
-    summary, val_fix, _test_fix = calibrate._summarize(rows, "m")
+    summary, val_fix, _test_fix = calibrate.Calibrate._summarize(rows, "m")
     assert val_fix <= 1e-6
     assert summary["transfer_ratio"] is None
 
 
 def _verdict(val_uncal, val_temp, test_uncal, test_temp):
     rows = [_row(val_uncal, val_temp, test_uncal, test_temp)]
-    summary, val_fix, test_fix = calibrate._summarize(rows, "m")
-    calibrate._report(summary, "m", val_fix, test_fix)
+    summary, val_fix, test_fix = calibrate.Calibrate._summarize(rows, "m")
+    calibrate.Calibrate._report(summary, "m", val_fix, test_fix)
     return summary["verdict"]
 
 

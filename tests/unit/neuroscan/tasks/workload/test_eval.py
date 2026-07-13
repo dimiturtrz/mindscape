@@ -7,7 +7,7 @@ two-label restrict + binary relabel. A clean amplitude signal must decode above 
 import numpy as np
 
 from baselines.fnirs.features import FnirsLda
-from neuroscan.tasks.workload._eval import CvConfig, CvData, cv_score
+from neuroscan.tasks.workload._eval import CvConfig, CvData, Eval
 
 
 def _dataset(n_subj=10, per_class=3, n_ch=4, n_t=60, n_classes=2, seed=0):
@@ -32,14 +32,14 @@ def _valid(acc, sd, kap):
 
 def test_grouped_default_build_decodes_amplitude():
     data = _dataset()
-    acc, sd, kap = cv_score(None, data, CvConfig(grouped=True, seeds=(0, 1), k=5))
+    acc, sd, kap = Eval.cv_score(None, data, CvConfig(grouped=True, seeds=(0, 1), k=5))
     _valid(acc, sd, kap)
     assert acc > 0.7                                        # clean amplitude signal -> well above 0.5 chance
 
 
 def test_within_subject_split_also_decodes():
     data = _dataset()
-    acc, sd, kap = cv_score(None, data, CvConfig(grouped=False, seeds=(0,), k=5))
+    acc, sd, kap = Eval.cv_score(None, data, CvConfig(grouped=False, seeds=(0,), k=5))
     _valid(acc, sd, kap)
     assert acc > 0.7
 
@@ -47,8 +47,8 @@ def test_within_subject_split_also_decodes():
 def test_custom_build_thunk_matches_default_fnirslda():
     data = _dataset()
     cfg = CvConfig(grouped=True, seeds=(0,), k=5)
-    default = cv_score(None, data, cfg)
-    custom = cv_score(lambda: FnirsLda(), data, cfg)        # build != None path
+    default = Eval.cv_score(None, data, cfg)
+    custom = Eval.cv_score(lambda: FnirsLda(), data, cfg)   # build != None path
     assert np.allclose(default, custom)                    # the thunk builds the same decoder -> same score
 
 
@@ -56,6 +56,6 @@ def test_classes_filter_restricts_and_binary_relabels():
     """`classes=(0, 2)` on a 3-class set keeps only those labels and relabels binary (2 -> 1). The kept two
     classes are still amplitude-separable, so it decodes; a 3rd untouched class is dropped from scoring."""
     data = _dataset(n_classes=3)
-    acc, sd, kap = cv_score(None, data, CvConfig(grouped=True, seeds=(0,), k=5, classes=(0, 2)))
+    acc, sd, kap = Eval.cv_score(None, data, CvConfig(grouped=True, seeds=(0,), k=5, classes=(0, 2)))
     _valid(acc, sd, kap)
     assert acc > 0.7                                        # 0 vs 2 have the largest amplitude gap

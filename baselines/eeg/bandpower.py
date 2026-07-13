@@ -20,7 +20,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from baselines.base import Baseline
-from core.features import band_powers
+from core.features import BandPower
 
 
 class EegBandpower(Baseline):
@@ -37,11 +37,11 @@ class EegBandpower(Baseline):
 
     def fit(self, X, y):
         self.pipe_ = self._build()
-        self.pipe_.fit(band_powers(X, self.fs, relative=self.relative), y)
+        self.pipe_.fit(BandPower.band_powers(X, self.fs, relative=self.relative), y)
         return self
 
     def predict_proba(self, X):
-        return self.pipe_.predict_proba(band_powers(X, self.fs, relative=self.relative))
+        return self.pipe_.predict_proba(BandPower.band_powers(X, self.fs, relative=self.relative))
 
 
 def fit(X: np.ndarray, y: np.ndarray) -> Baseline:

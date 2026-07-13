@@ -30,7 +30,7 @@ dependencies = [
 dev = ["pytest", "pytest-cov", "fvcore"]   # fvcore: params + FLOPs profiling (neuroscan/models/profile.py)
 export = ["onnx", "onnxruntime", "onnxscript"]   # ONNX export + parity check (Stage 2; core/export_onnx.py)
 data = ["osfclient", "openneuro-py"]   # dataset fetch (Stage-3 EEG->image: OSF / OpenNeuro); not a runtime dep
-devtools = ["grimp", "networkx"]   # one-shot import-graph diagnostic (bd 2r9; devtools/graph.py)
+devtools = ["grimp", "networkx", "nox"]   # import-graph diagnostic/fitness (bd 2r9/3nn) + gate runner (bd kvo; noxfile.py)
 source = ["nibabel"]   # EEG->cortex source localization: MNE fsaverage forward/inverse (bd 728; core.features.eeg.source)
 all = ["pytest", "onnx", "onnxruntime"]
 
@@ -134,6 +134,17 @@ exclude_lines = [
     "^\\s*\\.\\.\\.$",
     "@(abc\\.)?abstractmethod",
 ]
+
+# Architecture fitness thresholds (bd 3nn; enforced in CI via `python -m devtools.graph --assert`). The METRIC
+# arch axis import-linter's categorical layer contracts can't express — god-module / import-cycle / god-file
+# block; line-floor + betweenness chokepoint + test-mirror are advisory. Defaults chosen against today's graph
+# so the blocking rules start CLEAN and only ratchet TIGHTER (never relaxed). Mirrors the cardiac-seg/synthscape
+# superset. `file_min=0` = floor OFF (no honest floor — small files are SSOT/strategy/shared-vocab leaves).
+[tool.structure]
+bottleneck_degree = 8       # a module with BOTH fan-in and fan-out over this is a god-module (0 today)
+file_max = 750              # god-file ceiling (largest today ~373)
+file_min = 0                # OFF: no honest line floor exists (small files are legit SSOT/strategy leaves)
+betweenness_max = 0.10      # advisory chokepoint threshold
 
 # Architecture as a static import-graph contract (bd o92; enforced in CI via `lint-imports`). Three tiers,
 # imports point DOWN only: core (clean kernel) < neuroscan (trainer) < neuroviz (viewer). The viewer reusing

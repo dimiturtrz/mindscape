@@ -11,5 +11,9 @@ from moabb.datasets import BNCI2014_001
 from core.data.eeg.base import MoabbMIAdapter
 
 
-def adapter() -> MoabbMIAdapter:
-    return MoabbMIAdapter(name="bnci2014_001", dataset_cls=BNCI2014_001, n_classes=4)
+class Bnci2014001:
+    """BCI Competition IV-2a adapter factory (public name kept) — the Stage-0 motor-imagery warm-up set."""
+
+    @staticmethod
+    def adapter() -> MoabbMIAdapter:
+        return MoabbMIAdapter(name="bnci2014_001", dataset_cls=BNCI2014_001, n_classes=4)

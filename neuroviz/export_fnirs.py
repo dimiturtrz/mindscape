@@ -23,12 +23,12 @@ def _subject_epochs(subject: int):
     """(X [n,72,t] HbO|HbR, y, ch_names[36], pos2d[36,2], fs) for one subject via the adapter + montage."""
     import scipy.io as sio
 
-    from core.config import raw_dir
+    from core.config import Config
     from core.data.fnirs.base import FnirsCfg
     from core.data.fnirs.shin2017 import adapter
 
     X, y, _ = adapter("nback").get_data([subject], FnirsCfg(tmax=20.0))
-    d = raw_dir() / "shin2017" / f"VP{subject:03d}-NIRS"
+    d = Config.raw_dir() / "shin2017" / f"VP{subject:03d}-NIRS"
     mnt = sio.loadmat(d / "mnt_nback.mat", struct_as_record=False, squeeze_me=True)["mnt_nback"]
     names = [str(c) for c in np.asarray(mnt.clab)][:36]
     pos = np.stack([np.asarray(mnt.x)[:36], np.asarray(mnt.y)[:36]], axis=1).astype(float)
@@ -53,10 +53,10 @@ def _frames(X, y, chan_slice, n_frames=N_FRAMES):
 
 def _lda_patterns(X, y):
     """Per-class LDA weight on the HbO MEAN feature (what the decoder reads), one value per channel."""
-    from core.features import amplitude_features
+    from core.features import Amplitude
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
-    lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto").fit(amplitude_features(X), y)
+    lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto").fit(Amplitude.amplitude_features(X), y)
     coef = np.atleast_2d(lda.coef_)                         # [n_class, 216] (mean|slope|peak × 72)
     classes = sorted(np.unique(y).tolist())
     if coef.shape[0] == 1 and len(classes) == 2:
@@ -93,8 +93,8 @@ def _predictions(subject: int, X, y):
     from core.data import store
     from core.data.fnirs.base import FnirsCfg
 
-    meta = store.load("shin2017_nback", FnirsCfg(tmax=20.0))
-    Xtr, ytr = store.gather(meta.filter(pl.col("subject") != str(subject)))
+    meta = store.Store.load("shin2017_nback", FnirsCfg(tmax=20.0))
+    Xtr, ytr = store.Store.gather(meta.filter(pl.col("subject") != str(subject)))
     clf = ff.fit(Xtr, ytr)
     probs = ff.score(clf, X)
     pred = probs.argmax(1)

@@ -38,20 +38,22 @@ class CvConfig(BaseModel):
     classes: tuple[int, ...] | None = None
 
 
-def cv_score(build, data: CvData, config: CvConfig):
-    """Mean (acc, sd, kappa) over repeated seeded k-fold. `build` is a `() -> decoder` thunk (None ->
-    `FnirsLda`)."""
-    X, y, groups = np.asarray(data.X), np.asarray(data.y), np.asarray(data.groups)
-    if config.classes is not None:
-        m = np.isin(y, config.classes)
-        X, y, groups = X[m], (y[m] == config.classes[1]).astype(int), groups[m]
-    accs, kaps = [], []
-    for seed in config.seeds:
-        sp = (StratifiedGroupKFold(config.k, shuffle=True, random_state=seed) if config.grouped
-              else StratifiedKFold(config.k, shuffle=True, random_state=seed))
-        for tr, te in sp.split(X, y, groups if config.grouped else None):
-            clf = (build() if build is not None else FnirsLda()).fit(X[tr], y[tr])
-            pred = clf.predict_proba(X[te]).argmax(1)
-            accs.append(metrics.accuracy(y[te], pred))
-            kaps.append(metrics.kappa(y[te], pred))
-    return float(np.mean(accs)), float(np.std(accs)), float(np.mean(kaps))
+class Eval:
+    @staticmethod
+    def cv_score(build, data: CvData, config: CvConfig):
+        """Mean (acc, sd, kappa) over repeated seeded k-fold. `build` is a `() -> decoder` thunk (None ->
+        `FnirsLda`)."""
+        X, y, groups = np.asarray(data.X), np.asarray(data.y), np.asarray(data.groups)
+        if config.classes is not None:
+            m = np.isin(y, config.classes)
+            X, y, groups = X[m], (y[m] == config.classes[1]).astype(int), groups[m]
+        accs, kaps = [], []
+        for seed in config.seeds:
+            sp = (StratifiedGroupKFold(config.k, shuffle=True, random_state=seed) if config.grouped
+                  else StratifiedKFold(config.k, shuffle=True, random_state=seed))
+            for tr, te in sp.split(X, y, groups if config.grouped else None):
+                clf = (build() if build is not None else FnirsLda()).fit(X[tr], y[tr])
+                pred = clf.predict_proba(X[te]).argmax(1)
+                accs.append(metrics.Metrics.accuracy(y[te], pred))
+                kaps.append(metrics.Metrics.kappa(y[te], pred))
+        return float(np.mean(accs)), float(np.std(accs)), float(np.mean(kaps))

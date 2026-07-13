@@ -11,7 +11,7 @@ def _meta(n_subjects=26, per=3):
 
 
 def test_grouped_kfold_partitions_subjects_once():
-    folds = list(splits.grouped_kfold(_meta(26), k=5))
+    folds = list(splits.Splits.grouped_kfold(_meta(26), k=5))
     assert len(folds) == 5
     test_subs = [set(te["subject"].unique().to_list()) for _, _, te in folds]
     union = set().union(*test_subs)
@@ -20,7 +20,7 @@ def test_grouped_kfold_partitions_subjects_once():
 
 
 def test_grouped_kfold_train_test_disjoint_and_full():
-    for _, tr, te in splits.grouped_kfold(_meta(26), k=5):
+    for _, tr, te in splits.Splits.grouped_kfold(_meta(26), k=5):
         tr_s = set(tr["subject"].unique().to_list())
         te_s = set(te["subject"].unique().to_list())
         assert tr_s.isdisjoint(te_s)                                # no subject leaks across the split

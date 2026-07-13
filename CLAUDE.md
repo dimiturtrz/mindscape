@@ -91,5 +91,42 @@ Three tiers, imports point **down only**: `core` (clean kernel) < `neuroscan` (t
 upward import breaks CI; if a layer genuinely needs a symbol from above, the symbol is in the wrong layer —
 push it down (into `core`), don't invert the arrow.
 
-`devtools/graph.py` (bd 2r9, `[devtools]` extra) is the explorer view of the same graph — fan-in/out /
-bottleneck / betweenness / cycles via grimp+networkx. One-shot, not a gate: `python -m devtools.graph`.
+### Architecture fitness — `graph.py --assert` gate (bd 3nn)
+
+`devtools/graph.py` (bd 2r9/3nn, `[devtools]` extra) is both the **explorer** (`python -m devtools.graph` —
+fan-in/out / bottleneck / betweenness / cycles via grimp+networkx) **and** a CI **fitness gate**
+(`python -m devtools.graph --assert`) — the *metric* arch axis import-linter's categorical contracts can't
+express. **Blocks** on a god-module (fan-in AND fan-out both > `bottleneck_degree`), an import cycle (SCC>1),
+or a god-file (> `file_max`). **Advisory** (logged, never blocks): line-floor, betweenness chokepoint, and
+test-mirror (source modules without a `tests/unit/<path>/test_<name>.py` — advisory because many source files
+are coverage-omitted shells; graduates to blocking once a "mirror logic, exempt omitted shells" policy is
+backfilled). Thresholds live in `[tool.structure]`, chosen clean against today's graph — they **ratchet only
+tighter, never relax**. Runs in the CI `tests` job (needs the `[devtools]` extra).
+
+### Module shape — ast-grep gate (bd ylq)
+
+Semantic AST rules ruff's token linters can't express (`devtools/sgconfig.yml` → `devtools/sg-rules/`,
+enforced in CI: `ast-grep scan -c devtools/sgconfig.yml core neuroscan`, severity `error` blocks). Two rules:
+**`py-top-level-function`** — everything meaningful is a method: a top-level `def` must live on the class that
+owns it (`main`/`_main` exempt). The whole `core`+`neuroscan` tree was migrated (269 free funcs → 0), so any
+NEW top-level function fails CI. **`py-top-level-side-effect`** — no import-time call statements (move them into
+a method / lazy-populate, as the registries do; `matplotlib.use()` exempt). Fix by refactoring, never a `# noqa`.
+Constants, `logger`, dataclasses, pydantic models, enums, and `nn.Module`/`Dataset` subclasses stay top-level —
+only plain `def`s move.
+
+### Duplication — jscpd gate (bd apl)
+
+`devtools/jscpd.json` (Node, run in CI + `nox -s dup`) — the DRY axis. **Blocks** when python duplication
+exceeds 1% (currently 0.7% after the runner boilerplate was DRY-extracted into `Cli.setup_logging` +
+`Riemann.cross_subject_decode`). Fix a regression by extracting the shared logic, not by raising the threshold —
+it ratchets **down** as dup settles. Genuinely-distinct-but-similar-shaped runners are left un-merged (don't
+over-couple to chase the number).
+
+### Local gate runners — nox + pre-commit (bd kvo/dno)
+
+`nox` (`noxfile.py`, `[devtools]` extra) reproduces the CI gate suite locally from one command: `nox` runs
+`lint` (ruff+vulture+import-linter+ast-grep) + `test` (pytest+coverage floor) + `fitness` (graph.py --assert);
+`nox -s dup` adds advisory jscpd. Sessions shell the SAME pinned tools CI uses, so local == CI.
+`.pre-commit-config.yaml` runs the fast static gates (all but test/coverage) before each commit — enable with
+`pre-commit install` (keep it separate from the beads `.beads/hooks/pre-commit`), or one-shot `pre-commit run
+--all-files`.

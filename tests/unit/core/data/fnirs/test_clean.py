@@ -3,7 +3,7 @@ shape/stateless contract, and the composite chain order."""
 import numpy as np
 import pytest
 
-from core.data.fnirs.clean import Cbsi, Chain, Detrend, make_cleaner
+from core.data.fnirs.clean import Cbsi, Chain, Clean, Detrend
 
 
 def _pair(hbo, hbr):
@@ -40,17 +40,17 @@ def test_detrend_kills_linear_drift():
 
 def test_chain_applies_in_order_and_is_leakage_free():
     X = np.random.default_rng(1).standard_normal((4, 6, 80))
-    chain = make_cleaner(["cbsi", "detrend"])
+    chain = Clean.make_cleaner(["cbsi", "detrend"])
     assert isinstance(chain, Chain) and len(chain.cleaners) == 2
     # fit is a no-op for stateless cleaners: fit-then-transform == transform (no state carried from data)
     a = chain.transform(X)
-    b = make_cleaner(["cbsi", "detrend"]).fit(X).transform(X)
+    b = Clean.make_cleaner(["cbsi", "detrend"]).fit(X).transform(X)
     assert np.allclose(a, b)
 
 
 def test_make_cleaner_single_none_and_bad():
-    assert make_cleaner(None) is None
-    assert make_cleaner([]) is None
-    assert len(make_cleaner("cbsi").cleaners) == 1
+    assert Clean.make_cleaner(None) is None
+    assert Clean.make_cleaner([]) is None
+    assert len(Clean.make_cleaner("cbsi").cleaners) == 1
     with pytest.raises(ValueError):
-        make_cleaner("nope")
+        Clean.make_cleaner("nope")

@@ -18,7 +18,8 @@ import logging
 import statistics
 from pathlib import Path
 
-from neuroscan.tasks.visual.train_nice import TrainConfig, train
+from neuroscan.tasks.cli import Cli
+from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
 
 logger = logging.getLogger(__name__)
 
@@ -26,38 +27,41 @@ _CFG_DIR = Path(__file__).parent / "configs"
 _ARMS = {"naive": "perception_naive.json", "optimized": "perception_optimized.json"}
 
 
-def _agg(runs: list[dict], metric: str, k: str) -> dict:
-    """mean/std of `runs[i][metric][k]` across seeds (metric = single_trial | concept_avg)."""
-    vals = [r[metric][k] for r in runs]
-    return {"mean": statistics.fmean(vals), "std": statistics.pstdev(vals) if len(vals) > 1 else 0.0,
-            "vals": vals}
+class SeedParity:
+    """Multi-seed parity test for the NICE perception recipe — the free helpers folded in as staticmethods
+    (public names kept). `run` trains both arms across seeds; `_agg` reduces the per-seed runs to mean/std."""
 
+    @staticmethod
+    def _agg(runs: list[dict], metric: str, k: str) -> dict:
+        """mean/std of `runs[i][metric][k]` across seeds (metric = single_trial | concept_avg)."""
+        vals = [r[metric][k] for r in runs]
+        return {"mean": statistics.fmean(vals), "std": statistics.pstdev(vals) if len(vals) > 1 else 0.0,
+                "vals": vals}
 
-def run(train_subjects: list[int], test_subject: int, seeds: list[int]) -> dict:
-    out: dict = {"train": train_subjects, "test": test_subject, "seeds": seeds, "arms": {}}
-    for arm, fname in _ARMS.items():
-        base = json.loads((_CFG_DIR / fname).read_text())
-        runs = []
-        for seed in seeds:
-            cfg = TrainConfig(**{**base, "seed": seed})
-            logger.info(f"[{arm}] seed {seed} — {fname}")
-            runs.append(train(train_subjects, test_subject, cfg))
-        out["arms"][arm] = {
-            "single_trial": {k: _agg(runs, "single_trial", k) for k in ("1", "5")},
-            "concept_avg": {k: _agg(runs, "concept_avg", k) for k in ("1", "5")},
+    @staticmethod
+    def run(train_subjects: list[int], test_subject: int, seeds: list[int]) -> dict:
+        out: dict = {"train": train_subjects, "test": test_subject, "seeds": seeds, "arms": {}}
+        for arm, fname in _ARMS.items():
+            base = json.loads((_CFG_DIR / fname).read_text())
+            runs = []
+            for seed in seeds:
+                cfg = TrainConfig(**{**base, "seed": seed})
+                logger.info(f"[{arm}] seed {seed} — {fname}")
+                runs.append(TrainNice.train(train_subjects, test_subject, cfg))
+            out["arms"][arm] = {
+                "single_trial": {k: SeedParity._agg(runs, "single_trial", k) for k in ("1", "5")},
+                "concept_avg": {k: SeedParity._agg(runs, "concept_avg", k) for k in ("1", "5")},
+            }
+        n, o = out["arms"]["naive"], out["arms"]["optimized"]
+        out["gap_naive_minus_optimized"] = {
+            "single_trial_top1": n["single_trial"]["1"]["mean"] - o["single_trial"]["1"]["mean"],
+            "concept_avg_top1": n["concept_avg"]["1"]["mean"] - o["concept_avg"]["1"]["mean"],
         }
-    n, o = out["arms"]["naive"], out["arms"]["optimized"]
-    out["gap_naive_minus_optimized"] = {
-        "single_trial_top1": n["single_trial"]["1"]["mean"] - o["single_trial"]["1"]["mean"],
-        "concept_avg_top1": n["concept_avg"]["1"]["mean"] - o["concept_avg"]["1"]["mean"],
-    }
-    return out
+        return out
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--train", type=int, nargs="+", default=[1, 2, 3, 4])
     ap.add_argument("--test", type=int, default=5)
@@ -65,7 +69,7 @@ def main():
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    result = run(args.train, args.test, args.seeds)
+    result = SeedParity.run(args.train, args.test, args.seeds)
     logger.info(json.dumps(result, indent=2))
     if args.out:
         Path(args.out).write_text(json.dumps(result, indent=2))

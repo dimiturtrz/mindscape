@@ -39,8 +39,8 @@ def _load_epochs(subject: int):
     from moabb.datasets import BNCI2014_001
     from moabb.paradigms import MotorImagery
 
-    from core.config import configure_moabb_download
-    configure_moabb_download()
+    from core.config import Config
+    Config.configure_moabb_download()
     para = MotorImagery(n_classes=N_CLASSES, fmin=PROC_BAND[0], fmax=PROC_BAND[1],
                         tmin=0.0, tmax=None, resample=SFREQ)
     ep, labels, _ = para.get_data(dataset=BNCI2014_001(), subjects=[subject], return_epochs=True)
@@ -142,9 +142,9 @@ def _predictions(subject: int):
     from core.data import store
     from core.data.eeg.base import CANONICAL_MI_NAMES, EpochCfg
 
-    meta = store.load("bnci2014_001", EpochCfg())
-    Xtr, ytr = store.gather(meta.filter(pl.col("subject") != str(subject)))
-    Xte, yte = store.gather(meta.filter(pl.col("subject") == str(subject)))
+    meta = store.Store.load("bnci2014_001", EpochCfg())
+    Xtr, ytr = store.Store.gather(meta.filter(pl.col("subject") != str(subject)))
+    Xte, yte = store.Store.gather(meta.filter(pl.col("subject") == str(subject)))
     clf = csp_lda.fit(Xtr, ytr)
     probs = np.asarray(csp_lda.score(clf, Xte))
     pred = probs.argmax(1)

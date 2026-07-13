@@ -13,10 +13,15 @@ import numpy as np
 from sklearn.model_selection import StratifiedGroupKFold
 
 
-def grouped_folds(F: np.ndarray, y: np.ndarray, groups: np.ndarray,
-                  seeds, k: int) -> Iterator[tuple[np.ndarray, np.ndarray]]:
-    """Yield `(train_idx, test_idx)` for each fold of each seeded StratifiedGroupKFold pass. Subject-grouped;
-    repeated over `seeds` to average out the split noise in the CV estimate."""
-    for seed in seeds:
-        sgkf = StratifiedGroupKFold(n_splits=k, shuffle=True, random_state=seed)
-        yield from sgkf.split(F, y, groups)
+class Cv:
+    """Shared subject-grouped fold generation for the fNIRS feature-importance studies (free helper folded in
+    as a staticmethod, public name kept)."""
+
+    @staticmethod
+    def grouped_folds(F: np.ndarray, y: np.ndarray, groups: np.ndarray,
+                      seeds, k: int) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+        """Yield `(train_idx, test_idx)` for each fold of each seeded StratifiedGroupKFold pass. Subject-grouped;
+        repeated over `seeds` to average out the split noise in the CV estimate."""
+        for seed in seeds:
+            sgkf = StratifiedGroupKFold(n_splits=k, shuffle=True, random_state=seed)
+            yield from sgkf.split(F, y, groups)

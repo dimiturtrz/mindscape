@@ -18,7 +18,7 @@ import polars as pl
 from moabb.paradigms import MotorImagery
 from pydantic import BaseModel
 
-from core.config import configure_moabb_download
+from core.config import Config
 
 CANONICAL_MI: dict[str, int] = {"left_hand": 0, "right_hand": 1, "feet": 2, "tongue": 3}
 
@@ -84,7 +84,7 @@ class MoabbMIAdapter:
         """Epoch the requested subjects -> (X[n,ch,t] float32, y[n] canonical int, meta polars frame).
 
         meta columns: subject, session, run (one row per epoch). Pulls downloads into <data>/raw."""
-        configure_moabb_download()
+        Config.configure_moabb_download()
 
         ds = self._dataset()
         paradigm = MotorImagery(n_classes=self.n_classes, fmin=cfg.fmin, fmax=cfg.fmax,

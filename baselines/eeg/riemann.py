@@ -26,7 +26,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import FunctionTransformer
 
 from baselines.base import Baseline
-from core.features import time_delay_embed
+from core.features import Covariance
 
 
 class _RiemannBaseline(Baseline):
@@ -90,7 +90,8 @@ class Acm(_RiemannBaseline):
         self.order, self.lag = order, lag
 
     def _build(self):
-        aug = FunctionTransformer(time_delay_embed, kw_args={"order": self.order, "lag": self.lag}, validate=False)
+        aug = FunctionTransformer(Covariance.time_delay_embed, kw_args={"order": self.order, "lag": self.lag},
+                                  validate=False)
         return make_pipeline(aug, _cov(self.estimator), *_tangent_lr())
 
 

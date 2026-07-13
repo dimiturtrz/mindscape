@@ -22,6 +22,7 @@ from core.data.fnirs import shin2017 as fnmod
 from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
 from neuroscan.evaluation import metrics
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -31,29 +32,31 @@ _SEEDS, _K = [0], 5          # 1 seed default (escalate-on-signal, bd); k-fold =
 _FNIRS_BASELINE_ACC = 0.595   # EEG best-single reference (0.580) + margin; beat it to claim fusion cashed a gain
 
 
-def _build_all():
-    me = store.load("shin2017_nback_eeg", _EEG_CFG)
-    mf = store.load("shin2017_nback", FnirsCfg(tmax=32.0))     # past _TEND so read-forward (τ+lag) fills the tail
-    subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
-    pos_e = bc.eeg_positions(eegmod.adapter().channels())
-    Xs, ys, gs = [], [], []
-    for s in subs:
-        Xe, ye = store.gather(me.filter(me["subject"] == s))
-        Xf, yf = store.gather(mf.filter(mf["subject"] == s))
-        assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
-        pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
-        Xs.append(bc.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=_GRID,
-                                  series=bc.SeriesConfig(fps=_FPS, t_end=_TEND)))
-        ys.append(ye)
-        gs.append(np.array([s] * len(ye)))
-    return np.concatenate(Xs), np.concatenate(ys), np.concatenate(gs)
+class FusionCameraEval:
+    """Brain-camera spatiotemporal fusion eval helpers — the free helpers folded in as staticmethods."""
+
+    @staticmethod
+    def _build_all():
+        me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
+        mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=32.0))     # past _TEND so read-forward (τ+lag) fills the tail
+        subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
+        pos_e = bc.EegMontage.eeg_positions(eegmod.Shin2017NbackEegAdapter.adapter().channels())
+        Xs, ys, gs = [], [], []
+        for s in subs:
+            Xe, ye = store.Store.gather(me.filter(me["subject"] == s))
+            Xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
+            assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
+            pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter()._subject_dir(int(s)))
+            Xs.append(bc.BrainCamera.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=_GRID,
+                                      series=bc.SeriesConfig(fps=_FPS, t_end=_TEND)))
+            ys.append(ye)
+            gs.append(np.array([s] * len(ye)))
+        return np.concatenate(Xs), np.concatenate(ys), np.concatenate(gs)
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
-    X, y, g = _build_all()
+    Cli.setup_logging()
+    X, y, g = FusionCameraEval._build_all()
     logger.info(f"brain-camera fusion · {X.shape[0]} blocks · {len(set(g))} subj · tensor {X.shape[1:]} · "
           f"grid {_GRID} fps {_FPS} lag derived/subj · chance {1/(y.max()+1):.3f}")
     accs, kaps = [], []
@@ -61,8 +64,8 @@ def main():
         for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(X, y, g):
             clf = BrainCameraNet(BrainCameraConfig(n_classes=int(y.max()) + 1, seed=seed)).fit(X[tr], y[tr])
             pred = clf.predict_proba(X[te]).argmax(1)
-            accs.append(metrics.accuracy(y[te], pred))
-            kaps.append(metrics.kappa(y[te], pred))
+            accs.append(metrics.Metrics.accuracy(y[te], pred))
+            kaps.append(metrics.Metrics.kappa(y[te], pred))
     a, k = float(np.mean(accs)), float(np.mean(kaps))
     logger.info(f"\n  brain-camera 3D-CNN · cross-subject {len(_SEEDS)}x{_K}-fold: acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
     logger.info("  reference (per-subject-z features -> LDA): best-single 0.580 · late 0.587 · feature 0.564 · oracle 0.752")

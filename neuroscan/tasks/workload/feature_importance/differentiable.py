@@ -36,8 +36,9 @@ from sklearn.model_selection import GroupShuffleSplit
 from core.config import REPO
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
-from core.features import extract_bank, family_names
-from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
+from core.features import DescriptorBank
+from neuroscan.tasks.cli import Cli
+from neuroscan.tasks.workload.feature_importance._cv import Cv
 
 logger = logging.getLogger(__name__)
 
@@ -87,70 +88,73 @@ class _SearchData:
     groups: np.ndarray
 
 
-def _fit(Xtr, ytr, spec: GroupSpec, lam, hp) -> WeightedLinear:
-    model = WeightedLinear(spec.group_idx, spec.n_groups, Xtr.shape[1], spec.n_classes).to(_DEV)
-    opt = torch.optim.Adam(model.parameters(), lr=hp["lr"], weight_decay=hp["weight_decay"])
-    Xt = torch.as_tensor(Xtr, dtype=torch.float32, device=_DEV)
-    yt = torch.as_tensor(ytr, dtype=torch.long, device=_DEV)
-    norm = math.log(max(spec.n_groups, 2))                       # normalise entropy by log K so lambda is
-    model.train()                                               # grain-invariant (same meaning at 15 or 1080 weights)
-    for _ in range(hp["epochs"]):
-        opt.zero_grad()
-        loss = F.cross_entropy(model(Xt), yt) + lam * model.entropy() / norm
-        loss.backward()
-        opt.step()
-    return model
+class Differentiable:
+    """The differentiable fNIRS feature-subset study helpers (free functions folded in as staticmethods,
+    public names kept)."""
 
+    @staticmethod
+    def _fit(Xtr, ytr, spec: GroupSpec, lam, hp) -> WeightedLinear:
+        model = WeightedLinear(spec.group_idx, spec.n_groups, Xtr.shape[1], spec.n_classes).to(_DEV)
+        opt = torch.optim.Adam(model.parameters(), lr=hp["lr"], weight_decay=hp["weight_decay"])
+        Xt = torch.as_tensor(Xtr, dtype=torch.float32, device=_DEV)
+        yt = torch.as_tensor(ytr, dtype=torch.long, device=_DEV)
+        norm = math.log(max(spec.n_groups, 2))                       # normalise entropy by log K so lambda is
+        model.train()                                               # grain-invariant (same meaning at 15 or 1080 weights)
+        for _ in range(hp["epochs"]):
+            opt.zero_grad()
+            loss = F.cross_entropy(model(Xt), yt) + lam * model.entropy() / norm
+            loss.backward()
+            opt.step()
+        return model
 
-@torch.no_grad()
-def _predict(model, X) -> np.ndarray:
-    model.eval()
-    return model(torch.as_tensor(X, dtype=torch.float32, device=_DEV)).argmax(1).cpu().numpy()
+    @staticmethod
+    @torch.no_grad()
+    def _predict(model, X) -> np.ndarray:
+        model.eval()
+        return model(torch.as_tensor(X, dtype=torch.float32, device=_DEV)).argmax(1).cpu().numpy()
 
+    @staticmethod
+    def _standardise(Xtr, Xte):
+        """Fit per-feature standardisation on TRAIN, apply to both (no leakage) — the weights act on unit-scale
+        features so raw-scale differences between metrics don't bias the weighting."""
+        mu, sd = Xtr.mean(0), Xtr.std(0) + 1e-8
+        return (Xtr - mu) / sd, (Xte - mu) / sd
 
-def _standardise(Xtr, Xte):
-    """Fit per-feature standardisation on TRAIN, apply to both (no leakage) — the weights act on unit-scale
-    features so raw-scale differences between metrics don't bias the weighting."""
-    mu, sd = Xtr.mean(0), Xtr.std(0) + 1e-8
-    return (Xtr - mu) / sd, (Xte - mu) / sd
+    @staticmethod
+    def _cv_acc(data: _SearchData, spec: GroupSpec, lam, hp):
+        """Mean CV accuracy at this lambda, over repeated seeded StratifiedGroupKFold (subject-grouped)."""
+        accs = []
+        for tr, te in Cv.grouped_folds(data.F, data.y, data.groups, hp["fold_seeds"], hp["k"]):
+            Xtr, Xte = Differentiable._standardise(data.F[tr], data.F[te])
+            m = Differentiable._fit(Xtr, data.y[tr], spec, lam, hp)
+            accs.append(float((Differentiable._predict(m, Xte) == data.y[te]).mean()))
+        return float(np.mean(accs))
 
+    @staticmethod
+    def _effective_n(w: np.ndarray) -> float:
+        p = w[w > _EPS]
+        return float(np.exp(-(p * np.log(p)).sum()))
 
-def _cv_acc(data: _SearchData, spec: GroupSpec, lam, hp):
-    """Mean CV accuracy at this lambda, over repeated seeded StratifiedGroupKFold (subject-grouped)."""
-    accs = []
-    for tr, te in grouped_folds(data.F, data.y, data.groups, hp["fold_seeds"], hp["k"]):
-        Xtr, Xte = _standardise(data.F[tr], data.F[te])
-        m = _fit(Xtr, data.y[tr], spec, lam, hp)
-        accs.append(float((_predict(m, Xte) == data.y[te]).mean()))
-    return float(np.mean(accs))
+    @staticmethod
+    def _knee(points):
+        """Utopia-corner knee of the (acc, eff_n) sweep: closest to high-acc / low-eff_n."""
+        acc = np.array([p["acc"] for p in points])
+        en = np.array([p["eff_n"] for p in points])
+        an = (acc - acc.min()) / (np.ptp(acc) + 1e-9)
+        en_ = (en - en.min()) / (np.ptp(en) + 1e-9)
+        return points[int(np.hypot(1 - an, en_).argmin())]
 
-
-def _effective_n(w: np.ndarray) -> float:
-    p = w[w > _EPS]
-    return float(np.exp(-(p * np.log(p)).sum()))
-
-
-def _knee(points):
-    """Utopia-corner knee of the (acc, eff_n) sweep: closest to high-acc / low-eff_n."""
-    acc = np.array([p["acc"] for p in points])
-    en = np.array([p["eff_n"] for p in points])
-    an = (acc - acc.min()) / (np.ptp(acc) + 1e-9)
-    en_ = (en - en.min()) / (np.ptp(en) + 1e-9)
-    return points[int(np.hypot(1 - an, en_).argmin())]
-
-
-def _family_weights(w, group_idx_np, families, grain):
-    """Report weights per family: identity for grain=family, else sum the column weights within each family."""
-    if grain == "family":
-        return {f: float(w[i]) for i, f in enumerate(families)}
-    ch = len(group_idx_np) // len(families)
-    return {f: float(w[i * ch:(i + 1) * ch].sum()) for i, f in enumerate(families)}
+    @staticmethod
+    def _family_weights(w, group_idx_np, families, grain):
+        """Report weights per family: identity for grain=family, else sum the column weights within each family."""
+        if grain == "family":
+            return {f: float(w[i]) for i, f in enumerate(families)}
+        ch = len(group_idx_np) // len(families)
+        return {f: float(w[i * ch:(i + 1) * ch].sum()) for i, f in enumerate(families)}
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", default=None, help="study config (default: subset.yaml beside this module)")
     ap.add_argument("--grain", default=None, choices=["family", "channel"])
@@ -161,11 +165,11 @@ def main():
     hp = {"lr": cfg.lr, "weight_decay": cfg.weight_decay, "epochs": cfg.epochs,
           "k": cfg.k, "fold_seeds": list(cfg.fold_seeds)}
 
-    meta = store.load(cfg.dataset, FnirsCfg())
-    X, y = store.gather(meta)
+    meta = store.Store.load(cfg.dataset, FnirsCfg())
+    X, y = store.Store.gather(meta)
     groups = meta["subject"].to_numpy()
-    Fb, fam = extract_bank(X)
-    families = family_names()
+    Fb, fam = DescriptorBank.extract_bank(X)
+    families = DescriptorBank.family_names()
     n_classes = int(y.max()) + 1
 
     # weight-group per column: family id (grain=family) or the column itself (grain=channel)
@@ -185,21 +189,21 @@ def main():
 
     sweep = []
     for lam in cfg.lambdas:
-        acc = _cv_acc(search, spec, float(lam), hp)
-        Fs_std, _ = _standardise(Fs, Fs)                          # weights read from a full-search fit
-        w_full = _fit(Fs_std, ys, spec, float(lam), hp)
+        acc = Differentiable._cv_acc(search, spec, float(lam), hp)
+        Fs_std, _ = Differentiable._standardise(Fs, Fs)           # weights read from a full-search fit
+        w_full = Differentiable._fit(Fs_std, ys, spec, float(lam), hp)
         w = w_full.weights().detach().cpu().numpy()
-        fw = _family_weights(w, gi_np, families, grain)
-        sweep.append({"lam": float(lam), "acc": acc, "eff_n": _effective_n(w), "family_weights": fw})
+        fw = Differentiable._family_weights(w, gi_np, families, grain)
+        sweep.append({"lam": float(lam), "acc": acc, "eff_n": Differentiable._effective_n(w), "family_weights": fw})
         top = sorted(fw.items(), key=lambda kv: -kv[1])[:4]
         logger.info(f"  λ={float(lam):<5} acc {acc:.3f} · eff-#feat {sweep[-1]['eff_n']:.2f} · "
               f"top {[(f, round(v, 2)) for f, v in top]}")
 
-    knee = _knee(sweep)
+    knee = Differentiable._knee(sweep)
     # leakage-free: refit at the knee lambda on ALL search subjects, score the sealed holdout
-    Xtr, Xte = _standardise(Fs, Fb[seal_idx])
-    m = _fit(Xtr, ys, spec, knee["lam"], hp)
-    sealed = float((_predict(m, Xte) == y[seal_idx]).mean())
+    Xtr, Xte = Differentiable._standardise(Fs, Fb[seal_idx])
+    m = Differentiable._fit(Xtr, ys, spec, knee["lam"], hp)
+    sealed = float((Differentiable._predict(m, Xte) == y[seal_idx]).mean())
     kept = {f: round(v, 3) for f, v in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1]) if v > _KEEP_WEIGHT_MIN}
     logger.info(f"\nknee λ={knee['lam']}: eff-#feat {knee['eff_n']:.2f} · search-acc {knee['acc']:.3f} (optimistic) "
           f"· SEALED-acc {sealed:.3f} (unbiased)")

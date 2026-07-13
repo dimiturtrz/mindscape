@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from baselines.eeg import riemann
-from core.features import recenter_covariances
+from core.features import Covariance
 
 
 def _cov_dataset(n_per_class=40, n_ch=4, n_t=128, seed=0):
@@ -49,5 +49,5 @@ def test_recenter_makes_domain_mean_identity():
     shift = (lambda A: A @ A.T + 4 * np.eye(4))(rng.normal(size=(4, 4)))   # an SPD location far from I
     C = np.stack([shift @ (B @ B.T / 8) @ shift                            # covs centered away from I
                   for B in rng.normal(size=(30, 4, 8))])
-    M = mean_riemann(recenter_covariances(C))
+    M = mean_riemann(Covariance.recenter_covariances(C))
     assert np.allclose(M, np.eye(4), atol=1e-4)

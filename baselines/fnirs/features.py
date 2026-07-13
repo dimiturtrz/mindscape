@@ -21,12 +21,12 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from baselines.base import Baseline
-from core.features import amplitude_features
+from core.features import Amplitude
 
 
 class FnirsLda(Baseline):
     """Per-channel mean+slope+peak features -> StandardScaler -> shrinkage-LDA (the fNIRS-BCI workhorse).
-    The fitted pipeline lives on `self.pipe_`; features are `core.features.amplitude_features`."""
+    The fitted pipeline lives on `self.pipe_`; features are `core.features.Amplitude.amplitude_features`."""
 
     def _build(self):
         return make_pipeline(StandardScaler(),
@@ -34,11 +34,11 @@ class FnirsLda(Baseline):
 
     def fit(self, X, y):
         self.pipe_ = self._build()
-        self.pipe_.fit(amplitude_features(X), y)
+        self.pipe_.fit(Amplitude.amplitude_features(X), y)
         return self
 
     def predict_proba(self, X):
-        return self.pipe_.predict_proba(amplitude_features(X))
+        return self.pipe_.predict_proba(Amplitude.amplitude_features(X))
 
 
 def fit(X: np.ndarray, y: np.ndarray) -> Baseline:

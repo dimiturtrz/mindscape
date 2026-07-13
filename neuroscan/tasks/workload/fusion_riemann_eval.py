@@ -26,6 +26,7 @@ from core.data.fnirs import shin2017 as fnmod
 from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
 from neuroscan.evaluation import metrics
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -36,37 +37,39 @@ _CSD = True                                        # surface-Laplacian deblur of
 _FNIRS_BASELINE_ACC = 0.595                        # EEG-only re-centered Riemann reference (0.580) + margin
 
 
-def _cov(X):
-    return Covariances("oas").transform(X.astype(np.float64))
+class FusionRiemannEval:
+    """Brain-camera fusion Riemann-eval helpers — the free helpers folded in as staticmethods."""
 
+    @staticmethod
+    def _cov(X):
+        return Covariances("oas").transform(X.astype(np.float64))
 
-def _build_all(band="sum"):
-    me = store.load("shin2017_nback_eeg", _EEG_CFG)
-    mf = store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))
-    subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
-    ch_e = eegmod.adapter().channels()
-    pos_e = bc.eeg_positions(ch_e)
-    Cs, ys, gs = [], [], []
-    for s in subs:
-        Xe, ye = store.gather(me.filter(me["subject"] == s))
-        Xf, yf = store.gather(mf.filter(mf["subject"] == s))
-        assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
-        if _CSD:
-            Xe = bc.csd_transform(Xe, ch_e, 100.0)                     # spatial deblur before fusion
-        pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
-        joint, _ = bc.fused_node_series(bc.PairedModalities(Xe, Xf, pos_e, pos_f), band=band,
-                                        series=bc.SeriesConfig(fps=_FPS, t_end=_TEND))
-        Cs.append(_cov(joint))
-        ys.append(ye)
-        gs.append(np.array([s] * len(ye)))
-    return np.concatenate(Cs), np.concatenate(ys), np.concatenate(gs)
+    @staticmethod
+    def _build_all(band="sum"):
+        me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
+        mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))
+        subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
+        ch_e = eegmod.Shin2017NbackEegAdapter.adapter().channels()
+        pos_e = bc.EegMontage.eeg_positions(ch_e)
+        Cs, ys, gs = [], [], []
+        for s in subs:
+            Xe, ye = store.Store.gather(me.filter(me["subject"] == s))
+            Xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
+            assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
+            if _CSD:
+                Xe = bc.CSD.csd_transform(Xe, ch_e, 100.0)                 # spatial deblur before fusion
+            pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter()._subject_dir(int(s)))
+            joint, _ = bc.BrainCamera.fused_node_series(bc.PairedModalities(Xe, Xf, pos_e, pos_f), band=band,
+                                                        series=bc.SeriesConfig(fps=_FPS, t_end=_TEND))
+            Cs.append(FusionRiemannEval._cov(joint))
+            ys.append(ye)
+            gs.append(np.array([s] * len(ye)))
+        return np.concatenate(Cs), np.concatenate(ys), np.concatenate(gs)
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
-    C, y, g = _build_all()
+    Cli.setup_logging()
+    C, y, g = FusionRiemannEval._build_all()
     logger.info(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
     accs, kaps = [], []
     for seed in _SEEDS:
@@ -75,8 +78,8 @@ def main():
             proba = transfer.zero_shot_predict(transfer.Domain(C[tr], y[tr], g[tr]),
                                                transfer.Domain(C[te], groups=g[te]), scale=False)
             pred = proba.argmax(1)
-            accs.append(metrics.accuracy(y[te], pred))
-            kaps.append(metrics.kappa(y[te], pred))
+            accs.append(metrics.Metrics.accuracy(y[te], pred))
+            kaps.append(metrics.Metrics.kappa(y[te], pred))
     a, k = float(np.mean(accs)), float(np.mean(kaps))
     logger.info(f"\n  fused-only (joint EEG×fNIRS×coverage) · re-centered tangent · cross-subject {len(_SEEDS)}x{_K}-fold: "
           f"acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")

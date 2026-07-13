@@ -24,6 +24,7 @@ from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -32,33 +33,35 @@ _BETA = (13.0, 30.0)                                 # β power ~ the (de)synchr
 _LAG_STABLE_STD_S = 2                                # per-subject lag std (s) below which the coupling fit is STABLE
 
 
-def _global_series(subject_frames):
-    """Whole-head-mean EEG-β envelope + zero-lag fNIRS CBSI per block, on the shared grid -> `[n, T]` each."""
-    t_dst = np.arange(0, _TEND, 1.0 / _FPS)
-    drives, resps, groups = [], [], []
-    for s, (Xe, Xf) in subject_frames:
-        ch_f = Xf.shape[1] // 2
-        te = np.arange(Xe.shape[2]) / _FS_E
-        beta = bc._resample_time(bc._band_env(Xe, _FS_E, _BETA), te, t_dst).mean(1)          # [n, T]
-        tf = _TMIN_F + np.arange(Xf.shape[2]) / _FS_F
-        cbsi = bc.cbsi_neural(bc._resample_time(Xf[:, :ch_f, :], tf, t_dst),
-                              bc._resample_time(Xf[:, ch_f:, :], tf, t_dst)).mean(1)          # [n, T]
-        drives.append(beta)
-        resps.append(cbsi)
-        groups.append([s] * len(beta))
-    return drives, resps, groups
+class CouplingProbe:
+    """EEG->blood coupling-lag probe helpers — the free helpers folded in as staticmethods."""
+
+    @staticmethod
+    def _global_series(subject_frames):
+        """Whole-head-mean EEG-β envelope + zero-lag fNIRS CBSI per block, on the shared grid -> `[n, T]` each."""
+        t_dst = np.arange(0, _TEND, 1.0 / _FPS)
+        drives, resps, groups = [], [], []
+        for s, (Xe, Xf) in subject_frames:
+            ch_f = Xf.shape[1] // 2
+            te = np.arange(Xe.shape[2]) / _FS_E
+            beta = bc.Series._resample_time(bc.Series._band_env(Xe, _FS_E, _BETA), te, t_dst).mean(1)   # [n, T]
+            tf = _TMIN_F + np.arange(Xf.shape[2]) / _FS_F
+            cbsi = bc.Chromophore.cbsi_neural(bc.Series._resample_time(Xf[:, :ch_f, :], tf, t_dst),
+                                              bc.Series._resample_time(Xf[:, ch_f:, :], tf, t_dst)).mean(1)   # [n, T]
+            drives.append(beta)
+            resps.append(cbsi)
+            groups.append([s] * len(beta))
+        return drives, resps, groups
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
-    me = store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
-    mf = store.load("shin2017_nback", FnirsCfg())
+    Cli.setup_logging()
+    me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
+    mf = store.Store.load("shin2017_nback", FnirsCfg())
     subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
-    frames = [(s, (store.gather(me.filter(me["subject"] == s))[0], store.gather(mf.filter(mf["subject"] == s))[0]))
+    frames = [(s, (store.Store.gather(me.filter(me["subject"] == s))[0], store.Store.gather(mf.filter(mf["subject"] == s))[0]))
               for s in subs]
-    drives, resps, _ = _global_series(frames)
+    drives, resps, _ = CouplingProbe._global_series(frames)
     D, R = np.concatenate(drives), np.concatenate(resps)
     logger.info(f"pooled n={D.shape[0]} blocks · {len(subs)} subjects")
 
@@ -73,9 +76,9 @@ def main():
         dz = (d - d.mean(1, keepdims=True)) / (d.std(1, keepdims=True) + 1e-9)
         logger.info(f"  {sh:2d}   {float((dz * Rz).mean(1).mean()):+.3f}")
 
-    lag, decay, beta = bc.estimate_coupling(D, R, _FPS)
+    lag, decay, beta = bc.Coupling.estimate_coupling(D, R, _FPS)
     logger.info(f"\nPOOLED gamma fit: lag {lag:.1f}s · decay {decay:.2f}s · β {beta:.2g}")
-    per = np.array([bc.estimate_coupling(dv, rp, _FPS)[0] for dv, rp in zip(drives, resps, strict=True)])
+    per = np.array([bc.Coupling.estimate_coupling(dv, rp, _FPS)[0] for dv, rp in zip(drives, resps, strict=True)])
     logger.info(f"per-subject lag: mean {per.mean():.1f}s · std {per.std():.1f}s · range [{per.min():.1f}, {per.max():.1f}] "
           f"-> {'STABLE' if per.std() < _LAG_STABLE_STD_S else 'UNSTABLE (pool instead)'}")
 

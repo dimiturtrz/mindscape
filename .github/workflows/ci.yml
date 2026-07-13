@@ -20,8 +20,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - name: Install dependencies (locked, + dev extra for pytest + coverage)
-        run: uv sync --frozen --extra dev
+      - name: Install dependencies (locked, + dev extra for pytest + coverage, + devtools for arch-fitness)
+        run: uv sync --frozen --extra dev --extra devtools
       # One instrumented run = the test gate AND the coverage data. Config (source/omit/exclude) lives in
       # [tool.coverage.*] — denominator is library LOGIC, not filesystem/mlflow/libs/downloads/GPU shells.
       - name: Unit tests + coverage (tests block)
@@ -36,6 +36,18 @@ jobs:
       # not the target. Ratchet the floor up deliberately as coverage settles higher.
       - name: Coverage floor — enforced (>=80, blocks)
         run: uv run coverage report --fail-under=80
+      # Advisory reach target (bd jmy — superset parity with cardiac-seg/synthscape): warn (never block) below
+      # 95% so the gap between the enforced floor and the aspiration stays visible; ratchet the ENFORCED floor
+      # up toward it deliberately, don't relax it.
+      - name: Coverage target — advisory (>=95, warns)
+        if: always()
+        run: uv run coverage report --fail-under=95 || true
+      # Architecture fitness (bd 3nn): the METRIC arch axis import-linter's categorical layer contracts can't
+      # express — god-module (fan-in AND fan-out both >8) / import-cycle / god-file (>750 lines) BLOCK;
+      # line-floor / betweenness-chokepoint / test-mirror are advisory (logged, never block). Needs the devtools
+      # extra (grimp+networkx). Thresholds in [tool.structure]; clean today, ratchets only tighter.
+      - name: Architecture fitness — enforced (graph.py --assert)
+        run: uv run python -m devtools.graph --assert
 
   # Static-analysis ratchet (bd mindscape-y63): the two axes that don't need the test env — ruff (style/bugs)
   # + vulture (dead code). ENFORCED steps block on the graduated ruff families + vulture conf>=80; ADVISORY
@@ -63,6 +75,21 @@ jobs:
       # grimp parses ASTs statically — no project install needed. Contracts live in [tool.importlinter].
       - name: Import layers — enforced (import-linter)
         run: uvx --from import-linter lint-imports
+      # Semantic module-shape (bd ylq) — the AST axis ruff's token rules can't express. Two rules
+      # (devtools/sg-rules/): py-top-level-function (everything is a method — the owner's everything-in-a-class
+      # house rule; `main` exempt) + py-top-level-side-effect (no import-time calls). ENFORCED: severity error
+      # -> nonzero exit blocks. The whole core+neuroscan tree was migrated to 0 violations.
+      - name: Module shape — enforced (ast-grep)
+        run: uvx --from ast-grep-cli ast-grep scan -c devtools/sgconfig.yml core neuroscan
+      # Duplication (bd apl) — the DRY axis token/dead-code linters can't see. ENFORCED: the class-extraction
+      # refactor (bd ylq) settled the runner boilerplate and it was DRY-extracted (Cli.setup_logging,
+      # Riemann.cross_subject_decode) to 0.7% < the 1% threshold, so jscpd now BLOCKS (nonzero exit) as a DRY
+      # regression guard. Config + ignore/threshold in devtools/jscpd.json; paths on the CLI.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Duplication — enforced (jscpd, blocks >1%)
+        run: npx --yes jscpd@4 core neuroscan --config devtools/jscpd.json
       - name: Dead code — advisory (vulture conf>=60, warns)
         if: always()
         run: |

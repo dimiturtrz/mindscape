@@ -22,14 +22,13 @@ from core.data.eeg.braindecode_pre import BraindecodePreConfig
 from neuroscan import tracking
 from neuroscan.evaluation import metrics
 from neuroscan.models import decoders
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--method", default="atcnet", choices=sorted(decoders.MODELS))
     ap.add_argument("--subjects", type=int, nargs="*", default=None)
@@ -46,11 +45,11 @@ def main():
     # none:   continuous EMS applied in preprocessing, trainer passes through.
     use_ems = args.standardize == "none"
     logger.info(f"preprocessing ({'continuous EMS' if use_ems else 'bandpass uV + z-score'}) {args.method} ...")
-    X, y, meta = braindecode_pre.get_data("BNCI2014_001", subjects=args.subjects,
+    X, y, meta = braindecode_pre.BraindecodePre.get_data("BNCI2014_001", subjects=args.subjects,
                                           config=BraindecodePreConfig(ems=use_ems))
     logger.info(f"X {X.shape} · sessions {sorted(meta['session'].unique().to_list())}")
 
-    fit, _ = decoders.make(args.method)
+    fit, _ = decoders.BraindecodeClf.make(args.method)
     rows, models = [], []
     for s in sorted(meta["subject"].unique().to_list()):
         idx = (meta["subject"] == s).to_numpy()
@@ -63,8 +62,8 @@ def main():
             clf = fit(Xs[tr], ys[tr], standardize=args.standardize, crop_frac=None, batch=args.batch,
                       epochs=args.epochs, patience=args.patience, log_every=0, seed=seed)
             pred = clf.predict_proba(Xs[te]).argmax(1)
-            accs.append(metrics.accuracy(ys[te], pred))
-            kaps.append(metrics.kappa(ys[te], pred))
+            accs.append(metrics.Metrics.accuracy(ys[te], pred))
+            kaps.append(metrics.Metrics.kappa(ys[te], pred))
         models.append((str(s), clf))                      # keep the last-seed model per subject to persist
         r = {"subject": str(s), "acc": float(np.mean(accs)), "kappa": float(np.mean(kaps)),
              "acc_std": float(np.std(accs)), "seeds": args.seeds, "n": int(te.sum())}
@@ -83,15 +82,15 @@ def main():
               "batch": args.batch, "seeds": args.seeds, "acc_mean": acc, "kappa_mean": kap,
               "per_subject": rows}
     (out / f"{args.method}.json").write_text(json.dumps(report, indent=2))
-    with tracking.run("mindscape", f"reproduce_{args.method}",
+    with tracking.Tracking.run("mindscape", f"reproduce_{args.method}",
                       params={"method": args.method, "standardize": args.standardize,
                               "batch": args.batch, "epochs": args.epochs, "seeds": args.seeds},
                       tags={"kind": "reproduction"}, run_dir=out):
-        tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
-        tracking.per_group("acc_subject", {r["subject"]: r["acc"] for r in rows})
-        tracking.artifact(out / f"{args.method}.json")
+        tracking.Tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
+        tracking.Tracking.per_group("acc_subject", {r["subject"]: r["acc"] for r in rows})
+        tracking.Tracking.artifact(out / f"{args.method}.json")
         for subj, clf in models:                          # persist the trained net per subject
-            tracking.save_model(clf, f"model_{args.method}_s{subj}", run_dir=out)
+            tracking.Tracking.save_model(clf, f"model_{args.method}_s{subj}", run_dir=out)
     logger.info(f"-> {out}/{args.method}.json")
 
 

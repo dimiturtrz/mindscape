@@ -22,9 +22,9 @@ def test_onnx_export_parity_gate(tmp_path):
 
     net = _tiny_net()
     X = np.random.RandomState(0).randn(5, 8, 128).astype(np.float32)
-    path = export_onnx.export(net, 8, 128, tmp_path / "m.onnx", device="cpu")
+    path = export_onnx.OnnxExport.export(net, 8, 128, tmp_path / "m.onnx", device="cpu")
     assert path.exists()
-    gap = export_onnx.parity(net, path, X, device="cpu")
+    gap = export_onnx.OnnxExport.parity(net, path, X, device="cpu")
     assert gap < 1e-3, f"ONNX parity failed: {gap:.2e}"
 
 
@@ -33,8 +33,8 @@ def test_onnx_run_shape(tmp_path):
 
     net = _tiny_net()
     X = np.random.RandomState(1).randn(3, 8, 128).astype(np.float32)
-    path = export_onnx.export(net, 8, 128, tmp_path / "m.onnx", device="cpu")
-    logits = export_onnx.run(path, X)
+    path = export_onnx.OnnxExport.export(net, 8, 128, tmp_path / "m.onnx", device="cpu")
+    logits = export_onnx.OnnxExport.run(path, X)
     assert logits.shape == (3, 2)
 
 
@@ -43,11 +43,11 @@ def test_int8_quant_runs_if_supported(tmp_path):
 
     net = _tiny_net()
     X = np.random.RandomState(2).randn(4, 8, 128).astype(np.float32)
-    fp32 = export_onnx.export(net, 8, 128, tmp_path / "m.onnx", device="cpu")
+    fp32 = export_onnx.OnnxExport.export(net, 8, 128, tmp_path / "m.onnx", device="cpu")
     try:
-        int8 = export_onnx.quantize_int8(fp32, tmp_path / "m_int8.onnx")
+        int8 = export_onnx.OnnxExport.quantize_int8(fp32, tmp_path / "m_int8.onnx")
     except Exception as e:                      # tiny-net quantizer quirks are not a correctness gate
         pytest.skip(f"int8 quantization unsupported for this net: {e}")
     assert int8.exists()
-    assert export_onnx.run(int8, X).shape == (4, 2)
-    assert export_onnx.file_mb(int8) > 0
+    assert export_onnx.OnnxExport.run(int8, X).shape == (4, 2)
+    assert export_onnx.OnnxExport.file_mb(int8) > 0

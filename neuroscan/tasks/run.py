@@ -21,19 +21,19 @@ import json
 import logging
 from pathlib import Path
 
-from core import config, reference
+from core import config
 from core.data import store
 from core.data.eeg.base import EpochCfg
+from core.reference import Reference
 from neuroscan import models
 from neuroscan.evaluation import harness, modelcard, results
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--exp", default="mi_csp_within",
                     help="named experiment in experiments.yaml (see that file for the list)")
@@ -47,14 +47,14 @@ def main():
     exp = config.load_experiment(args.exp, args.overrides)
     dataset, method, regime = exp.dataset, exp.method, exp.regime
     cfg = EpochCfg(**exp.recipe)
-    meta = store.load(dataset, cfg)
+    meta = store.Store.load(dataset, cfg)
     n_classes = int(meta["label_id"].max()) + 1                  # derived from data, not assumed 4-class
     logger.info(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · {n_classes} classes · "
           f"sessions {sorted(meta['session'].unique().to_list())} · recipe {cfg.key()}")
 
     test_sessions = [exp.test_session] if (regime == "within" and exp.test_session) else ()
-    folds = harness.folds_for(meta, regime, test_sessions=test_sessions)
-    fit_fn, score_fn = models.get_method(method, fs=cfg.resample)
+    folds = harness.Harness.folds_for(meta, regime, test_sessions=test_sessions)
+    fit_fn, score_fn = models.Methods.get_method(method, fs=cfg.resample)
 
     run_dir = Path(args.out) if args.out else Path("runs") / f"{method}_{regime}_{dataset}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -63,7 +63,7 @@ def main():
     n_jobs = -1 if method in {"csp_lda", "riemann", "riemann_acm", "fnirs_lda"} else 1
     logger.info(f"\n=== {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
     method_obj = harness.Method(method, fit_fn, score_fn, n_classes, regime)
-    res = harness.run(method_obj, folds, n_jobs=n_jobs,
+    res = harness.Harness.run(method_obj, folds, n_jobs=n_jobs,
                       tracking_cfg=harness.TrackConfig(
                           params={"exp": args.exp, "method": method, "regime": regime,
                                   "dataset": dataset, "resample": cfg.resample},
@@ -71,13 +71,13 @@ def main():
 
     out = run_dir / "aggregate.json"
     out.write_text(json.dumps(res, indent=2))
-    modelcard.write(res, dataset, regime, run_dir / "CARD.md")
-    if not args.no_record and results.record(run_dir):
+    modelcard.ModelCard.write(res, dataset, regime, run_dir / "CARD.md")
+    if not args.no_record and results.Results.record(run_dir):
         logger.info(f"   recorded -> results.json ({run_dir.name})")
     ref_regime = "within_subject" if regime == "within" else "cross_subject"
     logger.info(f"\nfold-mean acc {res['fold_mean']['acc']:.3f} | pooled acc {res['pooled']['acc']:.3f} "
           f"| ece {res['fold_mean']['ece']:.3f}  (chance {1.0 / n_classes:.3f})")
-    logger.info("  vs reference: " + reference.compare(res["fold_mean"]["acc"], dataset, ref_regime, method))
+    logger.info("  vs reference: " + Reference.compare(res["fold_mean"]["acc"], dataset, ref_regime, method))
     logger.info(f"-> {out}")
 
 

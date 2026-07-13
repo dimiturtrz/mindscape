@@ -15,9 +15,9 @@ import logging
 import numpy as np
 from scipy.signal import fftconvolve
 
-from core.data.fnirs.synthetic import SynthConfig, double_gamma_hrf, synthesize_paired
-from core.features.fnirs.chromophore import cbsi_neural
-from core.features.fusion.coupling import estimate_coupling
+from core.data.fnirs.synthetic import SynthConfig, Synthetic
+from core.features.fnirs.chromophore import Chromophore
+from core.features.fusion.coupling import Coupling
 
 logger = logging.getLogger(__name__)
 
@@ -26,32 +26,36 @@ _MIN_CORR = 0.9                 # CBSI must track the true neural response this 
 _LAG_WINDOW = (2.0, 9.0)        # recovered lag must sit in this physiological window (around the 6 s HRF peak)
 
 
-def run(n_seeds: int = 5) -> dict:
-    """Recover CBSI-vs-neural correlation + coupling lag/sign across seeds against the synthetic ground truth."""
-    cfg = SynthConfig()
-    hrf = double_gamma_hrf(_FS, cfg)
-    com = float((np.arange(len(hrf)) * hrf).sum() / hrf.sum() / _FS)
-    corrs, lags, signs = [], [], []
-    for seed in range(n_seeds):
-        rng = np.random.default_rng(seed)
-        drive = np.zeros((1, 2000))
-        for s in rng.integers(0, 1900, 25):
-            drive[0, s:s + rng.integers(20, 60)] += 1.0
-        hbo, hbr = synthesize_paired(drive, _FS, cfg, seed=seed + 100)
-        cbsi = cbsi_neural(hbo[:, None, :], hbr[:, None, :])[:, 0, :]
-        true_resp = fftconvolve(drive, hrf[None, :], axes=1)[:, :drive.shape[1]]
-        corrs.append(float(np.corrcoef(cbsi[0], true_resp[0])[0, 1]))
-        lag, _decay, beta = estimate_coupling(drive, cbsi, _FS)
-        lags.append(lag)
-        signs.append(beta > 0)
-    return {"hrf_com_s": com, "cbsi_corr_mean": float(np.mean(corrs)),
-            "lag_mean_s": float(np.mean(lags)), "lag_std_s": float(np.std(lags)),
-            "sign_positive_frac": float(np.mean(signs))}
+class ValidateCoupling:
+    """Coupling-extraction ground-truth check helpers (bd uqw) — the free helpers folded in as staticmethods."""
+
+    @staticmethod
+    def run(n_seeds: int = 5) -> dict:
+        """Recover CBSI-vs-neural correlation + coupling lag/sign across seeds against the synthetic ground truth."""
+        cfg = SynthConfig()
+        hrf = Synthetic.double_gamma_hrf(_FS, cfg)
+        com = float((np.arange(len(hrf)) * hrf).sum() / hrf.sum() / _FS)
+        corrs, lags, signs = [], [], []
+        for seed in range(n_seeds):
+            rng = np.random.default_rng(seed)
+            drive = np.zeros((1, 2000))
+            for s in rng.integers(0, 1900, 25):
+                drive[0, s:s + rng.integers(20, 60)] += 1.0
+            hbo, hbr = Synthetic.synthesize_paired(drive, _FS, cfg, seed=seed + 100)
+            cbsi = Chromophore.cbsi_neural(hbo[:, None, :], hbr[:, None, :])[:, 0, :]
+            true_resp = fftconvolve(drive, hrf[None, :], axes=1)[:, :drive.shape[1]]
+            corrs.append(float(np.corrcoef(cbsi[0], true_resp[0])[0, 1]))
+            lag, _decay, beta = Coupling.estimate_coupling(drive, cbsi, _FS)
+            lags.append(lag)
+            signs.append(beta > 0)
+        return {"hrf_com_s": com, "cbsi_corr_mean": float(np.mean(corrs)),
+                "lag_mean_s": float(np.mean(lags)), "lag_std_s": float(np.std(lags)),
+                "sign_positive_frac": float(np.mean(signs))}
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    r = run()
+    r = ValidateCoupling.run()
     logger.info("coupling ground-truth validation (independent double-gamma forward):")
     logger.info(f"  CBSI vs true neural   : corr {r['cbsi_corr_mean']:.3f}  (separates neural from systemic)")
     logger.info(f"  estimate_coupling lag : {r['lag_mean_s']:.2f} ± {r['lag_std_s']:.2f} s "
