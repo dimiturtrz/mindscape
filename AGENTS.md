@@ -133,3 +133,12 @@ a method / lazy-populate, as the registries do; `matplotlib.use()` exempt). Fix 
 Constants, `logger`, dataclasses, pydantic models, enums, and `nn.Module`/`Dataset` subclasses stay top-level —
 only plain `def`s move.
 
+### Local gate runners — nox + pre-commit (bd kvo/dno)
+
+`nox` (`noxfile.py`, `[devtools]` extra) reproduces the CI gate suite locally from one command: `nox` runs
+`lint` (ruff+vulture+import-linter+ast-grep) + `test` (pytest+coverage floor) + `fitness` (graph.py --assert);
+`nox -s dup` adds advisory jscpd. Sessions shell the SAME pinned tools CI uses, so local == CI.
+`.pre-commit-config.yaml` runs the fast static gates (all but test/coverage) before each commit — enable with
+`pre-commit install` (keep it separate from the beads `.beads/hooks/pre-commit`), or one-shot `pre-commit run
+--all-files`.
+
