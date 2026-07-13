@@ -135,6 +135,17 @@ exclude_lines = [
     "@(abc\\.)?abstractmethod",
 ]
 
+# Architecture fitness thresholds (bd 3nn; enforced in CI via `python -m devtools.graph --assert`). The METRIC
+# arch axis import-linter's categorical layer contracts can't express — god-module / import-cycle / god-file
+# block; line-floor + betweenness chokepoint + test-mirror are advisory. Defaults chosen against today's graph
+# so the blocking rules start CLEAN and only ratchet TIGHTER (never relaxed). Mirrors the cardiac-seg/synthscape
+# superset. `file_min=0` = floor OFF (no honest floor — small files are SSOT/strategy/shared-vocab leaves).
+[tool.structure]
+bottleneck_degree = 8       # a module with BOTH fan-in and fan-out over this is a god-module (0 today)
+file_max = 750              # god-file ceiling (largest today ~373)
+file_min = 0                # OFF: no honest line floor exists (small files are legit SSOT/strategy leaves)
+betweenness_max = 0.10      # advisory chokepoint threshold
+
 # Architecture as a static import-graph contract (bd o92; enforced in CI via `lint-imports`). Three tiers,
 # imports point DOWN only: core (clean kernel) < neuroscan (trainer) < neuroviz (viewer). The viewer reusing
 # neuroscan's model registry (neuroviz -> neuroscan.models.get_method) is an INTENDED downward edge, so —

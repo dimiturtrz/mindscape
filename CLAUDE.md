@@ -91,5 +91,14 @@ Three tiers, imports point **down only**: `core` (clean kernel) < `neuroscan` (t
 upward import breaks CI; if a layer genuinely needs a symbol from above, the symbol is in the wrong layer —
 push it down (into `core`), don't invert the arrow.
 
-`devtools/graph.py` (bd 2r9, `[devtools]` extra) is the explorer view of the same graph — fan-in/out /
-bottleneck / betweenness / cycles via grimp+networkx. One-shot, not a gate: `python -m devtools.graph`.
+### Architecture fitness — `graph.py --assert` gate (bd 3nn)
+
+`devtools/graph.py` (bd 2r9/3nn, `[devtools]` extra) is both the **explorer** (`python -m devtools.graph` —
+fan-in/out / bottleneck / betweenness / cycles via grimp+networkx) **and** a CI **fitness gate**
+(`python -m devtools.graph --assert`) — the *metric* arch axis import-linter's categorical contracts can't
+express. **Blocks** on a god-module (fan-in AND fan-out both > `bottleneck_degree`), an import cycle (SCC>1),
+or a god-file (> `file_max`). **Advisory** (logged, never blocks): line-floor, betweenness chokepoint, and
+test-mirror (source modules without a `tests/unit/<path>/test_<name>.py` — advisory because many source files
+are coverage-omitted shells; graduates to blocking once a "mirror logic, exempt omitted shells" policy is
+backfilled). Thresholds live in `[tool.structure]`, chosen clean against today's graph — they **ratchet only
+tighter, never relax**. Runs in the CI `tests` job (needs the `[devtools]` extra).

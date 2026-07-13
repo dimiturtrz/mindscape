@@ -6,7 +6,15 @@ import pytest
 pytest.importorskip("grimp")            # devtools extra; networkx is present transitively, grimp is not
 nx = pytest.importorskip("networkx")
 
-from devtools.graph import _top, report  # noqa: E402
+from devtools.graph import (  # noqa: E402
+    _DEFAULTS,
+    _god_modules,
+    _oversized,
+    _top,
+    assert_fitness,
+    load_structure_cfg,
+    report,
+)
 
 
 def test_top_ranks_descending_and_caps():
@@ -20,3 +28,50 @@ def test_report_surfaces_fan_in_and_cycles():
     r = report(g, top=5)
     assert "fan-in (load-bearing)" in r and "hub" in r
     assert "import cycles (SCC>1): 1" in r
+
+
+def _god_graph(degree: int) -> nx.DiGraph:
+    """A single module with fan-in AND fan-out both > `degree` (a god-module) plus enough leaves."""
+    g = nx.DiGraph()
+    for i in range(degree + 1):
+        g.add_edge(f"in{i}", "god")       # fan-in  = degree+1 > degree
+        g.add_edge("god", f"out{i}")      # fan-out = degree+1 > degree
+    return g
+
+
+def test_god_module_flagged_over_degree_clean_under():
+    deg = 3
+    assert len(_god_modules(_god_graph(deg), deg)) == 1          # both fan-in & fan-out exceed -> flagged
+    assert _god_modules(_god_graph(deg), degree=deg + 5) == []   # under threshold -> clean
+
+
+def test_oversized_blocks_over_ceiling_only():
+    files = [("big.py", 801), ("ok.py", 200)]
+    over = _oversized(files, mx=750)
+    assert len(over) == 1 and "big.py" in over[0]        # only the file over the ceiling
+    assert _oversized(files, mx=1000) == []              # both under -> clean
+
+
+def test_assert_fitness_blocks_god_module_and_god_file():
+    g = _god_graph(_DEFAULTS["bottleneck_degree"])
+    files = [("huge.py", _DEFAULTS["file_max"] + 1)]
+    blocking, _ = assert_fitness(g, files, _DEFAULTS)
+    assert any("god-module" in b for b in blocking)
+    assert any("god-file" in b for b in blocking)
+
+
+def test_assert_fitness_clean_graph_no_blocking():
+    g = nx.DiGraph([("a", "b"), ("b", "c")])                     # tiny chain, no cycles / god-modules
+    blocking, _ = assert_fitness(g, [("small.py", 40)], _DEFAULTS)
+    assert blocking == []
+
+
+def test_line_floor_off_by_default_is_advisory_only():
+    g = nx.DiGraph([("a", "b")])
+    _, advisory = assert_fitness(g, [("tiny.py", 3)], _DEFAULTS)   # file_min=0 -> no undersized entries
+    assert not any("earn its keep" in a for a in advisory)
+
+
+def test_load_structure_cfg_defaults_when_absent():
+    cfg = load_structure_cfg("does-not-exist.toml")
+    assert cfg == _DEFAULTS

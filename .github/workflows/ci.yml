@@ -20,8 +20,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - name: Install dependencies (locked, + dev extra for pytest + coverage)
-        run: uv sync --frozen --extra dev
+      - name: Install dependencies (locked, + dev extra for pytest + coverage, + devtools for arch-fitness)
+        run: uv sync --frozen --extra dev --extra devtools
       # One instrumented run = the test gate AND the coverage data. Config (source/omit/exclude) lives in
       # [tool.coverage.*] — denominator is library LOGIC, not filesystem/mlflow/libs/downloads/GPU shells.
       - name: Unit tests + coverage (tests block)
@@ -36,6 +36,12 @@ jobs:
       # not the target. Ratchet the floor up deliberately as coverage settles higher.
       - name: Coverage floor — enforced (>=80, blocks)
         run: uv run coverage report --fail-under=80
+      # Architecture fitness (bd 3nn): the METRIC arch axis import-linter's categorical layer contracts can't
+      # express — god-module (fan-in AND fan-out both >8) / import-cycle / god-file (>750 lines) BLOCK;
+      # line-floor / betweenness-chokepoint / test-mirror are advisory (logged, never block). Needs the devtools
+      # extra (grimp+networkx). Thresholds in [tool.structure]; clean today, ratchets only tighter.
+      - name: Architecture fitness — enforced (graph.py --assert)
+        run: uv run python -m devtools.graph --assert
 
   # Static-analysis ratchet (bd mindscape-y63): the two axes that don't need the test env — ruff (style/bugs)
   # + vulture (dead code). ENFORCED steps block on the graduated ruff families + vulture conf>=80; ADVISORY
