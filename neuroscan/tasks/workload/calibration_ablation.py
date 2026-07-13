@@ -49,11 +49,11 @@ class CalibrationAblation:
     @staticmethod
     def _cv_raw_or_transductive(F, y, g, subs, zt):
         accs = []
-        for tr, te in GroupKFold(_K).split(subs, groups=subs):
-            mtr, mte = np.isin(g, subs[tr]), np.isin(g, subs[te])
-            Fz = SubjectNorm.zscore_per_subject(F, g) if zt else F
-            accs.append(metrics.Metrics.accuracy(
-                y[mte], CalibrationAblation._lda().fit(Fz[mtr], y[mtr]).predict(Fz[mte])))
+        for train_subj, test_subj in GroupKFold(_K).split(subs, groups=subs):
+            train_mask, test_mask = np.isin(g, subs[train_subj]), np.isin(g, subs[test_subj])
+            feats = SubjectNorm.zscore_per_subject(F, g) if zt else F
+            clf = CalibrationAblation._lda().fit(feats[train_mask], y[train_mask])
+            accs.append(metrics.Metrics.accuracy(y[test_mask], clf.predict(feats[test_mask])))
         return float(np.mean(accs))
 
     @staticmethod
@@ -61,12 +61,12 @@ class CalibrationAblation:
         """Leakage-free per-subject calibration: train z-scored on train subjects; for each test subject, fit stats on
         a random half of its blocks and score the other half."""
         accs = []
-        for tr, te in GroupKFold(_K).split(subs, groups=subs):
+        for train_subj, test_subj in GroupKFold(_K).split(subs, groups=subs):
             Ftr = SubjectNorm.zscore_per_subject(F, g)            # train side: per-subject z (train subjects only used)
-            mtr = np.isin(g, subs[tr])
-            clf = CalibrationAblation._lda().fit(Ftr[mtr], y[mtr])
+            train_mask = np.isin(g, subs[train_subj])
+            clf = CalibrationAblation._lda().fit(Ftr[train_mask], y[train_mask])
             yt, yp = [], []
-            for s in subs[te]:
+            for s in subs[test_subj]:
                 idx = np.where(g == s)[0]
                 perm = rng.permutation(idx)
                 h = len(perm) // 2
@@ -103,13 +103,13 @@ def main():
     # fusion picture on the z-scored (transductive) features: EEG becomes the strong modality; oracle grows
     Fez, Ffz = SubjectNorm.zscore_per_subject(Fe, ge), SubjectNorm.zscore_per_subject(Ff, ge)
     CE, CF, LATE = [], [], []
-    for tr, te in GroupKFold(_K).split(subs, groups=subs):
-        mtr, mte = np.isin(ge, subs[tr]), np.isin(ge, subs[te])
-        pe = CalibrationAblation._lda().fit(Fez[mtr], y[mtr]).predict_proba(Fez[mte])
-        pf = CalibrationAblation._lda().fit(Ffz[mtr], y[mtr]).predict_proba(Ffz[mte])
-        CE.append(pe.argmax(1) == y[mte])
-        CF.append(pf.argmax(1) == y[mte])
-        LATE.append(((pe + pf) / 2).argmax(1) == y[mte])
+    for train_subj, test_subj in GroupKFold(_K).split(subs, groups=subs):
+        train_mask, test_mask = np.isin(ge, subs[train_subj]), np.isin(ge, subs[test_subj])
+        pe = CalibrationAblation._lda().fit(Fez[train_mask], y[train_mask]).predict_proba(Fez[test_mask])
+        pf = CalibrationAblation._lda().fit(Ffz[train_mask], y[train_mask]).predict_proba(Ffz[test_mask])
+        CE.append(pe.argmax(1) == y[test_mask])
+        CF.append(pf.argmax(1) == y[test_mask])
+        LATE.append(((pe + pf) / 2).argmax(1) == y[test_mask])
     ce, cf, late = np.concatenate(CE), np.concatenate(CF), np.concatenate(LATE)
     out.update({
         "eeg_z_best": float(ce.mean()), "fnirs_z": float(cf.mean()),
