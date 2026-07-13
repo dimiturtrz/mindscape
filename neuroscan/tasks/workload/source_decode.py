@@ -42,7 +42,7 @@ class SourceDecode:
         for s in subs:
             x, y = store.Store.gather(meta.filter(meta["subject"] == s))
             c_sensor.append(Riemann.cov(x))
-            c_source.append(Riemann.cov(Source.to_parcels(x, ch, _CFG.resample)))   # [n,68,t] cortical parcels
+            c_source.append(Riemann.cov(Source(ch, _CFG.resample).to_parcels(x)))   # [n,68,t] cortical parcels
             ys.append(y)
             gs.append(np.array([s] * len(y)))
             logger.info(f"  subject {s}: {len(y)} blocks -> "

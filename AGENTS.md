@@ -129,9 +129,13 @@ Runs in the CI `tests` job (needs the `[devtools]` extra).
 
 `devtools/{state_candidates,data_clumps,lcom}.py` — pure-AST detectors run **advisory** in CI (never block):
 namespace-class with latent shared state (→ `__init__`), param data-clumps (→ Introduce Parameter Object),
-LCOM4 disjoint-state classes (→ split). A **regression radar** — each has a legitimate non-zero floor on a
-strategy-pattern codebase (the functional core's namespace bags, sklearn `fit`/`transform` interface pairs),
-so they surface a NEW smell in the log, not a gate. `python -m devtools.<name> core neuroscan`.
+LCOM4 disjoint-state classes (→ split). Known-legit patterns are **excluded** so the radar stays actionable:
+the sklearn `fit`/`transform` contract (lcom), and coverage-`omit` shells + `torch.autograd.Function`
+(state_candidates — it shares `devtools/omit.py` with the test-mirror rule, so the gates agree on what a shell
+is). The residual is the stateless op-namespace **floor** — methods sharing a per-call data/knob param
+(`X`/`y`/`grid`/…); genuine latent state (a class threading the SAME identity/config through every method, like
+a montage operator) stands out against it and is the promote signal. A **regression radar**, never a gate.
+`python -m devtools.<name> core neuroscan`.
 
 ### Module shape — ast-grep gate (bd ylq)
 
