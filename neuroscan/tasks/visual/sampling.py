@@ -35,8 +35,8 @@ class Sampling:
         """Index batches balanced across concepts: shuffle within each concept, then round-robin draw so every
         batch sees many distinct concepts ~equally (balances the InfoNCE negatives vs uniform sampling)."""
         by_concept: dict[int, list[int]] = {}
-        for ep, concept in enumerate(concept_ids):
-            by_concept.setdefault(int(concept), []).append(ep)
+        for epoch_idx, concept in enumerate(concept_ids):
+            by_concept.setdefault(int(concept), []).append(epoch_idx)
         pools = [rng.permutation(idx).tolist() for idx in by_concept.values()]
         order: list[int] = []
         while any(pools):
@@ -56,17 +56,17 @@ class Sampling:
         `stratified_batches`' round-robin, which decays as scarce concepts empty out). Scarce concepts are drawn
         WITH replacement to keep the count exact. Balances the InfoNCE negatives across the label space every step."""
         by_concept: dict[int, list[int]] = {}
-        for ep, concept in enumerate(concept_ids):
-            by_concept.setdefault(int(concept), []).append(ep)
+        for epoch_idx, concept in enumerate(concept_ids):
+            by_concept.setdefault(int(concept), []).append(epoch_idx)
         concepts = list(by_concept)
         per_batch = min(spec.concepts_per_batch, len(concepts))
         n_batches = spec.n_batches or max(1, len(concept_ids) // (per_batch * spec.samples_per_concept))
         batches = []
         for _ in range(n_batches):
             chosen = rng.choice(concepts, size=per_batch, replace=False)
-            epoch_ids = [ep for concept in chosen
-                         for ep in Sampling._draw(by_concept[int(concept)], spec.samples_per_concept, rng)]
-            batches.append(np.asarray(epoch_ids))
+            epoch_indices = [epoch_idx for concept in chosen
+                             for epoch_idx in Sampling._draw(by_concept[int(concept)], spec.samples_per_concept, rng)]
+            batches.append(np.asarray(epoch_indices))
         return batches
 
     @staticmethod
@@ -85,8 +85,8 @@ class Sampling:
         batch: pick a seed, take it + its top neighbours present in the data (pad with random concepts if short),
         draw `spec.samples_per_concept` trials each (replacement for scarce), so it stays strictly balanced."""
         by_concept: dict[int, list[int]] = {}
-        for ep, concept in enumerate(concept_ids):
-            by_concept.setdefault(int(concept), []).append(ep)
+        for epoch_idx, concept in enumerate(concept_ids):
+            by_concept.setdefault(int(concept), []).append(epoch_idx)
         present = list(by_concept)
         per_batch = min(spec.concepts_per_batch, len(present))
         n_batches = spec.n_batches or max(1, len(concept_ids) // (per_batch * spec.samples_per_concept))
@@ -99,7 +99,7 @@ class Sampling:
                 extra = int(rng.choice(present))
                 if extra not in group:
                     group.append(extra)
-            epoch_ids = [ep for concept in group
-                         for ep in Sampling._draw(by_concept[concept], spec.samples_per_concept, rng)]
-            batches.append(np.asarray(epoch_ids))
+            epoch_indices = [epoch_idx for concept in group
+                             for epoch_idx in Sampling._draw(by_concept[concept], spec.samples_per_concept, rng)]
+            batches.append(np.asarray(epoch_indices))
         return batches

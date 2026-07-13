@@ -199,15 +199,15 @@ def main():
         sweep.append({"lam": float(lam), "acc": acc, "eff_n": Differentiable._effective_n(w), "family_weights": fw})
         top = sorted(fw.items(), key=lambda kv: -kv[1])[:4]
         logger.info(f"  λ={float(lam):<5} acc {acc:.3f} · eff-#feat {sweep[-1]['eff_n']:.2f} · "
-              f"top {[(family, round(weight, 2)) for family, weight in top]}")
+              f"top {[(feature_family, round(weight, 2)) for feature_family, weight in top]}")
 
     knee = Differentiable._knee(sweep)
     # leakage-free: refit at the knee lambda on ALL search subjects, score the sealed holdout
     Xtr, Xte = Differentiable._standardise(Fs, Fb[seal_idx])
     m = Differentiable._fit(Xtr, ys, spec, knee["lam"], hp)
     sealed = float((Differentiable._predict(m, Xte) == y[seal_idx]).mean())
-    kept = {family: round(weight, _KEEP_WEIGHT_DP)
-            for family, weight in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1])
+    kept = {feature_family: round(weight, _KEEP_WEIGHT_DP)
+            for feature_family, weight in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1])
             if weight > _KEEP_WEIGHT_MIN}
     logger.info(f"\nknee λ={knee['lam']}: eff-#feat {knee['eff_n']:.2f} · search-acc {knee['acc']:.3f} (optimistic) "
           f"· SEALED-acc {sealed:.3f} (unbiased)")
