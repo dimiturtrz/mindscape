@@ -15,6 +15,7 @@ from devtools.graph import (  # noqa: E402
     assert_fitness,
     load_structure_cfg,
     report,
+    unmirrored,
 )
 
 
@@ -76,6 +77,41 @@ def test_line_floor_off_by_default_is_advisory_only():
 def test_load_structure_cfg_defaults_when_absent():
     cfg = load_structure_cfg("does-not-exist.toml")
     assert cfg == _DEFAULTS
+
+
+def _mirror_tree(root, *, mirror_bar=False, omit_bar=False):
+    """A tiny source pkg + tests/unit under `root`: foo.py always mirrored, bar.py mirrored only if asked."""
+    (root / "pkg").mkdir(parents=True)
+    (root / "pkg" / "__init__.py").write_text("")           # plumbing — always exempt
+    (root / "pkg" / "foo.py").write_text("X = 1\n")
+    (root / "pkg" / "bar.py").write_text("Y = 2\n")
+    tdir = root / "tests" / "unit" / "pkg"
+    tdir.mkdir(parents=True)
+    (tdir / "test_foo.py").write_text("def test_x(): assert True\n")
+    if mirror_bar:
+        (tdir / "test_bar.py").write_text("def test_y(): assert True\n")
+    if omit_bar:
+        (root / "pyproject.toml").write_text('[tool.coverage.run]\nomit = ["pkg/bar.py"]\n')
+
+
+def test_unmirrored_flags_only_the_module_without_a_strict_mirror(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _mirror_tree(tmp_path)                                   # foo mirrored, bar not, __init__ exempt
+    gaps = unmirrored(["pkg"])
+    assert len(gaps) == 1 and "pkg/bar.py" in gaps[0]        # only bar (no test_bar.py) blocks
+    assert "test_bar.py" in gaps[0]                          # message names the strict mirror path expected
+
+
+def test_unmirrored_clean_when_every_module_mirrored(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _mirror_tree(tmp_path, mirror_bar=True)                  # both foo and bar have their mirror
+    assert unmirrored(["pkg"]) == []
+
+
+def test_unmirrored_exempts_coverage_omit_shells(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _mirror_tree(tmp_path, omit_bar=True)                    # bar unmirrored BUT declared an omit shell
+    assert unmirrored(["pkg"]) == []                         # the omit carve exempts it — no false gap
 
 
 def test_matches_omit_globs_the_coverage_patterns():

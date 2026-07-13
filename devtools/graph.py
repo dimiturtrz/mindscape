@@ -9,8 +9,9 @@ arch axis import-linter's categorical layer contracts can't express):
   cycles (SCC>1)         tangle              -> break (import-linter gates layer cycles)
 
 `report` is the one-shot EXPLORER (ranked tables). `--assert` is the GATE: it fails when a module is a
-god-module (fan-in AND fan-out both over a degree), a new import cycle appears, or a file blows the line
-ceiling — plus advisory warnings (line floor, chokepoint, test-mirror) that never block. Thresholds live in
+god-module (fan-in AND fan-out both over a degree), a new import cycle appears, a file blows the line
+ceiling, or a logic module has no strict path-mirror test (bd 888) — plus advisory warnings (line floor,
+chokepoint) that never block. Thresholds live in
 `pyproject [tool.structure]`, defaulted so the blocking rules start CLEAN against today's graph and only
 ratchet tighter. IMPORT-level only: function-level lies on the neuroscan.models.get_method registry dispatch,
 so a registry hub's fan-in reads expected-high — the signal you want is fan-in/out on LOGIC modules.
@@ -109,24 +110,23 @@ def _matches_omit(path: str, patterns: list[str]) -> bool:
     return False
 
 
-def unmirrored(packages: list[str], test_root: str = "tests") -> list[str]:
-    """LOGIC source modules that NO test exercises — BLOCKING (bd 9nj). mindscape's test tree is deliberately
-    NOT 1:1-by-path (a `core` module is often exercised by a `baselines`/integration test), so 'mirrored' means
-    imported by SOME test, not a strict `test_<name>.py` at the mirror path. Coverage-OMITTED shells (runners /
-    adapters / GPU / download / viz glue) are exempt — the same 'not logic' set the coverage gate omits, so a
-    genuine shell is never a false gap. What remains blocks: a real logic module with no test at all."""
+def unmirrored(packages: list[str], test_root: str = "tests/unit") -> list[str]:
+    """LOGIC source modules with no STRICT path-mirror test — BLOCKING (bd 888, cardioseg way). A source
+    `<pkg>/<path>/foo.py` is mirrored iff `tests/unit/<path>/test_foo.py` EXISTS on disk — the test tree mirrors
+    the source tree method-wise, one home per module (a same-purpose test under a different name does NOT count;
+    rename it to the mirror path). Coverage-OMITTED shells (runners / adapters / GPU / download / viz glue) are
+    the one deliberate deviation from pure cardioseg (which exempts only __init__/__main__): mindscape has ~35
+    genuinely-non-unit-testable shells, and forcing a stub test for each violates the no-stubs rule, so the same
+    'not logic' set the coverage gate omits is exempt here too (`_matches_omit` on `[tool.coverage] omit`)."""
     omit = _coverage_omit()
-    corpus = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in Path(test_root).rglob("test_*.py"))
     out = []
     for pkg in packages:
         for f in sorted(Path(pkg).rglob("*.py")):
             if f.name in _STRUCTURAL or _matches_omit(f.as_posix(), omit):
                 continue
-            dotted, parent = f.as_posix()[:-3].replace("/", "."), f.parent.as_posix().replace("/", ".")
-            imported = dotted in corpus or re.search(
-                rf"from {re.escape(parent)} import[^\n]*\b{re.escape(f.stem)}\b", corpus)
-            if not imported:
-                out.append(f"{f.as_posix()} — no test imports it")
+            mirror = Path(test_root) / f.parent / f"test_{f.name}"
+            if not mirror.exists():
+                out.append(f"{f.as_posix()} — no mirrored {mirror.as_posix()}")
     return out
 
 
@@ -164,12 +164,12 @@ def report(g: nx.DiGraph, top: int) -> str:
 
 
 def _run_assert(packages: list[str]) -> int:
-    """The gate: log advisory warnings (incl. test-mirror), log blocking errors, return exit code (1 if any
-    blocking)."""
+    """The gate: log advisory warnings, log blocking errors (incl. test-mirror gaps), return exit code (1 if
+    any blocking)."""
     cfg = load_structure_cfg()
     g, files = build_graph(packages), file_lines(packages)
     blocking, advisory = assert_fitness(g, files, cfg)
-    blocking += [f"test mirror: {m}" for m in unmirrored(packages)]   # BLOCKING (bd 9nj) — see unmirrored()
+    blocking += [f"test mirror: {m}" for m in unmirrored(packages)]   # BLOCKING (bd 888) — see unmirrored()
     if advisory:
         shown = advisory[:_ADVISORY_PREVIEW]
         extra = f"\n  … +{len(advisory) - _ADVISORY_PREVIEW} more" if len(advisory) > _ADVISORY_PREVIEW else ""
@@ -187,8 +187,8 @@ def main():
     ap.add_argument("--packages", nargs="+", default=["core", "neuroscan"], help="root packages to graph")
     ap.add_argument("--top", type=int, default=10, help="rows per ranked table")
     ap.add_argument("--assert", action="store_true", dest="assert_",
-                    help="fitness GATE: exit 1 on a god-module / import cycle / god-file "
-                         "(advisory: line floor, chokepoint, test-mirror)")
+                    help="fitness GATE: exit 1 on a god-module / import cycle / god-file / test-mirror gap "
+                         "(advisory: line floor, chokepoint)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     if args.assert_:
