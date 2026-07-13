@@ -6,7 +6,7 @@ pytest.importorskip("braindecode")
 
 def test_profile_reports_params():
     from neuroscan.models import profile
-    r = profile.profile("EEGNetv4")
+    r = profile.Profile.profile("EEGNetv4")
     assert r["model"] == "EEGNetv4"
     assert r["params"] > 0
     # FLOPs is None if fvcore absent, else a positive count
@@ -15,6 +15,6 @@ def test_profile_reports_params():
 
 def test_fmt_units():
     from neuroscan.models import profile
-    assert profile._fmt(3700) == "3.70K"
-    assert profile._fmt(2_790_000) == "2.79M"
-    assert profile._fmt(None) == "—"
+    assert profile.Profile._fmt(3700) == "3.70K"
+    assert profile.Profile._fmt(2_790_000) == "2.79M"
+    assert profile.Profile._fmt(None) == "—"

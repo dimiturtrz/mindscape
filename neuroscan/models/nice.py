@@ -66,32 +66,48 @@ class NiceEncoder(nn.Module):
         return F.normalize(z, dim=-1)
 
 
-def clip_infonce(eeg: torch.Tensor, img: torch.Tensor, logit_scale: torch.Tensor,
-                 hard_beta: float = 0.0, soft_tau: float = 0.0) -> torch.Tensor:
-    """Symmetric InfoNCE (CLIP loss) between L2-normalized EEG and image embeddings in a batch.
+class Nice:
+    @staticmethod
+    def clip_infonce(eeg: torch.Tensor, img: torch.Tensor, logit_scale: torch.Tensor,
+                     hard_beta: float = 0.0, soft_tau: float = 0.0) -> torch.Tensor:
+        """Symmetric InfoNCE (CLIP loss) between L2-normalized EEG and image embeddings in a batch.
 
-    Positives = matched (eeg_i, img_i); negatives = every other image in the batch. Symmetric over both
-    directions. `logit_scale` is the learned temperature (exp), clamped by the caller.
+        Positives = matched (eeg_i, img_i); negatives = every other image in the batch. Symmetric over both
+        directions. `logit_scale` is the learned temperature (exp), clamped by the caller.
 
-    `hard_beta` > 0 turns on online hard-negative weighting (bd fww): each OFF-diagonal (negative) logit is
-    boosted by `hard_beta ×` its own (detached) similarity, so high-similarity negatives contribute more to
-    the softmax denominator and get a stronger push-down gradient. Rides this same forward pass — no extra
-    inference — and self-sharpens as the encoder improves. `hard_beta = 0` is the exact standard CLIP loss.
+        `hard_beta` > 0 turns on online hard-negative weighting (bd fww): each OFF-diagonal (negative) logit is
+        boosted by `hard_beta ×` its own (detached) similarity, so high-similarity negatives contribute more to
+        the softmax denominator and get a stronger push-down gradient. Rides this same forward pass — no extra
+        inference — and self-sharpens as the encoder improves. `hard_beta = 0` is the exact standard CLIP loss.
 
-    `soft_tau` > 0 replaces the hard one-hot target with a SOFT one — `softmax(img·imgᵀ / soft_tau)` — so a
-    same-concept-different-image pair (CLIP targets ~0.7 similar) is a partial positive, not a false negative
-    (bd lbd). Diagonal-dominant (self-sim = 1), tail set by `soft_tau`. Mutually exclusive with `hard_beta`.
-    """
-    logits = logit_scale * eeg @ img.t()                   # [B,B]
-    if hard_beta > 0:
-        off_diag = ~torch.eye(eeg.shape[0], dtype=torch.bool, device=eeg.device)
-        logits = logits + hard_beta * logits.detach() * off_diag
-    if soft_tau > 0:                                        # concept-aware soft targets (bd lbd)
-        soft = F.softmax((img @ img.t()).detach() / soft_tau, dim=1)
-        return -0.5 * ((soft * F.log_softmax(logits, dim=1)).sum(1).mean()
-                       + (soft * F.log_softmax(logits.t(), dim=1)).sum(1).mean())
-    target = torch.arange(eeg.shape[0], device=eeg.device)
-    return 0.5 * (F.cross_entropy(logits, target) + F.cross_entropy(logits.t(), target))
+        `soft_tau` > 0 replaces the hard one-hot target with a SOFT one — `softmax(img·imgᵀ / soft_tau)` — so a
+        same-concept-different-image pair (CLIP targets ~0.7 similar) is a partial positive, not a false negative
+        (bd lbd). Diagonal-dominant (self-sim = 1), tail set by `soft_tau`. Mutually exclusive with `hard_beta`.
+        """
+        logits = logit_scale * eeg @ img.t()                   # [B,B]
+        if hard_beta > 0:
+            off_diag = ~torch.eye(eeg.shape[0], dtype=torch.bool, device=eeg.device)
+            logits = logits + hard_beta * logits.detach() * off_diag
+        if soft_tau > 0:                                        # concept-aware soft targets (bd lbd)
+            soft = F.softmax((img @ img.t()).detach() / soft_tau, dim=1)
+            return -0.5 * ((soft * F.log_softmax(logits, dim=1)).sum(1).mean()
+                           + (soft * F.log_softmax(logits.t(), dim=1)).sum(1).mean())
+        target = torch.arange(eeg.shape[0], device=eeg.device)
+        return 0.5 * (F.cross_entropy(logits, target) + F.cross_entropy(logits.t(), target))
+
+    @staticmethod
+    @torch.no_grad()
+    def retrieval_topk(eeg: torch.Tensor, candidates: torch.Tensor, labels: torch.Tensor,
+                       ks: tuple[int, ...] = (1, 5)) -> dict[int, float]:
+        """Zero-shot retrieval accuracy: for each EEG embedding, rank the `candidates` (one CLIP embedding per
+        class) by cosine; hit@k if the true `labels` index is in the top-k. Chance = k / n_candidates."""
+        sims = eeg @ candidates.t()                            # [N, n_cand]
+        order = sims.argsort(dim=-1, descending=True)
+        out: dict[int, float] = {}
+        for k in ks:
+            hit = (order[:, :k] == labels[:, None]).any(dim=-1).float().mean().item()
+            out[k] = hit
+        return out
 
 
 class _GradReverse(torch.autograd.Function):
@@ -120,17 +136,3 @@ class SubjectDiscriminator(nn.Module):
 
     def forward(self, z: torch.Tensor, lambd: float) -> torch.Tensor:
         return self.net(_GradReverse.apply(z, lambd))
-
-
-@torch.no_grad()
-def retrieval_topk(eeg: torch.Tensor, candidates: torch.Tensor, labels: torch.Tensor,
-                   ks: tuple[int, ...] = (1, 5)) -> dict[int, float]:
-    """Zero-shot retrieval accuracy: for each EEG embedding, rank the `candidates` (one CLIP embedding per
-    class) by cosine; hit@k if the true `labels` index is in the top-k. Chance = k / n_candidates."""
-    sims = eeg @ candidates.t()                            # [N, n_cand]
-    order = sims.argsort(dim=-1, descending=True)
-    out: dict[int, float] = {}
-    for k in ks:
-        hit = (order[:, :k] == labels[:, None]).any(dim=-1).float().mean().item()
-        out[k] = hit
-    return out

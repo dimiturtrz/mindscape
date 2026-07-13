@@ -14,7 +14,7 @@ def _meta():
 
 
 def test_within_folds_one_per_subject_with_session_holdout():
-    folds = harness.folds_for(_meta(), "within", test_sessions=["1test"])
+    folds = harness.Harness.folds_for(_meta(), "within", test_sessions=["1test"])
     assert len(folds) == 3
     for name, train, test in folds:
         assert set(train["subject"].unique()) == {name}
@@ -24,7 +24,7 @@ def test_within_folds_one_per_subject_with_session_holdout():
 
 
 def test_cross_subject_folds_are_loso():
-    folds = harness.folds_for(_meta(), "cross_subject")
+    folds = harness.Harness.folds_for(_meta(), "cross_subject")
     assert len(folds) == 3
     for name, train, test in folds:
         assert set(test["subject"].unique()) == {name}
@@ -34,4 +34,4 @@ def test_cross_subject_folds_are_loso():
 def test_unknown_regime_raises():
     import pytest
     with pytest.raises(ValueError):
-        harness.folds_for(_meta(), "nope")
+        harness.Harness.folds_for(_meta(), "nope")

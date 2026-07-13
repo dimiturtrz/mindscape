@@ -22,7 +22,7 @@ def test_train_export_parity_chain(tmp_path, monkeypatch):
     X = (rng.normal(size=(n, ch, t)) + np.tile([0, 1, 2, 3], n // 4)[:, None, None]).astype(np.float32)
     y = np.tile([0, 1, 2, 3], n // 4)
 
-    fit, score = decoders.make("eegnet")
+    fit, score = decoders.BraindecodeClf.make("eegnet")
     clf = fit(X, y, epochs=2, patience=0, crop_frac=None, standardize="zscore")
     probs = score(clf, X)
     assert probs.shape == (n, 4)

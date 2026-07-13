@@ -15,6 +15,7 @@ from typing import Protocol
 from pydantic import BaseModel
 from torch import Tensor, nn
 
+from neuroscan.models.foundation import Foundation
 from neuroscan.models.nice import NiceConfig, NiceEncoder
 
 
@@ -37,19 +38,37 @@ class ImageEncoder(Protocol):
 _BUILDERS: dict[str, Callable[[EncoderSpec], nn.Module]] = {}
 
 
-def register(name: str, builder: Callable[[EncoderSpec], nn.Module]) -> None:
-    _BUILDERS[name] = builder
+class EncoderRegistry:
+    """Name -> encoder-builder registry — the free helpers folded in as staticmethods (public names kept).
+    The built-in builders register lazily on first `build_encoder` (kept out of import time — no side effects
+    on import), so importing this module builds nothing. NICE lives here; the pretrained CBraMod builders live
+    in `foundation.py` and are registered here too, so registration has one home (mirrors core.data.registry)."""
 
+    _populated = False
 
-def build_encoder(name: str, spec: EncoderSpec) -> ImageEncoder:
-    """The encoder for a model name, shaped by `spec`. `KeyError` (with the known names) on an unknown model."""
-    if name not in _BUILDERS:
-        raise KeyError(f"unknown encoder {name!r}; have {sorted(_BUILDERS)}")
-    return _BUILDERS[name](spec)
+    @staticmethod
+    def register(name: str, builder: Callable[[EncoderSpec], nn.Module]) -> None:
+        _BUILDERS[name] = builder
 
+    @staticmethod
+    def build_encoder(name: str, spec: EncoderSpec) -> ImageEncoder:
+        """The encoder for a model name, shaped by `spec`. `KeyError` (with the known names) on an unknown model."""
+        EncoderRegistry._ensure_populated()
+        if name not in _BUILDERS:
+            raise KeyError(f"unknown encoder {name!r}; have {sorted(_BUILDERS)}")
+        return _BUILDERS[name](spec)
 
-def _build_nice(spec: EncoderSpec) -> nn.Module:
-    return NiceEncoder(NiceConfig(n_channels=spec.n_channels, n_times=spec.n_times, embed_dim=spec.embed_dim))
+    @staticmethod
+    def _build_nice(spec: EncoderSpec) -> nn.Module:
+        return NiceEncoder(NiceConfig(n_channels=spec.n_channels, n_times=spec.n_times, embed_dim=spec.embed_dim))
 
-
-register("nice", _build_nice)   # the from-scratch conv baseline (Song et al. ICLR 2024)
+    @staticmethod
+    def _ensure_populated() -> None:
+        """Register the built-in encoder builders exactly once, on first use (not at import)."""
+        if EncoderRegistry._populated:
+            return
+        EncoderRegistry._populated = True
+        EncoderRegistry.register("nice", EncoderRegistry._build_nice)   # from-scratch conv baseline (Song ICLR 2024)
+        EncoderRegistry.register("cbramod", Foundation._build_cbramod)          # frozen backbone + head (linear probe)
+        EncoderRegistry.register("cbramod_ft", Foundation._build_cbramod_ft)    # unfrozen — fine-tune on perception
+        EncoderRegistry.register("cbramod_ft_attn", Foundation._build_cbramod_ft_attn)  # unfrozen + attention pool (bd)

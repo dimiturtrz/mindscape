@@ -20,7 +20,7 @@ def test_crop_trainer_cpu_smoke(monkeypatch):
     X = rng.standard_normal((n, ch, T)).astype(np.float32)
     y = np.tile([0, 1, 2, 3], n // 4)
 
-    fit, score = decoders.make("eegnet")
+    fit, score = decoders.BraindecodeClf.make("eegnet")
     clf = fit(X, y, epochs=2, patience=0, log_every=0)
     assert clf.crop_len == int(0.5 * T)          # crop_frac default 0.5
     assert clf.device == "cpu"

@@ -61,8 +61,8 @@ def main():
         for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(X, y, g):
             clf = BrainCameraNet(BrainCameraConfig(n_classes=int(y.max()) + 1, seed=seed)).fit(X[tr], y[tr])
             pred = clf.predict_proba(X[te]).argmax(1)
-            accs.append(metrics.accuracy(y[te], pred))
-            kaps.append(metrics.kappa(y[te], pred))
+            accs.append(metrics.Metrics.accuracy(y[te], pred))
+            kaps.append(metrics.Metrics.kappa(y[te], pred))
     a, k = float(np.mean(accs)), float(np.mean(kaps))
     logger.info(f"\n  brain-camera 3D-CNN · cross-subject {len(_SEEDS)}x{_K}-fold: acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
     logger.info("  reference (per-subject-z features -> LDA): best-single 0.580 · late 0.587 · feature 0.564 · oracle 0.752")

@@ -27,21 +27,21 @@ def _write_run(tmp_path, name, agg=None):
 
 
 def test_split_name_regime_and_dataset():
-    assert results._split_name(NAME) == ("csp_lda", "within", "bnci2014_001")
-    assert results._split_name("riemann_acm_cross_subject_bnci2014_001") == (
+    assert results.Results._split_name(NAME) == ("csp_lda", "within", "bnci2014_001")
+    assert results.Results._split_name("riemann_acm_cross_subject_bnci2014_001") == (
         "riemann_acm", "cross_subject", "bnci2014_001")
-    assert results._split_name("fnirs_lda_cross_subject_shin2017_nback") == (
+    assert results.Results._split_name("fnirs_lda_cross_subject_shin2017_nback") == (
         "fnirs_lda", "cross_subject", "shin2017_nback")
 
 
 def test_metrics_handles_both_schemas():
-    assert results.read_metrics(_harness(ACC, KAPPA, ECE)) == {"acc": ACC, "kappa": KAPPA, "ece": ECE}
-    assert results.read_metrics({"acc_mean": ACC, "kappa_mean": KAPPA}) == {"acc": ACC, "kappa": KAPPA, "ece": None}
-    assert results.read_metrics({"nothing": 1}) is None
+    assert results.Results.read_metrics(_harness(ACC, KAPPA, ECE)) == {"acc": ACC, "kappa": KAPPA, "ece": ECE}
+    assert results.Results.read_metrics({"acc_mean": ACC, "kappa_mean": KAPPA}) == {"acc": ACC, "kappa": KAPPA, "ece": None}
+    assert results.Results.read_metrics({"nothing": 1}) is None
 
 
 def test_collect_rounds_to_precision(tmp_path):
-    row = results.collect(_write_run(tmp_path, NAME).parent)[NAME]
+    row = results.Results.collect(_write_run(tmp_path, NAME).parent)[NAME]
     assert row["acc"] == round(ACC, results._PRECISION)          # snapshot keeps _PRECISION decimals
     assert row["dataset"] == "bnci2014_001"
 
@@ -51,31 +51,31 @@ def test_record_upserts_and_preserves_others(tmp_path):
     other = "riemann_within_bnci2014_001"
     a = _write_run(tmp_path, NAME, _harness(acc=0.5))
     _write_run(tmp_path, other, _harness(acc=0.7))
-    assert results.record(a, out) == NAME
-    assert results.record(tmp_path / other, out) == other
+    assert results.Results.record(a, out) == NAME
+    assert results.Results.record(tmp_path / other, out) == other
     assert set(json.loads(out.read_text())["runs"]) == {NAME, other}    # both kept
 
     (a / "aggregate.json").write_text(json.dumps(_harness(acc=0.55)))   # re-record a changed number
-    results.record(a, out)
+    results.Results.record(a, out)
     runs = json.loads(out.read_text())["runs"]
     assert runs[NAME]["acc"] == 0.55 and runs[other]["acc"] == 0.7      # upsert in place, sibling untouched
 
 
 def test_record_nonfatal_on_missing(tmp_path):
-    assert results.record(tmp_path / "nope", tmp_path / "results.json") is None   # no aggregate -> None, no raise
+    assert results.Results.record(tmp_path / "nope", tmp_path / "results.json") is None   # no aggregate -> None, no raise
 
 
 def test_render_single_and_gap():
     runs = {"within": {"acc": ACC}, "cross": {"acc": CROSS_ACC}}
-    assert sync_numbers._render(runs, "within.acc") == "0.598"                    # 3dp display of ACC
-    assert sync_numbers._render(runs, "cross.acc-within.acc") == "−0.215"         # signed, unicode minus
+    assert sync_numbers.SyncNumbers._render(runs, "within.acc") == "0.598"                    # 3dp display of ACC
+    assert sync_numbers.SyncNumbers._render(runs, "cross.acc-within.acc") == "−0.215"         # signed, unicode minus
 
 
 def test_render_rejects_bad_term():
     with pytest.raises(KeyError):
-        sync_numbers._render({"a": {"acc": ACC}}, "a.f1score")     # unknown field
+        sync_numbers.SyncNumbers._render({"a": {"acc": ACC}}, "a.f1score")     # unknown field
     with pytest.raises(KeyError):
-        sync_numbers._render({}, "missing.acc")                   # unknown run
+        sync_numbers.SyncNumbers._render({}, "missing.acc")                   # unknown run
 
 
 def test_row_passes_through_fusion_blocks():
@@ -86,7 +86,7 @@ def test_row_passes_through_fusion_blocks():
            "per_role_mean": {"eeg": 0.4301, "fnirs": 0.4743, "late": 0.4679, "feature": 0.4341},
            "complementarity": {"oracle_either": 0.688, "err_corr": 0.0531},
            "aggregation": {"stacking": 0.4687, "eeg_conf_gap": 0.0228}}
-    row = results._row("fusion_cross_subject_kfold_shin2017_nback", agg)
+    row = results.Results._row("fusion_cross_subject_kfold_shin2017_nback", agg)
     assert row["acc"] == 0.4679 and row["kappa"] is None and row["ece"] is None
     assert row["fnirs"] == 0.4743 and row["oracle_either"] == 0.688         # role + complementarity fields
     assert row["stacking"] == 0.4687 and row["eeg_conf_gap"] == 0.0228      # aggregation-sweep fields
@@ -95,6 +95,6 @@ def test_row_passes_through_fusion_blocks():
 def test_render_generic_field_and_headroom_diff():
     """markers address any flat field (fusion roles / complementarity), incl. a signed diff (oracle headroom)."""
     runs = {"fus": {"fnirs": 0.474, "oracle_either": 0.688, "best_single": 0.474}}
-    assert sync_numbers._render(runs, "fus.fnirs") == "0.474"
-    assert sync_numbers._render(runs, "fus.oracle_either") == "0.688"
-    assert sync_numbers._render(runs, "fus.oracle_either-fus.best_single") == "+0.214"
+    assert sync_numbers.SyncNumbers._render(runs, "fus.fnirs") == "0.474"
+    assert sync_numbers.SyncNumbers._render(runs, "fus.oracle_either") == "0.688"
+    assert sync_numbers.SyncNumbers._render(runs, "fus.oracle_either-fus.best_single") == "+0.214"

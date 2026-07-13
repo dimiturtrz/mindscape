@@ -73,10 +73,10 @@ def _epochs(subject: int):
 def _predictions(subject: int):
     """Honest per-trial output: Riemann (tangent space) trained on the OTHER subjects (LOSO), predict THIS
     subject's blocks. Covariance methods read the workload band-power; chance is 1/3."""
-    from neuroscan.models import get_method
+    from neuroscan.models import Methods
 
     meta = store.Store.load(_DATASET, _CFG)
-    fit, score = get_method("riemann")
+    fit, score = Methods.get_method("riemann")
     tr = meta.filter(meta["subject"] != str(subject))
     te = meta.filter(meta["subject"] == str(subject))
     Xtr, ytr = store.Store.gather(tr)

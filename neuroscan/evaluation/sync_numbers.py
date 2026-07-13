@@ -35,69 +35,70 @@ _RESULTS = REPO / "results.json"
 _README = REPO / "README.md"
 _DP = 3          # decimals shown in the README (snapshot keeps more; see results._PRECISION)
 _SKIP_DIRS = {".venv", "external", "node_modules", ".git", "mlruns", "runs", ".pytest_cache", ".beads", "docs"}
-
-
-def _doc_files() -> list:
-    """Root README first, then every sub-README.md outside vendored/generated trees."""
-    subs = [p for p in sorted(REPO.rglob("README.md"))
-            if p != _README and not _SKIP_DIRS & set(p.relative_to(REPO).parts)]
-    return [_README, *subs]
-
 _MARKER = re.compile(r"<!--r:([^>]+?)-->(.*?)<!--/r-->")
 _TERM = re.compile(r"^([\w.]+?)\.([a-z_]+)$")     # <run>.<field>; field validated by presence in the row
 
 
-def _lookup(runs: dict, term: str) -> float:
-    m = _TERM.match(term.strip())
-    if not m:
-        raise KeyError(f"bad term {term!r} (want <run_name>.acc|kappa|ece)")
-    name, field = m.groups()
-    if name not in runs:
-        raise KeyError(f"no run {name!r} in results.json")
-    v = runs[name].get(field)
-    if v is None:
-        raise KeyError(f"run {name!r} has no {field}")
-    return float(v)
+class SyncNumbers:
+    @staticmethod
+    def _doc_files() -> list:
+        """Root README first, then every sub-README.md outside vendored/generated trees."""
+        subs = [p for p in sorted(REPO.rglob("README.md"))
+                if p != _README and not _SKIP_DIRS & set(p.relative_to(REPO).parts)]
+        return [_README, *subs]
 
+    @staticmethod
+    def _lookup(runs: dict, term: str) -> float:
+        m = _TERM.match(term.strip())
+        if not m:
+            raise KeyError(f"bad term {term!r} (want <run_name>.acc|kappa|ece)")
+        name, field = m.groups()
+        if name not in runs:
+            raise KeyError(f"no run {name!r} in results.json")
+        v = runs[name].get(field)
+        if v is None:
+            raise KeyError(f"run {name!r} has no {field}")
+        return float(v)
 
-def _render(runs: dict, expr: str) -> str:
-    expr = expr.strip()
-    if "-" in expr and not expr.startswith("-"):          # a.field-b.field -> signed within→cross gap
-        a, b = expr.split("-", 1)
-        gap = _lookup(runs, a) - _lookup(runs, b)
-        return f"{'−' if gap < 0 else '+'}{abs(gap):.{_DP}f}"     # unicode minus, matches README
-    return f"{_lookup(runs, expr):.{_DP}f}"
+    @staticmethod
+    def _render(runs: dict, expr: str) -> str:
+        expr = expr.strip()
+        if "-" in expr and not expr.startswith("-"):          # a.field-b.field -> signed within→cross gap
+            a, b = expr.split("-", 1)
+            gap = SyncNumbers._lookup(runs, a) - SyncNumbers._lookup(runs, b)
+            return f"{'−' if gap < 0 else '+'}{abs(gap):.{_DP}f}"     # unicode minus, matches README
+        return f"{SyncNumbers._lookup(runs, expr):.{_DP}f}"
 
+    @staticmethod
+    def _markers(runs: dict, text: str) -> list[tuple[str, str, str, str]]:
+        """(full_match, expr, current_text, rendered) for every marker in document order."""
+        return [(m[0], m[1], m[2], SyncNumbers._render(runs, m[1])) for m in _MARKER.finditer(text)]
 
-def _markers(runs: dict, text: str) -> list[tuple[str, str, str, str]]:
-    """(full_match, expr, current_text, rendered) for every marker in document order."""
-    return [(m[0], m[1], m[2], _render(runs, m[1])) for m in _MARKER.finditer(text)]
-
-
-def sync(*, check: bool = False) -> int:
-    runs = json.loads(_RESULTS.read_text())["runs"]
-    total = stale_total = 0
-    for path in _doc_files():
-        text = path.read_text(encoding="utf-8")
-        marks = _markers(runs, text)
-        if not marks:
-            continue
-        stale = [(expr, cur, new) for _old, expr, cur, new in marks if cur != new]
-        total += len(marks)
-        stale_total += len(stale)
-        rel = path.relative_to(REPO)
+    @staticmethod
+    def sync(*, check: bool = False) -> int:
+        runs = json.loads(_RESULTS.read_text())["runs"]
+        total = stale_total = 0
+        for path in SyncNumbers._doc_files():
+            text = path.read_text(encoding="utf-8")
+            marks = SyncNumbers._markers(runs, text)
+            if not marks:
+                continue
+            stale = [(expr, cur, new) for _old, expr, cur, new in marks if cur != new]
+            total += len(marks)
+            stale_total += len(stale)
+            rel = path.relative_to(REPO)
+            if check:
+                for expr, cur, new in stale:
+                    logger.info(f"  {rel}: {expr}: {cur!r} -> {new!r}")
+                continue
+            for old, expr, _cur, new in marks:
+                text = text.replace(old, f"<!--r:{expr}-->{new}<!--/r-->", 1)
+            path.write_text(text, encoding="utf-8")
         if check:
-            for expr, cur, new in stale:
-                logger.info(f"  {rel}: {expr}: {cur!r} -> {new!r}")
-            continue
-        for old, expr, _cur, new in marks:
-            text = text.replace(old, f"<!--r:{expr}-->{new}<!--/r-->", 1)
-        path.write_text(text, encoding="utf-8")
-    if check:
-        logger.info(f"{'STALE' if stale_total else 'ok'} — {stale_total}/{total} marker(s) out of sync")
-        return 1 if stale_total else 0
-    logger.info(f"synced {total} marker(s); updated {stale_total}")
-    return 0
+            logger.info(f"{'STALE' if stale_total else 'ok'} — {stale_total}/{total} marker(s) out of sync")
+            return 1 if stale_total else 0
+        logger.info(f"synced {total} marker(s); updated {stale_total}")
+        return 0
 
 
 if __name__ == "__main__":
@@ -106,4 +107,4 @@ if __name__ == "__main__":
         logging.getLogger(lib_name).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="report staleness, don't write (CI gate)")
-    sys.exit(sync(check=ap.parse_args().check))
+    sys.exit(SyncNumbers.sync(check=ap.parse_args().check))

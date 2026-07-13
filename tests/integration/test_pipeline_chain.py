@@ -42,18 +42,18 @@ def _lda():
 
 def test_within_chain_decodes_separable(tmp_path):
     meta = _write_cloud(tmp_path)
-    folds = harness.folds_for(meta, "within", test_sessions=["1test"])
+    folds = harness.Harness.folds_for(meta, "within", test_sessions=["1test"])
     assert len(folds) == 3
     fit, score = _lda()
-    res = harness.aggregate(harness.Method("lda", fit, score, 4, "within"), folds)
+    res = harness.Harness.aggregate(harness.Method("lda", fit, score, 4, "within"), folds)
     assert res["fold_mean"]["acc"] > 0.8                  # separable signal decodes through the chain
     assert np.array(res["pooled"]["confusion"]).shape == (4, 4)
 
 
 def test_cross_subject_chain_runs(tmp_path):
     meta = _write_cloud(tmp_path)
-    folds = harness.folds_for(meta, "cross_subject")
+    folds = harness.Harness.folds_for(meta, "cross_subject")
     fit, score = _lda()
-    res = harness.aggregate(harness.Method("lda", fit, score, 4, "cross_subject"), folds)
+    res = harness.Harness.aggregate(harness.Method("lda", fit, score, 4, "cross_subject"), folds)
     assert res["n_folds"] == 3                            # leave-one-subject-out -> one fold per subject
     assert 0.0 <= res["fold_mean"]["ece"] <= 1.0

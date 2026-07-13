@@ -75,8 +75,8 @@ def main():
             proba = transfer.zero_shot_predict(transfer.Domain(C[tr], y[tr], g[tr]),
                                                transfer.Domain(C[te], groups=g[te]), scale=False)
             pred = proba.argmax(1)
-            accs.append(metrics.accuracy(y[te], pred))
-            kaps.append(metrics.kappa(y[te], pred))
+            accs.append(metrics.Metrics.accuracy(y[te], pred))
+            kaps.append(metrics.Metrics.kappa(y[te], pred))
     a, k = float(np.mean(accs)), float(np.mean(kaps))
     logger.info(f"\n  fused-only (joint EEG×fNIRS×coverage) · re-centered tangent · cross-subject {len(_SEEDS)}x{_K}-fold: "
           f"acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")

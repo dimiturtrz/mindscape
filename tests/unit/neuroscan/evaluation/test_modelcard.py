@@ -14,7 +14,7 @@ _RES = {
 
 
 def test_card_has_headline_and_where_it_fails():
-    md = modelcard.card(_RES, "bnci2014_001", "within")
+    md = modelcard.ModelCard.card(_RES, "bnci2014_001", "within")
     assert "# Model card" in md
     assert "Where it fails" in md
     assert "worst: subject 1" in md          # lowest-acc fold surfaced

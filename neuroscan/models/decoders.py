@@ -23,8 +23,7 @@ from pydantic import BaseModel
 
 # standardizers + crops live in transforms.py (independently testable); re-exported under the legacy
 # private names so callers (e.g. tasks/motor_imagery/quantize.py) keep working.
-from neuroscan.models.transforms import crops as _crops
-from neuroscan.models.transforms import standardizer as _standardizer
+from neuroscan.models.transforms import Transforms
 
 # method -> (braindecode class, training + crop hparams). crop_frac=0.5 + 16 train crops is the standard
 # 2a recipe; strong nets get more epochs (cheap on the 5090, capped by early stopping).
@@ -46,16 +45,8 @@ _MIN_TRIALS_FOR_VAL = 8   # need more than this many trials before carving a hel
 
 logger = logging.getLogger(__name__)
 
-
-def _take(Xs, y, idx, cl, n_crops):
-    """Gather (X, y) for a set of trial indices — cropping into `cl`-length windows when cl is set.
-    idx=None (no validation split) returns (None, None), so the caller needs no use_val branch."""
-    if idx is None:
-        return None, None
-    if not cl:
-        return Xs[idx], y[idx]
-    Xc, cmap = _crops(Xs[idx], cl, n_crops)
-    return Xc, y[idx][cmap]
+_crops = Transforms.crops
+_standardizer = Transforms.standardizer
 
 
 @dataclass
@@ -94,6 +85,17 @@ class BraindecodeClf:
     and `predict_proba(X) -> probs`, the same contract the classical baselines satisfy — so the harness
     runs nets and baselines through one path."""
 
+    @staticmethod
+    def _take(Xs, y, idx, cl, n_crops):
+        """Gather (X, y) for a set of trial indices — cropping into `cl`-length windows when cl is set.
+        idx=None (no validation split) returns (None, None), so the caller needs no use_val branch."""
+        if idx is None:
+            return None, None
+        if not cl:
+            return Xs[idx], y[idx]
+        Xc, cmap = _crops(Xs[idx], cl, n_crops)
+        return Xc, y[idx][cmap]
+
     def __init__(self, arch: Arch, config: TrainCfg):
         self.cfg = config
         self.device = config.device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -119,8 +121,8 @@ class BraindecodeClf:
         else:
             ti, vi = np.arange(len(Xs)), None
 
-        Xtr, ytr = _take(Xs, y, ti, cl, self.n_train_crops)
-        Xva, yva = _take(Xs, y, vi, cl, self.n_test_crops)     # vi is None when no val -> (None, None)
+        Xtr, ytr = BraindecodeClf._take(Xs, y, ti, cl, self.n_train_crops)
+        Xva, yva = BraindecodeClf._take(Xs, y, vi, cl, self.n_test_crops)     # vi is None when no val -> (None, None)
         return Xtr, ytr, Xva, yva
 
     def fit(self, X, y):
@@ -194,28 +196,28 @@ class BraindecodeClf:
         """Crop-averaged logits per trial — the input temperature scaling calibrates."""
         return self._trial_outputs(X, softmax=False)
 
+    @staticmethod
+    def make(method: str):
+        """Return (fit_fn, score_fn) for a registered braindecode method (with crop augmentation)."""
+        if method not in MODELS:
+            raise KeyError(f"unknown decoder {method!r}; have {sorted(MODELS)}")
+        cfg = {**DEFAULTS, **MODELS[method]}
 
-def make(method: str):
-    """Return (fit_fn, score_fn) for a registered braindecode method (with crop augmentation)."""
-    if method not in MODELS:
-        raise KeyError(f"unknown decoder {method!r}; have {sorted(MODELS)}")
-    cfg = {**DEFAULTS, **MODELS[method]}
+        def fit(X, y, **over):
+            p = {**cfg, **over}
+            T = X.shape[2]
+            crop_len = int(p["crop_frac"] * T) if p.get("crop_frac") else None
+            n_times = crop_len or T
+            arch = Arch(cls=p["cls"], n_chans=X.shape[1], n_times=n_times, n_classes=int(y.max()) + 1)
+            config = TrainCfg(
+                epochs=p["epochs"], lr=p["lr"], batch=p["batch"],
+                log_every=p.get("log_every", 0), val_frac=p.get("val_frac", 0.2),
+                patience=p.get("patience", 0), crop_len=crop_len,
+                n_train_crops=p["n_train_crops"], n_test_crops=p["n_test_crops"],
+                standardize=p.get("standardize", "ems"), seed=p.get("seed", 0))
+            return BraindecodeClf(arch, config).fit(X, y)
 
-    def fit(X, y, **over):
-        p = {**cfg, **over}
-        T = X.shape[2]
-        crop_len = int(p["crop_frac"] * T) if p.get("crop_frac") else None
-        n_times = crop_len or T
-        arch = Arch(cls=p["cls"], n_chans=X.shape[1], n_times=n_times, n_classes=int(y.max()) + 1)
-        config = TrainCfg(
-            epochs=p["epochs"], lr=p["lr"], batch=p["batch"],
-            log_every=p.get("log_every", 0), val_frac=p.get("val_frac", 0.2),
-            patience=p.get("patience", 0), crop_len=crop_len,
-            n_train_crops=p["n_train_crops"], n_test_crops=p["n_test_crops"],
-            standardize=p.get("standardize", "ems"), seed=p.get("seed", 0))
-        return BraindecodeClf(arch, config).fit(X, y)
+        def score(clf, X):
+            return clf.predict_proba(X)
 
-    def score(clf, X):
-        return clf.predict_proba(X)
-
-    return fit, score
+        return fit, score

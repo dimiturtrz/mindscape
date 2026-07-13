@@ -34,7 +34,7 @@ def _perfect_method(n_classes):
 def test_aggregate_fold_mean_and_pooled_perfect_scorer(monkeypatch):
     monkeypatch.setattr(harness.store.Store, "gather", staticmethod(_stub_gather))
     folds = [_fold("s1", [0, 1, 2, 3]), _fold("s2", [0, 0, 1, 1, 2])]   # unequal fold sizes
-    res = harness.aggregate(_perfect_method(4), folds)
+    res = harness.Harness.aggregate(_perfect_method(4), folds)
 
     assert res["method"] == "perfect" and res["n_folds"] == 2
     assert res["fold_mean"]["acc"] == 1.0 and res["fold_mean"]["kappa"] == 1.0
@@ -51,7 +51,7 @@ def test_aggregate_collects_models_out_in_fold_order(monkeypatch):
     monkeypatch.setattr(harness.store.Store, "gather", staticmethod(_stub_gather))
     folds = [_fold("a", [0, 1]), _fold("b", [1, 0])]
     models: list = []
-    harness.aggregate(_perfect_method(2), folds, models_out=models)
+    harness.Harness.aggregate(_perfect_method(2), folds, models_out=models)
     assert [name for name, _clf in models] == ["a", "b"]
 
 
@@ -62,7 +62,7 @@ def _kfold_meta(n_subjects=5):
 
 
 def test_folds_for_cross_subject_kfold_partitions_subjects():
-    folds = harness.folds_for(_kfold_meta(5), "cross_subject_kfold")
+    folds = harness.Harness.folds_for(_kfold_meta(5), "cross_subject_kfold")
     assert len(folds) == 5                        # k=5 over 5 subjects == LOSO limit
     tested = set()
     for _name, train, test in folds:

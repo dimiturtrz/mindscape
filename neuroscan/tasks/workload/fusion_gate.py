@@ -97,7 +97,7 @@ def main():
         P.append(p)
         A.append(a)
         Y.append(y[m_te])
-        acc = metrics.accuracy(y[m_te], p.argmax(1))
+        acc = metrics.Metrics.accuracy(y[m_te], p.argmax(1))
         rows.append({"fold": str(i), "n": int(m_te.sum()), "gate_acc": acc,
                      "alpha_mean": float(a.mean())})
         logger.info(f"  fold{i}: gate {acc:.3f} | ᾱ(eeg-weight) {a.mean():.2f} (n={int(m_te.sum())})")
@@ -120,7 +120,7 @@ def main():
            "pooled_acc": gate, "acc_std": std, "per_fold": rows}
     (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
     if not args.no_record:
-        results.record(run_dir)
+        results.Results.record(run_dir)
     logger.info(f"-> {run_dir}/aggregate.json")
 
 

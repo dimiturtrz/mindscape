@@ -8,9 +8,11 @@ from __future__ import annotations
 import numpy as np
 
 
-def spread(rows: list[dict], key: str = "acc") -> dict:
-    """Summary of a per-group metric: mean / std / min / max — the cross-subject variability that the
-    single mean number hides."""
-    vals = np.array([r[key] for r in rows], float)
-    return {"mean": float(vals.mean()), "std": float(vals.std()),
-            "min": float(vals.min()), "max": float(vals.max())}
+class Diagnostics:
+    @staticmethod
+    def spread(rows: list[dict], key: str = "acc") -> dict:
+        """Summary of a per-group metric: mean / std / min / max — the cross-subject variability that the
+        single mean number hides."""
+        vals = np.array([r[key] for r in rows], float)
+        return {"mean": float(vals.mean()), "std": float(vals.std()),
+                "min": float(vals.min()), "max": float(vals.max())}

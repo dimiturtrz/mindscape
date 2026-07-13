@@ -16,29 +16,31 @@ from __future__ import annotations
 import numpy as np
 
 
-def holdout_mask(concept_names: np.ndarray, holdout: set[str]) -> np.ndarray:
-    """Boolean mask of trials to KEEP for training: every trial whose concept is NOT in the eval `holdout`
-    set. Keeps the cross-dataset encoder from ever seeing the concepts it will be retrieved on."""
-    names = np.asarray(concept_names)
-    return np.array([name not in holdout for name in names], dtype=bool)
+class CrossDataset:
+    @staticmethod
+    def holdout_mask(concept_names: np.ndarray, holdout: set[str]) -> np.ndarray:
+        """Boolean mask of trials to KEEP for training: every trial whose concept is NOT in the eval `holdout`
+        set. Keeps the cross-dataset encoder from ever seeing the concepts it will be retrieved on."""
+        names = np.asarray(concept_names)
+        return np.array([name not in holdout for name in names], dtype=bool)
 
+    @staticmethod
+    def common_channel_order(names_a: list[str], names_b: list[str]) -> list[str]:
+        """The electrodes present in BOTH montages, in `names_a`'s order — the shared spatial layout a
+        cross-dataset encoder must use. THINGS-EEG1 and -EEG2 share 62 of 63 electrodes (EEG1 has Fz not Cz,
+        EEG2 has Cz not Fz) but in different channel ORDER, so without this the encoder's spatial filters land
+        on the wrong electrodes at eval — the confound that pins cross-dataset retrieval to chance."""
+        in_b = set(names_b)
+        return [name for name in names_a if name in in_b]
 
-def common_channel_order(names_a: list[str], names_b: list[str]) -> list[str]:
-    """The electrodes present in BOTH montages, in `names_a`'s order — the shared spatial layout a
-    cross-dataset encoder must use. THINGS-EEG1 and -EEG2 share 62 of 63 electrodes (EEG1 has Fz not Cz,
-    EEG2 has Cz not Fz) but in different channel ORDER, so without this the encoder's spatial filters land
-    on the wrong electrodes at eval — the confound that pins cross-dataset retrieval to chance."""
-    in_b = set(names_b)
-    return [name for name in names_a if name in in_b]
-
-
-def align_channels(eeg: np.ndarray, src_names: list[str], target_names: list[str]) -> np.ndarray:
-    """Reindex `eeg` [n, C, t] so its channel axis matches `target_names` BY NAME (drop channels not in the
-    target; error if the target names a channel absent from the source). Makes two datasets' differently-
-    ordered montages line up before an encoder trained on one is applied to the other."""
-    src_index = {name: i for i, name in enumerate(src_names)}
-    missing = [name for name in target_names if name not in src_index]
-    if missing:
-        raise ValueError(f"source channels missing {missing} — cannot align to target montage")
-    order = [src_index[name] for name in target_names]
-    return eeg[:, order, :]
+    @staticmethod
+    def align_channels(eeg: np.ndarray, src_names: list[str], target_names: list[str]) -> np.ndarray:
+        """Reindex `eeg` [n, C, t] so its channel axis matches `target_names` BY NAME (drop channels not in the
+        target; error if the target names a channel absent from the source). Makes two datasets' differently-
+        ordered montages line up before an encoder trained on one is applied to the other."""
+        src_index = {name: i for i, name in enumerate(src_names)}
+        missing = [name for name in target_names if name not in src_index]
+        if missing:
+            raise ValueError(f"source channels missing {missing} — cannot align to target montage")
+        order = [src_index[name] for name in target_names]
+        return eeg[:, order, :]

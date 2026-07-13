@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from core.data.eeg import things_eeg1, things_eeg2
 from neuroscan.evaluation import cross_dataset as bridge
-from neuroscan.evaluation.retrieval import retrieval_calibration, retrieval_metrics
+from neuroscan.evaluation.retrieval import Retrieval
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tasks.visual.train_nice import RetrievalSet, TrainConfig, TrainData, evaluate, train_encoder
 
@@ -74,14 +74,14 @@ def run(cfg: CrossDatasetConfig) -> dict:
     holdout = set(eval_names)          # EEG2's 200 test concepts — never seen in EEG1 training
 
     e1_ch, e2_ch = things_eeg1.ThingsEeg1.channels(), things_eeg2.ThingsEeg2.channels()
-    common_ch = bridge.common_channel_order(e2_ch, e1_ch)      # 62 shared electrodes, in EEG2 order
+    common_ch = bridge.CrossDataset.common_channel_order(e2_ch, e1_ch)      # 62 shared electrodes, in EEG2 order
     logger.info(f"montage align: {len(common_ch)}/{len(e1_ch)} shared electrodes "
           f"(EEG1-only {sorted(set(e1_ch) - set(e2_ch))}, EEG2-only {sorted(set(e2_ch) - set(e1_ch))})")
 
     e1_eeg, e1_concept, _, _ = things_eeg1.ThingsEeg1.get_epochs(
         list(cfg.eeg1_subjects), things_eeg1.ThingsEeg1EpochCfg(resample=cfg.resample))
-    e1_eeg = bridge.align_channels(e1_eeg, e1_ch, common_ch)   # reorder EEG1 to the shared montage
-    keep = bridge.holdout_mask(e1_concept, holdout) & np.array([n in name_to_proto for n in e1_concept])
+    e1_eeg = bridge.CrossDataset.align_channels(e1_eeg, e1_ch, common_ch)   # reorder EEG1 to the shared montage
+    keep = bridge.CrossDataset.holdout_mask(e1_concept, holdout) & np.array([n in name_to_proto for n in e1_concept])
     e1_eeg, e1_names = e1_eeg[keep], e1_concept[keep]
     targets = np.stack([name_to_proto[name] for name in e1_names]).astype(np.float32)
     name_id = {name: i for i, name in enumerate(sorted(set(e1_names)))}      # concept ids for the val split
@@ -93,13 +93,13 @@ def run(cfg: CrossDatasetConfig) -> dict:
 
     e2_eeg, e2_concept, _, _ = things_eeg2.ThingsEeg2.get_epochs(
         list(cfg.eeg2_subjects), things_eeg2.ThingsEpochCfg(split="test", resample=cfg.resample))
-    e2_eeg = bridge.align_channels(e2_eeg, e2_ch, common_ch)   # same shared montage the encoder trained on
+    e2_eeg = bridge.CrossDataset.align_channels(e2_eeg, e2_ch, common_ch)   # same shared montage the encoder trained on
     test_bank = clip_targets.concept_prototypes("test")
     topk = evaluate(encoder, RetrievalSet(e2_eeg, e2_concept, test_bank), device)
 
     scores = _embed(encoder, e2_eeg, device) @ test_bank.T
-    metrics = retrieval_metrics(scores, e2_concept)
-    calib = retrieval_calibration(scores, e2_concept, scale=_LOGIT_SCALE)
+    metrics = Retrieval.retrieval_metrics(scores, e2_concept)
+    calib = Retrieval.retrieval_calibration(scores, e2_concept, scale=_LOGIT_SCALE)
     logger.info(f"cross-dataset EEG1->EEG2: single top1 {topk['single_trial'][1]*100:.2f}%  "
           f"MRR {metrics['mrr']:.3f}  median-rank {metrics['median_rank']:.0f}/{len(eval_names)}  "
           f"PR-AUC {metrics['pr_auc']:.3f}  ECE {calib['ece']:.3f}")

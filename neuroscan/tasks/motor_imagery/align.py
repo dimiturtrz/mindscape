@@ -64,50 +64,52 @@ class AlignConfig(BaseModel):
     lag: int = 8
 
 
-def _covariances(X, augment, order, lag, estimator="oas"):
-    if augment:
-        X = Covariance.time_delay_embed(X.astype(np.float64), order, lag)
-    return Covariances(estimator=estimator).transform(X.astype(np.float64))
+class Align:
+    @staticmethod
+    def _covariances(X, augment, order, lag, estimator="oas"):
+        if augment:
+            X = Covariance.time_delay_embed(X.astype(np.float64), order, lag)
+        return Covariances(estimator=estimator).transform(X.astype(np.float64))
 
+    @staticmethod
+    def _zero_shot_fold(s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
+        """Zero-shot: delegate the alignment + classifier to the transfer method, score ALL target."""
+        probs = transfer.zero_shot_predict(train, transfer.Domain(test.cov),
+                                           scale=(cfg.method == "recenter_scale"))
+        return Align._row(s, test.labels, probs)
 
-def _zero_shot_fold(s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
-    """Zero-shot: delegate the alignment + classifier to the transfer method, score ALL target."""
-    probs = transfer.zero_shot_predict(train, transfer.Domain(test.cov),
-                                       scale=(cfg.method == "recenter_scale"))
-    return _row(s, test.labels, probs)
+    @staticmethod
+    def _calibrated_fold(s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
+        """Calibrated: carve a stratified `calib_frac` of the held-out subject as the *only* labelled target data
+        (the rest is the disjoint test set), hand it to the transfer method, score the disjoint remainder. Test
+        labels never enter the fit — the split is the runner's leakage-free guarantee, the method just consumes it."""
+        cal, ev = next(StratifiedShuffleSplit(1, train_size=cfg.calib_frac,
+                                              random_state=cfg.seed).split(test.cov, test.labels))
+        pred = transfer.calibrated_predict(cfg.method, train,
+                                           transfer.Domain(test.cov[cal], test.labels[cal]),
+                                           transfer.Domain(test.cov[ev]), cfg.mdwm_lambda)
+        yev = test.labels[ev]
+        row = {"fold": str(s), "n": int(len(ev)), "n_calib": int(len(cal)),
+               "acc": metrics.Metrics.accuracy(yev, pred), "kappa": metrics.Metrics.kappa(yev, pred), "ece": 0.0}
+        return row, None, yev
 
+    @staticmethod
+    def _row(s, yte, probs):
+        pred = probs.argmax(1)
+        row = {"fold": str(s), "n": int(len(yte)), "acc": metrics.Metrics.accuracy(yte, pred),
+               "kappa": metrics.Metrics.kappa(yte, pred), "ece": metrics.Metrics.ece_from_probs(probs, yte)}
+        return row, probs, yte
 
-def _calibrated_fold(s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
-    """Calibrated: carve a stratified `calib_frac` of the held-out subject as the *only* labelled target data
-    (the rest is the disjoint test set), hand it to the transfer method, score the disjoint remainder. Test
-    labels never enter the fit — the split is the runner's leakage-free guarantee, the method just consumes it."""
-    cal, ev = next(StratifiedShuffleSplit(1, train_size=cfg.calib_frac,
-                                          random_state=cfg.seed).split(test.cov, test.labels))
-    pred = transfer.calibrated_predict(cfg.method, train,
-                                       transfer.Domain(test.cov[cal], test.labels[cal]),
-                                       transfer.Domain(test.cov[ev]), cfg.mdwm_lambda)
-    yev = test.labels[ev]
-    row = {"fold": str(s), "n": int(len(ev)), "n_calib": int(len(cal)),
-           "acc": metrics.accuracy(yev, pred), "kappa": metrics.kappa(yev, pred), "ece": 0.0}
-    return row, None, yev
-
-
-def _row(s, yte, probs):
-    pred = probs.argmax(1)
-    row = {"fold": str(s), "n": int(len(yte)), "acc": metrics.accuracy(yte, pred),
-           "kappa": metrics.kappa(yte, pred), "ece": metrics.ece_from_probs(probs, yte)}
-    return row, probs, yte
-
-
-def _run_fold(s, tr, te, cfg: AlignConfig):
-    """One LOSO fold — module-level so joblib ships it to a worker (folds are independent)."""
-    Xtr, ytr = store.Store.gather(tr)
-    Xte, yte = store.Store.gather(te)
-    train = transfer.Domain(_covariances(Xtr, cfg.augment, cfg.order, cfg.lag), ytr, tr["subject"].to_numpy())
-    test = transfer.Domain(_covariances(Xte, cfg.augment, cfg.order, cfg.lag), yte)
-    if cfg.method in _ZERO_SHOT:
-        return _zero_shot_fold(s, train, test, cfg)
-    return _calibrated_fold(s, train, test, cfg)
+    @staticmethod
+    def _run_fold(s, tr, te, cfg: AlignConfig):
+        """One LOSO fold — module-level so joblib ships it to a worker (folds are independent)."""
+        Xtr, ytr = store.Store.gather(tr)
+        Xte, yte = store.Store.gather(te)
+        train = transfer.Domain(Align._covariances(Xtr, cfg.augment, cfg.order, cfg.lag), ytr, tr["subject"].to_numpy())
+        test = transfer.Domain(Align._covariances(Xte, cfg.augment, cfg.order, cfg.lag), yte)
+        if cfg.method in _ZERO_SHOT:
+            return Align._zero_shot_fold(s, train, test, cfg)
+        return Align._calibrated_fold(s, train, test, cfg)
 
 
 def main():
@@ -144,7 +146,7 @@ def main():
     folds = list(splits.Splits.leave_one_subject_out(meta))
     logger.info(f"\n=== {name} · cross_subject · {dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
     out_folds = Parallel(n_jobs=args.jobs)(
-        delayed(_run_fold)(s, tr, te, fold_cfg) for s, tr, te in folds)
+        delayed(Align._run_fold)(s, tr, te, fold_cfg) for s, tr, te in folds)
 
     rows, P, Y = [], [], []
     for row, probs, yte in sorted(out_folds, key=lambda r: r[0]["fold"]):
@@ -167,14 +169,14 @@ def main():
            "calib_frac": calib_frac if regime == "calibrated" else None,
            "acc_mean": acc, "kappa_mean": kap, "per_fold": rows}
     (out / "aggregate.json").write_text(json.dumps(res, indent=2))
-    with tracking.run("mindscape", f"{name}_cross",
+    with tracking.Tracking.run("mindscape", f"{name}_cross",
                       params={"exp": args.exp, "method": name, "transfer_regime": regime,
                               "augment": augment, "calib_frac": calib_frac},
                       tags={"kind": "transfer", "regime": "cross_subject"}, run_dir=out):
-        tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
-        tracking.per_group("acc_subject", {r["fold"]: r["acc"] for r in rows})
-        tracking.artifact(out / "aggregate.json")
-    if not args.no_record and results.record(out):
+        tracking.Tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
+        tracking.Tracking.per_group("acc_subject", {r["fold"]: r["acc"] for r in rows})
+        tracking.Tracking.artifact(out / "aggregate.json")
+    if not args.no_record and results.Results.record(out):
         logger.info(f"   recorded -> results.json ({out.name})")
     logger.info(f"-> {out}/aggregate.json")
 

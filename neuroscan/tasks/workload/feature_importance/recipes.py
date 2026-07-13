@@ -49,8 +49,8 @@ def _cv(F, fam, y, groups, families):
         clf = make_pipeline(StandardScaler(),
                             LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")).fit(Fr[tr], y[tr])
         pred = clf.predict(Fr[te])
-        accs.append(metrics.accuracy(y[te], pred))
-        kaps.append(metrics.kappa(y[te], pred))
+        accs.append(metrics.Metrics.accuracy(y[te], pred))
+        kaps.append(metrics.Metrics.kappa(y[te], pred))
     return float(np.mean(accs)), float(np.std(accs)), float(np.mean(kaps))
 
 
@@ -63,7 +63,7 @@ def _record(key, acc, kappa, n_classes):
         "method": f"fnirs_recipe_{key}", "regime": "cross_subject", "n_classes": n_classes,
         "fold_mean": {"acc": acc, "kappa": kappa, "ece": None},
     }, indent=2))
-    return results.record(run_dir)
+    return results.Results.record(run_dir)
 
 
 def main():

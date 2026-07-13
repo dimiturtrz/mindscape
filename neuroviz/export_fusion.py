@@ -19,7 +19,7 @@ from sklearn.model_selection import GroupKFold
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
-from neuroscan.models import get_method
+from neuroscan.models import Methods
 
 _EEG, _FNIRS = "shin2017_nback_eeg", "shin2017_nback"
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
@@ -42,7 +42,7 @@ def main():
     from pyriemann.estimation import Covariances
 
     from baselines.eeg import transfer
-    ff, fs = get_method("fnirs_lda")
+    ff, fs = Methods.get_method("fnirs_lda")
 
     blocks = []
     for tr, te in GroupKFold(n_splits=5).split(subs, groups=subs):

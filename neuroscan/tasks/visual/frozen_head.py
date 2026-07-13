@@ -33,8 +33,8 @@ from torch import nn
 
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.montage import EegMontage
-from neuroscan.models.foundation import _load_backbone
-from neuroscan.models.nice import clip_infonce, retrieval_topk
+from neuroscan.models.foundation import Foundation
+from neuroscan.models.nice import Nice
 from neuroscan.tasks.visual import clip_targets
 
 logger = logging.getLogger(__name__)
@@ -183,7 +183,7 @@ class Cache:
 
 
 def _build_cache(train_subjects: list[int], test_subject: int, device: str) -> Cache:
-    backbone = _load_backbone().to(device).eval()
+    backbone = Foundation._load_backbone().to(device).eval()
     for p in backbone.parameters():
         p.requires_grad = False
     tr_eeg, tr_concept, tr_files, _ = _load(train_subjects, "training")
@@ -210,10 +210,10 @@ def _retrieval(head, feat: torch.Tensor, concept: np.ndarray, bank: torch.Tensor
     head.eval()
     emb = torch.cat([head(feat[i:i + 4096].float().to(device)).cpu() for i in range(0, len(feat), 4096)])
     labels = torch.tensor(concept)
-    single = retrieval_topk(emb, bank, labels)
+    single = Nice.retrieval_topk(emb, bank, labels)
     n = int(concept.max()) + 1
     averaged = torch.stack([F.normalize(emb[labels == c].mean(0), dim=-1) for c in range(n)])
-    return {"single_trial": single, "concept_avg": retrieval_topk(averaged, bank, torch.arange(n))}
+    return {"single_trial": single, "concept_avg": Nice.retrieval_topk(averaged, bank, torch.arange(n))}
 
 
 def _train_arm(spec: HeadSpec, cache: Cache, device: str, cfg: FitCfg) -> dict:
@@ -234,7 +234,7 @@ def _train_arm(spec: HeadSpec, cache: Cache, device: str, cfg: FitCfg) -> dict:
             f = cache.tr_feat[idx].float().to(device)
             tgt = F.normalize(cache.tr_tgt[idx].to(device), dim=-1)
             opt.zero_grad()
-            loss = clip_infonce(head(f), tgt, logit_scale.exp().clamp(max=100))
+            loss = Nice.clip_infonce(head(f), tgt, logit_scale.exp().clamp(max=100))
             loss.backward()
             opt.step()
         val_top1 = _retrieval(head, val_feat, val_lab, val_bank_t, device)["single_trial"][1]

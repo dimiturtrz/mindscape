@@ -2,6 +2,6 @@
 Kept so `--method eegnet` and any direct imports resolve to the same (fit, score) contract."""
 from __future__ import annotations
 
-from neuroscan.models.decoders import make
+from neuroscan.models.decoders import BraindecodeClf
 
-fit, score = make("eegnet")
+fit, score = BraindecodeClf.make("eegnet")

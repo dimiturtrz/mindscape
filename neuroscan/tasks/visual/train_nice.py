@@ -34,9 +34,8 @@ from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.covariance import Covariance
-from neuroscan.models import foundation  # noqa: F401 — registers the "cbramod" encoder in the registry
-from neuroscan.models.encoders import EncoderSpec, build_encoder
-from neuroscan.models.nice import SubjectDiscriminator, clip_infonce, retrieval_topk
+from neuroscan.models.encoders import EncoderRegistry, EncoderSpec
+from neuroscan.models.nice import Nice, SubjectDiscriminator
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tasks.visual.sampling import (
     BatchSpec,
@@ -136,11 +135,11 @@ def evaluate(encoder, data: RetrievalSet, device, batch: int = _EVAL_BATCH) -> d
                               for i in range(0, len(data.eeg), batch)])  # [N,512] normalized (back to fp32)
     candidate_bank = torch.tensor(data.candidates)
     labels = torch.tensor(data.concept)
-    single = retrieval_topk(embedded, candidate_bank, labels)
+    single = Nice.retrieval_topk(embedded, candidate_bank, labels)
     n_concepts = int(data.concept.max()) + 1
     averaged = torch.stack([torch.nn.functional.normalize(embedded[labels == c].mean(0), dim=-1)
                             for c in range(n_concepts)])
-    concept_avg = retrieval_topk(averaged, candidate_bank, torch.arange(n_concepts))
+    concept_avg = Nice.retrieval_topk(averaged, candidate_bank, torch.arange(n_concepts))
     return {"single_trial": single, "concept_avg": concept_avg}
 
 
@@ -220,7 +219,7 @@ class TrainData:
 def _build_optim(spec: EncoderSpec, n_subjects: int, cfg: TrainConfig, device: str):
     """Encoder (by `cfg.model`, from the registry) + logit-scale + (optional) subject discriminator, all under
     one AdamW."""
-    encoder = build_encoder(cfg.model, spec).to(device)
+    encoder = EncoderRegistry.build_encoder(cfg.model, spec).to(device)
     logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
     # per-encoder optimizer groups if the encoder defines them (foundation: discriminative backbone/head LR),
     # else one group at cfg.lr (NICE — unchanged).
@@ -283,7 +282,7 @@ def train_encoder(data: TrainData, cfg: TrainConfig, device: str):
             optimizer.zero_grad()
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda" and cfg.amp)):
                 z = encoder(eeg_batch)
-                loss = clip_infonce(z, target_batch, logit_scale.exp().clamp(max=100),
+                loss = Nice.clip_infonce(z, target_batch, logit_scale.exp().clamp(max=100),
                                     hard_beta=cfg.hard_beta, soft_tau=cfg.soft_tau)
                 if discriminator is not None:              # push encoder to be subject-invariant (GRL, bd 36g)
                     subj_logits = discriminator(z, lam)

@@ -64,21 +64,21 @@ def main():
         meta = store.Store.load(dataset, cfg)
         n_classes = int(meta["label_id"].max()) + 1
         tsess = [test_session] if (regime == "within" and test_session) else ()
-        folds = harness.folds_for(meta, regime, test_sessions=tsess)
-        fit_fn, score_fn = models.get_method(method, fs=getattr(cfg, "resample", None))
+        folds = harness.Harness.folds_for(meta, regime, test_sessions=tsess)
+        fit_fn, score_fn = models.Methods.get_method(method, fs=getattr(cfg, "resample", None))
         n_jobs = 1 if method in MODELS else -1                    # classical baselines parallelize folds; nets don't
         run_dir = Path("runs") / f"{method}_{regime}_{dataset}"
         run_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"\n=== {name} · {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
         method_obj = harness.Method(method, fit_fn, score_fn, n_classes, regime)
         cell_start = time.perf_counter()
-        res = harness.run(method_obj, folds, n_jobs=n_jobs,
+        res = harness.Harness.run(method_obj, folds, n_jobs=n_jobs,
                           tracking_cfg=harness.TrackConfig(
                               params={"exp": name, "method": method, "regime": regime, "dataset": dataset},
                               run_dir=run_dir))
         elapsed = time.perf_counter() - cell_start
         (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
-        results.record(run_dir)
+        results.Results.record(run_dir)
         logger.info(f"  -> acc {res['fold_mean']['acc']:.3f}  kappa {res['fold_mean']['kappa']:.3f}  "
               f"(chance {1/n_classes:.3f})  [{elapsed:.1f}s, {elapsed/len(folds):.2f}s/fold]")
     logger.info("\nreproduce_all done — regenerated results.json. Run `align --exp mi_align_recenter` (+ "

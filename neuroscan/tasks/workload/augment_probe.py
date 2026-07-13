@@ -66,7 +66,7 @@ def _cross(x, y, g, *, augment: bool) -> tuple[float, float]:
         for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(x, y, g):
             x_tr, y_tr = (_augment(x[tr], y[tr], seed) if augment else (x[tr], y[tr]))
             proba = FnirsLda().fit(x_tr, y_tr).predict_proba(x[te])
-            accs.append(metrics.accuracy(y[te], proba.argmax(1)))
+            accs.append(metrics.Metrics.accuracy(y[te], proba.argmax(1)))
     return float(np.mean(accs)), float(np.std(accs))
 
 
@@ -76,7 +76,7 @@ def _within(x, y, g) -> tuple[float, float]:
     for seed in _SEEDS:
         for tr, te in StratifiedKFold(_K, shuffle=True, random_state=seed).split(x, y):
             proba = FnirsLda().fit(x[tr], y[tr]).predict_proba(x[te])
-            accs.append(metrics.accuracy(y[te], proba.argmax(1)))
+            accs.append(metrics.Metrics.accuracy(y[te], proba.argmax(1)))
     return float(np.mean(accs)), float(np.std(accs))
 
 

@@ -97,7 +97,7 @@ def _decode(c, y, g) -> tuple[float, float]:
         for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(c, y, g):
             proba = transfer.zero_shot_predict(transfer.Domain(c[tr], y[tr], g[tr]),
                                                transfer.Domain(c[te], groups=g[te]), scale=False)
-            accs.append(metrics.accuracy(y[te], proba.argmax(1)))
+            accs.append(metrics.Metrics.accuracy(y[te], proba.argmax(1)))
     return float(np.mean(accs)), float(np.std(accs))
 
 

@@ -117,10 +117,10 @@ def _run_folds(fold_subs, meta_e, meta_f, subs, models: _RunnerModels):
             pooled[name].append(value)
         rows.append({
             "fold": str(fold), "n": int(len(test.y)),
-            "eeg": metrics.accuracy(test.y, eeg_probs.argmax(1)),
-            "fnirs": metrics.accuracy(test.y, fnirs_probs.argmax(1)),
-            "late": metrics.accuracy(test.y, late.argmax(1)),
-            "feature": metrics.accuracy(test.y, feature.argmax(1)),
+            "eeg": metrics.Metrics.accuracy(test.y, eeg_probs.argmax(1)),
+            "fnirs": metrics.Metrics.accuracy(test.y, fnirs_probs.argmax(1)),
+            "late": metrics.Metrics.accuracy(test.y, late.argmax(1)),
+            "feature": metrics.Metrics.accuracy(test.y, feature.argmax(1)),
         })
         logger.info(f"  fold{fold}: eeg {rows[-1]['eeg']:.3f} | fnirs {rows[-1]['fnirs']:.3f} | "
               f"late {rows[-1]['late']:.3f} | feature {rows[-1]['feature']:.3f}")
@@ -162,8 +162,8 @@ def main():
     logger.info(f"fusion cloud: {len(subs)} paired subjects · {n_classes} classes · chance {1/n_classes:.3f} · "
           f"EEG {'re-centered' if recenter else 'plain'} Riemann")
 
-    eeg_fit, eeg_score = models.get_method("riemann")        # the plain-EEG fallback (fusion EEG is Riemann)
-    fn_fit, fn_score = models.get_method("fnirs_lda")
+    eeg_fit, eeg_score = models.Methods.get_method("riemann")        # the plain-EEG fallback (fusion EEG is Riemann)
+    fn_fit, fn_score = models.Methods.get_method("fnirs_lda")
 
     def _cov(X):
         return Covariances("oas").transform(X.astype(np.float64))

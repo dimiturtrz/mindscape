@@ -52,6 +52,6 @@ def cv_score(build, data: CvData, config: CvConfig):
         for tr, te in sp.split(X, y, groups if config.grouped else None):
             clf = (build() if build is not None else FnirsLda()).fit(X[tr], y[tr])
             pred = clf.predict_proba(X[te]).argmax(1)
-            accs.append(metrics.accuracy(y[te], pred))
-            kaps.append(metrics.kappa(y[te], pred))
+            accs.append(metrics.Metrics.accuracy(y[te], pred))
+            kaps.append(metrics.Metrics.kappa(y[te], pred))
     return float(np.mean(accs)), float(np.std(accs)), float(np.mean(kaps))

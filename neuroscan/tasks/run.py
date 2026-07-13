@@ -54,8 +54,8 @@ def main():
           f"sessions {sorted(meta['session'].unique().to_list())} · recipe {cfg.key()}")
 
     test_sessions = [exp.test_session] if (regime == "within" and exp.test_session) else ()
-    folds = harness.folds_for(meta, regime, test_sessions=test_sessions)
-    fit_fn, score_fn = models.get_method(method, fs=cfg.resample)
+    folds = harness.Harness.folds_for(meta, regime, test_sessions=test_sessions)
+    fit_fn, score_fn = models.Methods.get_method(method, fs=cfg.resample)
 
     run_dir = Path(args.out) if args.out else Path("runs") / f"{method}_{regime}_{dataset}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -64,7 +64,7 @@ def main():
     n_jobs = -1 if method in {"csp_lda", "riemann", "riemann_acm", "fnirs_lda"} else 1
     logger.info(f"\n=== {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
     method_obj = harness.Method(method, fit_fn, score_fn, n_classes, regime)
-    res = harness.run(method_obj, folds, n_jobs=n_jobs,
+    res = harness.Harness.run(method_obj, folds, n_jobs=n_jobs,
                       tracking_cfg=harness.TrackConfig(
                           params={"exp": args.exp, "method": method, "regime": regime,
                                   "dataset": dataset, "resample": cfg.resample},
@@ -72,8 +72,8 @@ def main():
 
     out = run_dir / "aggregate.json"
     out.write_text(json.dumps(res, indent=2))
-    modelcard.write(res, dataset, regime, run_dir / "CARD.md")
-    if not args.no_record and results.record(run_dir):
+    modelcard.ModelCard.write(res, dataset, regime, run_dir / "CARD.md")
+    if not args.no_record and results.Results.record(run_dir):
         logger.info(f"   recorded -> results.json ({run_dir.name})")
     ref_regime = "within_subject" if regime == "within" else "cross_subject"
     logger.info(f"\nfold-mean acc {res['fold_mean']['acc']:.3f} | pooled acc {res['pooled']['acc']:.3f} "

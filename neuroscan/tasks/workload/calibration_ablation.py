@@ -47,7 +47,7 @@ def _cv_raw_or_transductive(F, y, g, subs, zt):
     for tr, te in GroupKFold(_K).split(subs, groups=subs):
         mtr, mte = np.isin(g, subs[tr]), np.isin(g, subs[te])
         Fz = SubjectNorm.zscore_per_subject(F, g) if zt else F
-        accs.append(metrics.accuracy(y[mte], _lda().fit(Fz[mtr], y[mtr]).predict(Fz[mte])))
+        accs.append(metrics.Metrics.accuracy(y[mte], _lda().fit(Fz[mtr], y[mtr]).predict(Fz[mte])))
     return float(np.mean(accs))
 
 
@@ -68,7 +68,7 @@ def _cv_calib_half(F, y, g, subs, rng):
             ev = perm[h:]
             yp.extend(clf.predict((F[ev] - mu) / (sd + 1e-6)))
             yt.extend(y[ev])
-        accs.append(metrics.accuracy(np.array(yt), np.array(yp)))
+        accs.append(metrics.Metrics.accuracy(np.array(yt), np.array(yp)))
     return float(np.mean(accs))
 
 
@@ -123,7 +123,7 @@ def main():
     (run_dir / "aggregate.json").write_text(json.dumps(
         {"method": "calibration_ablation", "regime": "cross_subject_kfold", "n_classes": 3,
          "fold_mean": {"acc": out["eeg_zcalib"]}, "per_role_mean": out}, indent=2))
-    results.record(run_dir)
+    results.Results.record(run_dir)
     logger.info(f"-> recorded {run_dir.name}")
 
 

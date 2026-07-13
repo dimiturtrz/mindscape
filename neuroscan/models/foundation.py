@@ -23,6 +23,7 @@ Backbone checked out (not vendored) under `external/CBraMod`; pretrained weights
 from __future__ import annotations
 
 import sys
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn.functional as F
@@ -30,7 +31,9 @@ from pydantic import BaseModel
 from torch import nn
 
 from core.config import REPO, Config
-from neuroscan.models.encoders import EncoderSpec, register
+
+if TYPE_CHECKING:
+    from neuroscan.models.encoders import EncoderSpec
 
 _CBRAMOD_ROOT = REPO / "external" / "CBraMod"   # checked out @ 0ff6be91 (MIT); see the fetch step above
 
@@ -51,24 +54,6 @@ class FoundationConfig(BaseModel):
                                    # the mean collapses; the head-side lever, bd)
 
 
-def _load_backbone() -> nn.Module:
-    """Instantiate CBraMod and load the pretrained weights. The backbone lives in a checked-out external repo
-    (not a package), so its path is injected here — the one place that reaches into `external/` — rather than
-    importing an uninstalled top-level module. `proj_out` (the pretrain reconstruction head) is dropped so the
-    encoder exposes the raw `d_model` token features."""
-    if str(_CBRAMOD_ROOT) not in sys.path:
-        sys.path.insert(0, str(_CBRAMOD_ROOT))
-    from models.cbramod import CBraMod  # noqa: PLC0415
-
-    ckpt = Config.data_root("pretrained") / "CBraMod" / "pretrained_weights.pth"
-    if not ckpt.exists():
-        raise FileNotFoundError(f"CBraMod weights not at {ckpt} — see the fetch step in this module's docstring")
-    backbone = CBraMod()
-    backbone.load_state_dict(torch.load(ckpt, map_location="cpu"))
-    backbone.proj_out = nn.Identity()           # expose d_model token features, not the reconstruction output
-    return backbone
-
-
 class CBraModEncoder(nn.Module):
     """CBraMod backbone + a small CLIP-projection head, honouring the `ImageEncoder` contract
     (`[B, C, T] -> L2-normalized [B, embed_dim]`). Frozen backbone by default — only the head trains."""
@@ -76,7 +61,7 @@ class CBraModEncoder(nn.Module):
     def __init__(self, spec: EncoderSpec, cfg: FoundationConfig | None = None):
         super().__init__()
         self.cfg = cfg or FoundationConfig()
-        self.backbone = _load_backbone()
+        self.backbone = Foundation._load_backbone()
         if self.cfg.freeze_backbone:
             for p in self.backbone.parameters():
                 p.requires_grad = False
@@ -126,18 +111,37 @@ class CBraModEncoder(nn.Module):
         return F.normalize(z, dim=-1)
 
 
-def _build_cbramod(spec: EncoderSpec) -> nn.Module:
-    return CBraModEncoder(spec, FoundationConfig(freeze_backbone=True))
+class Foundation:
+    """CBraMod backbone loading + the encoder builders — the free helpers folded in as staticmethods (public
+    names kept). The builders are registered lazily by `encoders.EncoderRegistry` (one registration home, no
+    import-time side effects), so importing this module registers nothing on its own."""
 
+    @staticmethod
+    def _load_backbone() -> nn.Module:
+        """Instantiate CBraMod and load the pretrained weights. The backbone lives in a checked-out external repo
+        (not a package), so its path is injected here — the one place that reaches into `external/` — rather than
+        importing an uninstalled top-level module. `proj_out` (the pretrain reconstruction head) is dropped so the
+        encoder exposes the raw `d_model` token features."""
+        if str(_CBRAMOD_ROOT) not in sys.path:
+            sys.path.insert(0, str(_CBRAMOD_ROOT))
+        from models.cbramod import CBraMod  # noqa: PLC0415
 
-def _build_cbramod_ft(spec: EncoderSpec) -> nn.Module:
-    return CBraModEncoder(spec, FoundationConfig(freeze_backbone=False))
+        ckpt = Config.data_root("pretrained") / "CBraMod" / "pretrained_weights.pth"
+        if not ckpt.exists():
+            raise FileNotFoundError(f"CBraMod weights not at {ckpt} — see the fetch step in this module's docstring")
+        backbone = CBraMod()
+        backbone.load_state_dict(torch.load(ckpt, map_location="cpu"))
+        backbone.proj_out = nn.Identity()       # expose d_model token features, not the reconstruction output
+        return backbone
 
+    @staticmethod
+    def _build_cbramod(spec: EncoderSpec) -> nn.Module:
+        return CBraModEncoder(spec, FoundationConfig(freeze_backbone=True))
 
-def _build_cbramod_ft_attn(spec: EncoderSpec) -> nn.Module:
-    return CBraModEncoder(spec, FoundationConfig(freeze_backbone=False, pool="attn"))
+    @staticmethod
+    def _build_cbramod_ft(spec: EncoderSpec) -> nn.Module:
+        return CBraModEncoder(spec, FoundationConfig(freeze_backbone=False))
 
-
-register("cbramod", _build_cbramod)       # frozen backbone + head (linear probe of pretrained features)
-register("cbramod_ft", _build_cbramod_ft)  # unfrozen — fine-tune the backbone on perception (capacity test)
-register("cbramod_ft_attn", _build_cbramod_ft_attn)  # unfrozen + attention pool (undo the mean bottleneck, bd)
+    @staticmethod
+    def _build_cbramod_ft_attn(spec: EncoderSpec) -> nn.Module:
+        return CBraModEncoder(spec, FoundationConfig(freeze_backbone=False, pool="attn"))
