@@ -10,30 +10,12 @@ one builder + one `register` line, no trainer change.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
 
-from pydantic import BaseModel
-from torch import Tensor, nn
+from torch import nn
 
+from neuroscan.models.encoder_spec import EncoderSpec, ImageEncoder
 from neuroscan.models.foundation import Foundation
 from neuroscan.models.nice import NiceConfig, NiceEncoder
-
-
-class EncoderSpec(BaseModel):
-    """The data-derived shape every encoder needs: EEG channel count, epoch length, and the CLIP target dim
-    the embedding must match. Passed to a builder so the encoder's shape is fixed by the data, not hardcoded."""
-    n_channels: int
-    n_times: int
-    embed_dim: int
-
-
-class ImageEncoder(Protocol):
-    """The EEG→image encoder contract: `forward([B, C, T]) -> L2-normalized [B, embed_dim]`. Documents what a
-    new backbone must satisfy to drop into `train_nice` (NICE already does) — the return type of
-    `build_encoder`, so the trainer programs against the contract, not a concrete class."""
-
-    def forward(self, x: Tensor) -> Tensor: ...
-
 
 _BUILDERS: dict[str, Callable[[EncoderSpec], nn.Module]] = {}
 

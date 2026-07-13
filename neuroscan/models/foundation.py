@@ -33,7 +33,7 @@ from torch import nn
 from core.config import REPO, Config
 
 if TYPE_CHECKING:
-    from neuroscan.models.encoders import EncoderSpec
+    from neuroscan.models.encoder_spec import EncoderSpec
 
 _CBRAMOD_ROOT = REPO / "external" / "CBraMod"   # checked out @ 0ff6be91 (MIT); see the fetch step above
 
