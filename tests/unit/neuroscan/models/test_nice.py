@@ -1,6 +1,7 @@
 """NICE encoder + contrastive/retrieval primitives — data-free contracts."""
 from __future__ import annotations
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -65,3 +66,17 @@ def test_retrieval_topk_planted_and_chance():
     rand = torch.nn.functional.normalize(torch.randn(200, 512), dim=-1)
     chance = Nice.retrieval_topk(rand, cand, labels)                   # unrelated queries ~ chance
     assert chance[1] < 0.1                                        # 1/200 = 0.5%, well under 10%
+
+
+def test_retrieval_hits_is_per_trial_and_means_to_topk():
+    """The per-trial hit vector (bd 5s3l) is 0/1 per query and means to exactly retrieval_topk — so the
+    bootstrap resamples the same signal the headline reports."""
+    cand = torch.nn.functional.normalize(torch.randn(50, 512), dim=-1)
+    labels = torch.arange(50)
+    eeg = cand.clone()
+    eeg[10:] = torch.nn.functional.normalize(torch.randn(40, 512), dim=-1)   # first 10 planted, rest ~chance
+    hits = Nice.retrieval_hits(eeg, cand, labels)
+    assert hits[1].shape == (50,) and set(np.unique(hits[1])).issubset({0.0, 1.0})
+    assert hits[1][:10].all()                                    # planted queries all hit@1
+    top = Nice.retrieval_topk(eeg, cand, labels)
+    assert hits[1].mean() == top[1] and hits[5].mean() == top[5]

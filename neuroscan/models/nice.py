@@ -14,6 +14,7 @@ pixels touch the net — only precomputed CLIP embeddings (see tasks/visual/clip
 """
 from __future__ import annotations
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from pydantic import BaseModel
@@ -97,17 +98,22 @@ class Nice:
 
     @staticmethod
     @torch.no_grad()
+    def retrieval_hits(eeg: torch.Tensor, candidates: torch.Tensor, labels: torch.Tensor,
+                       ks: tuple[int, ...] = (1, 5)) -> dict[int, np.ndarray]:
+        """PER-TRIAL hit@k: for each EEG embedding, 1.0 if the true `labels` index is within the top-k
+        cosine-ranked `candidates`, else 0.0. The un-averaged vector `retrieval_topk` means over — kept so a
+        bootstrap can resample it for an honest CI (bd 5s3l). Returns one float array per k."""
+        sims = eeg @ candidates.t()                            # [N, n_cand]
+        order = sims.argsort(dim=-1, descending=True)
+        return {k: (order[:, :k] == labels[:, None]).any(dim=-1).float().cpu().numpy() for k in ks}
+
+    @staticmethod
+    @torch.no_grad()
     def retrieval_topk(eeg: torch.Tensor, candidates: torch.Tensor, labels: torch.Tensor,
                        ks: tuple[int, ...] = (1, 5)) -> dict[int, float]:
         """Zero-shot retrieval accuracy: for each EEG embedding, rank the `candidates` (one CLIP embedding per
         class) by cosine; hit@k if the true `labels` index is in the top-k. Chance = k / n_candidates."""
-        sims = eeg @ candidates.t()                            # [N, n_cand]
-        order = sims.argsort(dim=-1, descending=True)
-        out: dict[int, float] = {}
-        for k in ks:
-            hit = (order[:, :k] == labels[:, None]).any(dim=-1).float().mean().item()
-            out[k] = hit
-        return out
+        return {k: float(hits.mean()) for k, hits in Nice.retrieval_hits(eeg, candidates, labels, ks).items()}
 
 
 class _GradReverse(torch.autograd.Function):

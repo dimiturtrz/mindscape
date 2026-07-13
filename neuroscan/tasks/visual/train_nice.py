@@ -34,6 +34,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.covariance import Covariance
+from neuroscan.evaluation.metrics import Metrics
 from neuroscan.models.encoders import EncoderRegistry, EncoderSpec
 from neuroscan.models.nice import Nice, SubjectDiscriminator
 from neuroscan.tasks.cli import Cli
@@ -157,12 +158,15 @@ class TrainNice:
                                   for i in range(0, len(data.eeg), batch)])  # [N,512] normalized (back to fp32)
         candidate_bank = torch.tensor(data.candidates)
         labels = torch.tensor(data.concept)
-        single = Nice.retrieval_topk(embedded, candidate_bank, labels)
+        hits = Nice.retrieval_hits(embedded, candidate_bank, labels)             # per-trial, for the bootstrap CI
+        single = {k: float(h.mean()) for k, h in hits.items()}
+        single_ci = {k: Metrics.boot_ci(np.mean, h) for k, h in hits.items()}   # honest CI from ONE run (bd 5s3l)
         n_concepts = int(data.concept.max()) + 1
         averaged = torch.stack([torch.nn.functional.normalize(embedded[labels == c].mean(0), dim=-1)
                                 for c in range(n_concepts)])
         concept_avg = Nice.retrieval_topk(averaged, candidate_bank, torch.arange(n_concepts))
-        return {"single_trial": single, "concept_avg": concept_avg}
+        return {"single_trial": single, "single_trial_ci": single_ci, "concept_avg": concept_avg,
+                "single_trial_hits": {k: h.tolist() for k, h in hits.items()}}   # persisted for paired delta (s1t2)
 
     @staticmethod
     def _val_split(concept: np.ndarray, targets: np.ndarray, seed: int, fraction: float):
@@ -364,7 +368,8 @@ def main():
                  if k in TrainConfig.model_fields and v is not None}
     cfg = TrainConfig(**{**base, **overrides})
     result = TrainNice.train(args.train, args.test, cfg)
-    logger.info(json.dumps(result, indent=2))
+    logged = {k: v for k, v in result.items() if k != "single_trial_hits"}   # per-trial vector -> --out only
+    logger.info(json.dumps(logged, indent=2))
     if args.out:
         with Path(args.out).open("w") as f:
             json.dump(result, f, indent=2)
