@@ -21,7 +21,8 @@ import json
 import logging
 from pathlib import Path
 
-from core import config, reference
+from core import config
+from core.reference import Reference
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from neuroscan import models
@@ -77,7 +78,7 @@ def main():
     ref_regime = "within_subject" if regime == "within" else "cross_subject"
     logger.info(f"\nfold-mean acc {res['fold_mean']['acc']:.3f} | pooled acc {res['pooled']['acc']:.3f} "
           f"| ece {res['fold_mean']['ece']:.3f}  (chance {1.0 / n_classes:.3f})")
-    logger.info("  vs reference: " + reference.compare(res["fold_mean"]["acc"], dataset, ref_regime, method))
+    logger.info("  vs reference: " + Reference.compare(res["fold_mean"]["acc"], dataset, ref_regime, method))
     logger.info(f"-> {out}")
 
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core import reference
+from core.reference import Reference
 
 
 def card(res: dict, dataset: str, regime: str) -> str:
@@ -21,7 +21,7 @@ def card(res: dict, dataset: str, regime: str) -> str:
         f"- **fold-mean accuracy**: {fm['acc']:.3f}  ·  kappa {fm['kappa']:.3f}  ·  ECE {fm['ece']:.3f}",
         f"- **pooled** (per-epoch): acc {pooled['acc']:.3f}  ·  kappa {pooled['kappa']:.3f}  ·  ECE {pooled['ece']:.3f}",
         f"- **per-subject spread**: {sp['min']:.3f} – {sp['max']:.3f}  (std {sp['std']:.3f})",
-        f"- **vs reference**: {reference.compare(fm['acc'], dataset, ref_regime, res['method'])}",
+        f"- **vs reference**: {Reference.compare(fm['acc'], dataset, ref_regime, res['method'])}",
         "",
         "## Where it fails",
         f"- worst: subject {worst['fold']} — acc {worst['acc']:.3f} (kappa {worst['kappa']:.3f}, ECE {worst['ece']:.3f})",

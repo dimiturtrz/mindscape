@@ -37,7 +37,8 @@ from pyriemann.estimation import Covariances
 from sklearn.model_selection import StratifiedShuffleSplit
 
 from baselines.eeg import transfer
-from core import config, reference
+from core import config
+from core.reference import Reference
 from core.data import splits, store
 from core.data.eeg.base import EpochCfg
 from core.features import time_delay_embed
@@ -157,7 +158,7 @@ def main():
     acc = float(np.mean([r["acc"] for r in rows]))
     kap = float(np.mean([r["kappa"] for r in rows]))
     logger.info(f"  {'MEAN':>6}  acc {acc:.3f}  kappa {kap:.3f}   [{regime}]")
-    logger.info("  vs reference: " + reference.compare(acc, dataset, "cross_subject", "riemann"))
+    logger.info("  vs reference: " + Reference.compare(acc, dataset, "cross_subject", "riemann"))
     logger.info("  (un-recentered riemann LOSO ~0.36; recenter ~0.50 — read the ladder against those)")
 
     out = Path(args.out) if args.out else Path("runs") / f"{name}_{dataset}"
