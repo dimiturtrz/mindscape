@@ -20,6 +20,7 @@ import numpy as np
 from pydantic import BaseModel
 
 from core.data.eeg import things_eeg2 as things
+from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
 
 logger = logging.getLogger(__name__)
@@ -122,9 +123,7 @@ class RetrievalAudit:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--subjects", type=int, nargs="+", required=True, help="subjects to hold out one at a time")
     ap.add_argument("--epochs", type=int, default=AuditConfig(subjects=(1,)).epochs)

@@ -18,6 +18,7 @@ from baselines.eeg import transfer
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from neuroscan.evaluation import metrics
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,7 @@ class WorkloadConfusion:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
     subs = sorted(me["subject"].unique().to_list())
     Cs, ys, gs = [], [], []

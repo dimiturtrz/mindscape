@@ -11,6 +11,7 @@ import logging
 
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
+from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.workload._eval import CvConfig, CvData, Eval
 
 logger = logging.getLogger(__name__)
@@ -22,9 +23,7 @@ _ARMS = [("none (baseline)", None), ("cbsi", "cbsi"), ("detrend", "detrend"), ("
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     logger.info("fNIRS cleaner ablation · Shin n-back · fixed decoder fnirs_lda · 3x5-fold · chance 0.333\n")
     logger.info(f"  {'clean':<18}{'within':>9}{'±sd':>7}{'κ':>7}   {'cross':>9}{'±sd':>7}{'κ':>7}{'  Δcross':>9}")
     base_cross = None

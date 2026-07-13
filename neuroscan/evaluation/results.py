@@ -28,6 +28,7 @@ import logging
 from pathlib import Path
 
 from core.config import REPO
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -133,9 +134,7 @@ class Results:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     p = Results.write()
     n = len(json.loads(p.read_text())["runs"])
     logger.info(f"wrote {p.relative_to(REPO)} — {n} run(s)")

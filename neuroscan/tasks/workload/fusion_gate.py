@@ -37,6 +37,7 @@ from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from core.features import Amplitude, BandPower, SubjectNorm
 from neuroscan.evaluation import metrics, results
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +68,7 @@ class FusionGate:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--out", default=None)

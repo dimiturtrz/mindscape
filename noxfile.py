@@ -7,7 +7,7 @@ uv/uvx/npx which handle their own isolation, so no per-session venv is built.
 import nox
 
 nox.options.default_venv_backend = "none"
-nox.options.sessions = ["lint", "test", "fitness"]   # `dup` (jscpd) is advisory, opt-in
+nox.options.sessions = ["lint", "test", "fitness", "dup"]   # `dup` (jscpd) needs Node; drop it if absent
 
 _RUFF = "ruff@0.15.13"
 _VULTURE = "vulture@2.16"
@@ -41,5 +41,5 @@ def fitness(session):
 
 @nox.session
 def dup(session):
-    """Duplication — advisory (jscpd; needs Node)."""
+    """Duplication — enforced, blocks >1% (jscpd; needs Node)."""
     session.run("npx", "--yes", "jscpd@4", *_PKGS, "--config", "devtools/jscpd.json", external=True)

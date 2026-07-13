@@ -26,6 +26,7 @@ from core.data import store
 from core.data.fnirs.augment import AugConfig, Augment
 from core.data.fnirs.base import FnirsCfg
 from neuroscan.evaluation import metrics
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -85,9 +86,7 @@ class AugmentProbe:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     x, y, g = AugmentProbe._build()
     logger.info(f"{len(y)} epochs · {len(set(g.tolist()))} subj · 0-back vs 2-back · {len(_SEEDS)}x{_K}-fold")
     a_win, s_win = AugmentProbe._within(x, y, g)

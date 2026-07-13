@@ -24,6 +24,7 @@ from core.data.fnirs.base import FnirsCfg
 from neuroscan import models
 from neuroscan.evaluation import harness, results
 from neuroscan.models.decoders import MODELS
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,7 @@ class ReproduceAll:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--cross-only", action="store_true", help="skip within-subject runs")
     ap.add_argument("--only", default=None,

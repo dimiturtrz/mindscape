@@ -18,6 +18,7 @@ import logging
 import statistics
 from pathlib import Path
 
+from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
 
 logger = logging.getLogger(__name__)
@@ -60,9 +61,7 @@ class SeedParity:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--train", type=int, nargs="+", default=[1, 2, 3, 4])
     ap.add_argument("--test", type=int, default=5)

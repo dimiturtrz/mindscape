@@ -133,6 +133,14 @@ a method / lazy-populate, as the registries do; `matplotlib.use()` exempt). Fix 
 Constants, `logger`, dataclasses, pydantic models, enums, and `nn.Module`/`Dataset` subclasses stay top-level —
 only plain `def`s move.
 
+### Duplication — jscpd gate (bd apl)
+
+`devtools/jscpd.json` (Node, run in CI + `nox -s dup`) — the DRY axis. **Blocks** when python duplication
+exceeds 1% (currently 0.7% after the runner boilerplate was DRY-extracted into `Cli.setup_logging` +
+`Riemann.cross_subject_decode`). Fix a regression by extracting the shared logic, not by raising the threshold —
+it ratchets **down** as dup settles. Genuinely-distinct-but-similar-shaped runners are left un-merged (don't
+over-couple to chase the number).
+
 ### Local gate runners — nox + pre-commit (bd kvo/dno)
 
 `nox` (`noxfile.py`, `[devtools]` extra) reproduces the CI gate suite locally from one command: `nox` runs

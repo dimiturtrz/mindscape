@@ -22,6 +22,7 @@ import torch
 from PIL import Image
 
 from core.config import Config
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -129,9 +130,7 @@ class ClipTargets:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ClipTargets.compute(sys.argv[1] if len(sys.argv) > 1 else "test")
 
 

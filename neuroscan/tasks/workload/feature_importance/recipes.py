@@ -22,6 +22,7 @@ from core.data import store
 from core.data.fnirs.base import FnirsCfg
 from core.features import DescriptorBank
 from neuroscan.evaluation import metrics, results
+from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.workload.feature_importance._cv import Cv
 
 logger = logging.getLogger(__name__)
@@ -72,9 +73,7 @@ class Recipes:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     meta = store.Store.load(_DATASET, FnirsCfg())
     X, y = store.Store.gather(meta)
     groups = meta["subject"].to_numpy()

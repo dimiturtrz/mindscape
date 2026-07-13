@@ -81,14 +81,14 @@ jobs:
       # -> nonzero exit blocks. The whole core+neuroscan tree was migrated to 0 violations.
       - name: Module shape — enforced (ast-grep)
         run: uvx --from ast-grep-cli ast-grep scan -c devtools/sgconfig.yml core neuroscan
-      # Duplication (bd apl) — the DRY axis. ADVISORY (continue-on-error) until the class-extraction refactor
-      # (bd ylq) settles + dup is driven under the 1% threshold, then graduates to blocking. Config +
-      # ignore/threshold in devtools/jscpd.json; paths on the CLI.
+      # Duplication (bd apl) — the DRY axis token/dead-code linters can't see. ENFORCED: the class-extraction
+      # refactor (bd ylq) settled the runner boilerplate and it was DRY-extracted (Cli.setup_logging,
+      # Riemann.cross_subject_decode) to 0.7% < the 1% threshold, so jscpd now BLOCKS (nonzero exit) as a DRY
+      # regression guard. Config + ignore/threshold in devtools/jscpd.json; paths on the CLI.
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Duplication — advisory (jscpd, warns)
-        continue-on-error: true
+      - name: Duplication — enforced (jscpd, blocks >1%)
         run: npx --yes jscpd@4 core neuroscan --config devtools/jscpd.json
       - name: Dead code — advisory (vulture conf>=60, warns)
         if: always()

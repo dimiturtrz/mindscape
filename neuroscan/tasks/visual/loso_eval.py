@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
+from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
 
 logger = logging.getLogger(__name__)
@@ -52,9 +53,7 @@ class LosoEval:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--models", nargs="+", required=True, help="encoder names to compare on the SAME folds")
     ap.add_argument("--subjects", type=int, nargs="+", required=True, help="LOSO subject pool")

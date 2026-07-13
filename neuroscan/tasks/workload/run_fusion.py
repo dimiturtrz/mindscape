@@ -38,6 +38,7 @@ from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from neuroscan import models
 from neuroscan.evaluation import metrics
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -159,9 +160,7 @@ class RunFusion:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     args = RunFusion._parse_args()
 
     exp = config.load_experiment(args.exp, args.overrides)

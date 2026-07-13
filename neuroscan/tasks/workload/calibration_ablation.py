@@ -30,6 +30,7 @@ from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from core.features import Amplitude, BandPower, SubjectNorm
 from neuroscan.evaluation import metrics, results
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -77,9 +78,7 @@ class CalibrationAblation:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     rng = np.random.default_rng(_SEED)
     me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
     mf = store.Store.load("shin2017_nback", FnirsCfg())

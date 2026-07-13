@@ -27,14 +27,13 @@ from core.data.eeg.base import EpochCfg
 from core.reference import Reference
 from neuroscan import models
 from neuroscan.evaluation import harness, modelcard, results
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--exp", default="mi_csp_within",
                     help="named experiment in experiments.yaml (see that file for the list)")

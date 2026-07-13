@@ -37,6 +37,7 @@ from core.config import REPO
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
 from core.features import DescriptorBank
+from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.workload.feature_importance._cv import Cv
 
 logger = logging.getLogger(__name__)
@@ -153,9 +154,7 @@ class Differentiable:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", default=None, help="study config (default: subset.yaml beside this module)")
     ap.add_argument("--grain", default=None, choices=["family", "channel"])

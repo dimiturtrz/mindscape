@@ -24,10 +24,7 @@ from __future__ import annotations
 import logging
 
 import numpy as np
-from pyriemann.estimation import Covariances
-from sklearn.model_selection import StratifiedGroupKFold
 
-from baselines.eeg import transfer
 from core.data import store
 from core.data.eeg import shin2017_nback_eeg as eegmod
 from core.data.eeg.base import EpochCfg
@@ -37,7 +34,8 @@ from core.features.eeg.montage import EegMontage
 from core.features.eeg.source import Source
 from core.features.fnirs.montage import FnirsMontage
 from core.features.fusion.source_prior import SourcePrior
-from neuroscan.evaluation import metrics
+from neuroscan.tasks.cli import Cli
+from neuroscan.tasks.workload.riemann import Riemann
 
 logger = logging.getLogger(__name__)
 
@@ -51,10 +49,6 @@ _WIN = 0.01                 # min Δacc over the controls to call the fNIRS prio
 
 class SourcePriorDecode:
     """fNIRS-informed source-space fusion decode helpers (bd 4so) — the free helpers folded in as staticmethods."""
-
-    @staticmethod
-    def _cov(x):
-        return Covariances("oas").transform(x.astype(np.float64))
 
     @staticmethod
     def _fnirs_prior(x_fnirs: np.ndarray, subject_dir, src2d: np.ndarray) -> np.ndarray:
@@ -85,34 +79,22 @@ class SourcePriorDecode:
             xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
             assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
             w = SourcePriorDecode._fnirs_prior(xf, fnmod.Shin2017NirsAdapter.adapter()._subject_dir(int(s)), src2d)
-            arms["sensor"].append(SourcePriorDecode._cov(xe))
-            arms["dSPM"].append(SourcePriorDecode._cov(Source.to_parcels(xe, ch_e, _SFREQ)))
-            arms["uniform"].append(SourcePriorDecode._cov(SourcePrior.parcels_from_leadfield(xe, g, agg, None)))
-            arms["fNIRS"].append(SourcePriorDecode._cov(SourcePrior.parcels_from_leadfield(xe, g, agg, w)))
+            arms["sensor"].append(Riemann.cov(xe))
+            arms["dSPM"].append(Riemann.cov(Source.to_parcels(xe, ch_e, _SFREQ)))
+            arms["uniform"].append(Riemann.cov(SourcePrior.parcels_from_leadfield(xe, g, agg, None)))
+            arms["fNIRS"].append(Riemann.cov(SourcePrior.parcels_from_leadfield(xe, g, agg, w)))
             ys.append(ye)
             gs.append(np.array([s] * len(ye)))
             logger.info(f"  subject {s}: {len(ye)} blocks · prior w∈[{w.min():.2f},{w.max():.2f}]")
         return ({k: np.concatenate(v) for k, v in arms.items()}, np.concatenate(ys), np.concatenate(gs))
 
-    @staticmethod
-    def _decode(c, y, g) -> tuple[float, float]:
-        accs = []
-        for seed in _SEEDS:
-            for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(c, y, g):
-                proba = transfer.zero_shot_predict(transfer.Domain(c[tr], y[tr], g[tr]),
-                                                   transfer.Domain(c[te], groups=g[te]), scale=False)
-                accs.append(metrics.Metrics.accuracy(y[te], proba.argmax(1)))
-        return float(np.mean(accs)), float(np.std(accs))
-
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     arms, y, g = SourcePriorDecode._build()
     logger.info(f"\n{len(y)} blocks · {len(set(g.tolist()))} subj · chance {1 / (y.max() + 1):.3f} "
           f"· {len(_SEEDS)}x{_K}-fold re-centered tangent")
-    res = {name: SourcePriorDecode._decode(c, y, g) for name, c in arms.items()}
+    res = {name: Riemann.cross_subject_decode(c, y, g, _SEEDS, _K) for name, c in arms.items()}
     for name in ("sensor", "dSPM", "uniform", "fNIRS"):
         a, sd = res[name]
         logger.info(f"  {name:14s} acc {a:.3f} ± {sd:.3f}")

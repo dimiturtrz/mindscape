@@ -22,6 +22,7 @@ from core.data.fnirs import shin2017 as fnmod
 from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
 from neuroscan.evaluation import metrics
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +55,7 @@ class FusionCameraEval:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     X, y, g = FusionCameraEval._build_all()
     logger.info(f"brain-camera fusion · {X.shape[0]} blocks · {len(set(g))} subj · tensor {X.shape[1:]} · "
           f"grid {_GRID} fps {_FPS} lag derived/subj · chance {1/(y.max()+1):.3f}")

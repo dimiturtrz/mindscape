@@ -28,6 +28,7 @@ import re
 import sys
 
 from core.config import REPO
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +103,7 @@ class SyncNumbers:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="report staleness, don't write (CI gate)")
     sys.exit(SyncNumbers.sync(check=ap.parse_args().check))

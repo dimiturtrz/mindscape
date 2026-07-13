@@ -44,6 +44,7 @@ from core.features import Covariance
 from core.reference import Reference
 from neuroscan import tracking
 from neuroscan.evaluation import metrics, results
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -113,9 +114,7 @@ class Align:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--exp", default="mi_align_recenter",
                     help="named transfer experiment in experiments.yaml (task: align)")

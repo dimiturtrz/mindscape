@@ -18,6 +18,7 @@ import logging
 from baselines.fnirs.windowed import WindowedConfig, WindowedFnirs
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
+from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.workload._eval import CvConfig, CvData, Eval
 
 logger = logging.getLogger(__name__)
@@ -41,9 +42,7 @@ for _agg in ("mean", "max", "lse"):
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     meta = store.Store.load(_DATASET, FnirsCfg())
     X, y = store.Store.gather(meta)
     groups = meta["subject"].to_numpy()

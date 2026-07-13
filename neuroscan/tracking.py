@@ -29,6 +29,7 @@ import torch
 
 from core.config import REPO
 from neuroscan.evaluation import results
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -193,9 +194,7 @@ class Tracking:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     Tracking.backfill()
 
 

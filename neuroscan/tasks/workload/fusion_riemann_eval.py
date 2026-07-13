@@ -26,6 +26,7 @@ from core.data.fnirs import shin2017 as fnmod
 from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
 from neuroscan.evaluation import metrics
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +68,7 @@ class FusionRiemannEval:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     C, y, g = FusionRiemannEval._build_all()
     logger.info(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
     accs, kaps = [], []

@@ -36,6 +36,7 @@ from core.data.eeg import things_eeg2 as things
 from core.features.eeg.covariance import Covariance
 from neuroscan.models.encoders import EncoderRegistry, EncoderSpec
 from neuroscan.models.nice import Nice, SubjectDiscriminator
+from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tasks.visual.sampling import BatchSpec, Sampling
 
@@ -338,9 +339,7 @@ class TrainNice:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--train", type=int, nargs="+", default=[1], help="training subject id(s)")
     ap.add_argument("--test", type=int, default=1, help="held-out test subject id")

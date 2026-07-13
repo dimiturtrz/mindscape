@@ -14,6 +14,7 @@ from baselines.fnirs.features import FnirsLda
 from baselines.fnirs.glm import GlmBeta
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
+from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.workload._eval import CvConfig, CvData, Eval
 
 logger = logging.getLogger(__name__)
@@ -33,9 +34,7 @@ class FnirsGlmEval:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     meta = store.Store.load(_DATASET, FnirsCfg())                          # clean=None (no filter, as requested)
     X, y = store.Store.gather(meta)
     data = CvData(X, y, meta["subject"].to_numpy())

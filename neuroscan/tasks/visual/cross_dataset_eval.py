@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from core.data.eeg import things_eeg1, things_eeg2
 from neuroscan.evaluation import cross_dataset as bridge
 from neuroscan.evaluation.retrieval import Retrieval
+from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tasks.visual.train_nice import RetrievalSet, TrainConfig, TrainData, TrainNice
 
@@ -118,9 +119,7 @@ class CrossDatasetEval:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--eeg1-subjects", type=int, nargs="+", required=True)
     ap.add_argument("--eeg2-subjects", type=int, nargs="+", default=[1, 2])

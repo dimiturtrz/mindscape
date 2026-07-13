@@ -24,6 +24,7 @@ from core.data.eeg.base import EpochCfg
 from neuroscan import tracking
 from neuroscan.evaluation import metrics
 from neuroscan.models import decoders
+from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +88,7 @@ class Quantize:
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for lib_name in ("mne", "moabb", "braindecode"):
-        logging.getLogger(lib_name).setLevel(logging.WARNING)
+    Cli.setup_logging()
     args = Quantize._parse_args()
 
     meta = store.Store.load(args.dataset, EpochCfg(resample=args.resample, fmin=args.fmin, fmax=args.fmax))
