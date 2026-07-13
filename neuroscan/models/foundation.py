@@ -41,10 +41,14 @@ class FoundationConfig(BaseModel):
     patch_points: int = 200        # CBraMod points-per-patch — implies 200 Hz epochs (set resample=200)
     d_model: int = 200             # CBraMod per-token feature width (fixed by the checkpoint)
     freeze_backbone: bool = True   # capacity stays in the frozen pretrained weights; only the head learns
-    backbone_lr_scale: float = 0.1  # when unfrozen, backbone fine-tunes at base_lr × this (< head's) so the
-                                    # pretrained features aren't washed out — standard discriminative-LR fine-tune
+    backbone_lr_scale: float = 1.0  # when unfrozen, backbone fine-tunes at base_lr × this. 1.0 = whole-model
+                                    # single-LR, the WINNING recipe (n3q, single 2.38%); discriminative 0.1
+                                    # (07m, backbone < head) fine-tuned WORSE (single 2.10%) — negative, don't default
     hidden: int = 512
     dropout: float = 0.5
+    pool: str = "mean"             # (C,S)-token pooling into the head: "mean" (the crude bottleneck) |
+                                   # "attn" (learned attention over tokens — keeps the spatial/temporal grid
+                                   # the mean collapses; the head-side lever, bd)
 
 
 def _load_backbone() -> nn.Module:
@@ -80,6 +84,8 @@ class CBraModEncoder(nn.Module):
             nn.Linear(self.cfg.d_model, self.cfg.hidden), nn.GELU(), nn.Dropout(self.cfg.dropout),
             nn.Linear(self.cfg.hidden, spec.embed_dim),
         )
+        # attention pool: a learned scorer weights the (C,S) tokens instead of a flat mean (bd) — None = mean
+        self.pool_attn = nn.Linear(self.cfg.d_model, 1) if self.cfg.pool == "attn" else None
 
     def train(self, mode: bool = True):  # noqa: FBT001, FBT002
         """Keep the frozen backbone in eval (no dropout/norm drift) even when the encoder is train()-ed.
@@ -93,10 +99,21 @@ class CBraModEncoder(nn.Module):
         """Discriminative-LR optimizer groups: the pretrained backbone fine-tunes at `base_lr ×
         backbone_lr_scale` (gentler than the head, so pretrained features survive), the fresh head at
         `base_lr`. Frozen backbone -> head-only group. Consumed by the trainer's `_build_optim`."""
+        head = [p for m in (self.head, self.pool_attn) if m is not None for p in m.parameters()]
         if self.cfg.freeze_backbone:
-            return [{"params": list(self.head.parameters()), "lr": base_lr}]
+            return [{"params": head, "lr": base_lr}]
         return [{"params": list(self.backbone.parameters()), "lr": base_lr * self.cfg.backbone_lr_scale},
-                {"params": list(self.head.parameters()), "lr": base_lr}]
+                {"params": head, "lr": base_lr}]
+
+    def _pool(self, feats: torch.Tensor) -> torch.Tensor:
+        """Collapse the [B, C, S, d_model] token grid to [B, d_model]. Flat mean (crude, the bottleneck) or a
+        learned attention weighting over the C·S tokens (bd)."""
+        if self.pool_attn is None:
+            return feats.mean(dim=(1, 2))
+        b, c, s, d = feats.shape
+        tokens = feats.reshape(b, c * s, d)                       # [B, C·S, d_model]
+        weights = self.pool_attn(tokens).softmax(dim=1)           # [B, C·S, 1] over tokens
+        return (weights * tokens).sum(dim=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, t = x.shape
@@ -105,7 +122,7 @@ class CBraModEncoder(nn.Module):
         x = x[:, :, :s * p]                                        # drop the ragged tail patch
         x = (x - x.mean(-1, keepdim=True)) / (x.std(-1, keepdim=True) + 1e-6)   # per-channel z-score
         feats = self.backbone(x.reshape(b, c, s, p))              # [B, C, S, d_model]
-        z = self.head(feats.mean(dim=(1, 2)))                     # pool tokens -> [B, embed_dim]
+        z = self.head(self._pool(feats))                          # pool tokens -> [B, embed_dim]
         return F.normalize(z, dim=-1)
 
 
@@ -117,5 +134,10 @@ def _build_cbramod_ft(spec: EncoderSpec) -> nn.Module:
     return CBraModEncoder(spec, FoundationConfig(freeze_backbone=False))
 
 
+def _build_cbramod_ft_attn(spec: EncoderSpec) -> nn.Module:
+    return CBraModEncoder(spec, FoundationConfig(freeze_backbone=False, pool="attn"))
+
+
 register("cbramod", _build_cbramod)       # frozen backbone + head (linear probe of pretrained features)
 register("cbramod_ft", _build_cbramod_ft)  # unfrozen — fine-tune the backbone on perception (capacity test)
+register("cbramod_ft_attn", _build_cbramod_ft_attn)  # unfrozen + attention pool (undo the mean bottleneck, bd)
