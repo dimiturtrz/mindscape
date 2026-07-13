@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 import tomllib
 from pathlib import Path
 
@@ -89,20 +90,43 @@ def _chokepoints(g: nx.DiGraph, mx: float) -> list[str]:
             for n, v in nx.betweenness_centrality(g).items() if v > mx]
 
 
-def unmirrored(packages: list[str], test_root: str = "tests/unit") -> list[str]:
-    """Source modules with no mirrored test at tests/unit/<same path>/test_<name>.py. ADVISORY for now (bd
-    3nn): mindscape has many coverage-OMITTED shells (GPU/CLI runners, torch models, data adapters) that are
-    legitimately unit-untested — mirroring them would be empty stubs. Graduate-to-blocking trigger: once a
-    'mirror LOGIC modules only, exempt the [tool.coverage] omit set' policy is defined + backfilled to 0 gaps
-    (bd follow-up), move this into the blocking bucket like the sibling repos did."""
+def _coverage_omit(pyproject: str = "pyproject.toml") -> list[str]:
+    """The [tool.coverage.run] omit globs — the 'not logic' set (runners, adapters, GPU/CLI/download/viz glue)
+    the test-mirror rule reuses as its exemption, so the two gates agree on what a shell is."""
+    p = Path(pyproject)
+    if not p.exists():
+        return []
+    return tomllib.loads(p.read_text(encoding="utf-8")).get("tool", {}).get("coverage", {}).get("run", {}).get(
+        "omit", [])
+
+
+def _matches_omit(path: str, patterns: list[str]) -> bool:
+    path = path.replace("\\", "/")
+    for pat in patterns:
+        rx = "^" + re.escape(pat.replace("\\", "/")).replace(r"\*\*", ".*").replace(r"\*", "[^/]*") + "$"
+        if re.match(rx, path):
+            return True
+    return False
+
+
+def unmirrored(packages: list[str], test_root: str = "tests") -> list[str]:
+    """LOGIC source modules that NO test exercises — BLOCKING (bd 9nj). mindscape's test tree is deliberately
+    NOT 1:1-by-path (a `core` module is often exercised by a `baselines`/integration test), so 'mirrored' means
+    imported by SOME test, not a strict `test_<name>.py` at the mirror path. Coverage-OMITTED shells (runners /
+    adapters / GPU / download / viz glue) are exempt — the same 'not logic' set the coverage gate omits, so a
+    genuine shell is never a false gap. What remains blocks: a real logic module with no test at all."""
+    omit = _coverage_omit()
+    corpus = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in Path(test_root).rglob("test_*.py"))
     out = []
     for pkg in packages:
         for f in sorted(Path(pkg).rglob("*.py")):
-            if f.name in _STRUCTURAL:
+            if f.name in _STRUCTURAL or _matches_omit(f.as_posix(), omit):
                 continue
-            mirror = Path(test_root) / f.parent / f"test_{f.name}"
-            if not mirror.exists():
-                out.append(f"{f.as_posix()} — no mirrored {mirror.as_posix()}")
+            dotted, parent = f.as_posix()[:-3].replace("/", "."), f.parent.as_posix().replace("/", ".")
+            imported = dotted in corpus or re.search(
+                rf"from {re.escape(parent)} import[^\n]*\b{re.escape(f.stem)}\b", corpus)
+            if not imported:
+                out.append(f"{f.as_posix()} — no test imports it")
     return out
 
 
@@ -145,7 +169,7 @@ def _run_assert(packages: list[str]) -> int:
     cfg = load_structure_cfg()
     g, files = build_graph(packages), file_lines(packages)
     blocking, advisory = assert_fitness(g, files, cfg)
-    advisory += [f"test mirror: {m}" for m in unmirrored(packages)]   # ADVISORY (bd 3nn) — see unmirrored()
+    blocking += [f"test mirror: {m}" for m in unmirrored(packages)]   # BLOCKING (bd 9nj) — see unmirrored()
     if advisory:
         shown = advisory[:_ADVISORY_PREVIEW]
         extra = f"\n  … +{len(advisory) - _ADVISORY_PREVIEW} more" if len(advisory) > _ADVISORY_PREVIEW else ""

@@ -116,11 +116,13 @@ push it down (into `core`), don't invert the arrow.
 fan-in/out / bottleneck / betweenness / cycles via grimp+networkx) **and** a CI **fitness gate**
 (`python -m devtools.graph --assert`) — the *metric* arch axis import-linter's categorical contracts can't
 express. **Blocks** on a god-module (fan-in AND fan-out both > `bottleneck_degree`), an import cycle (SCC>1),
-or a god-file (> `file_max`). **Advisory** (logged, never blocks): line-floor, betweenness chokepoint, and
-test-mirror (source modules without a `tests/unit/<path>/test_<name>.py` — advisory because many source files
-are coverage-omitted shells; graduates to blocking once a "mirror logic, exempt omitted shells" policy is
-backfilled). Thresholds live in `[tool.structure]`, chosen clean against today's graph — they **ratchet only
-tighter, never relax**. Runs in the CI `tests` job (needs the `[devtools]` extra).
+a god-file (> `file_max`), or **test-mirror** (bd 9nj): a LOGIC module that no test exercises. Mindscape's test
+tree isn't 1:1-by-path (a `core` module is often exercised by a `baselines`/integration test), so "mirrored" =
+imported by *some* test, not a strict `test_<name>.py`; coverage-**omitted** shells (runners/adapters/GPU/
+download/viz glue) are exempt — the same "not logic" set the coverage gate omits (`unmirrored()` reads
+`[tool.coverage] omit`). **Advisory** (logged, never blocks): line-floor + betweenness chokepoint. Thresholds
+live in `[tool.structure]`, chosen clean against today's graph — they **ratchet only tighter, never relax**.
+Runs in the CI `tests` job (needs the `[devtools]` extra).
 
 ### Module shape — ast-grep gate (bd ylq)
 

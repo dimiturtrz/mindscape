@@ -119,6 +119,11 @@ omit = [
     "neuroscan/tasks/workload/coupling_probe.py", "neuroscan/tasks/workload/workload_confusion.py",
     "neuroscan/tasks/workload/repro_benchnirs.py",
     "neuroscan/tasks/workload/feature_importance/recipes.py",   # fixed-recipe CV RUNNER (pure _cv logic tested; rest is store.load/disk record)
+    # one-off decode/probe RUNNERS (load -> decode-arms -> log; the shared decode logic is in workload/riemann.py, tested)
+    "neuroscan/tasks/workload/augment_probe.py", "neuroscan/tasks/workload/source_decode.py",
+    "neuroscan/tasks/workload/source_prior_decode.py", "neuroscan/tasks/workload/validate_coupling.py",
+    "neuroscan/tasks/cli.py",   # runner glue: logging.basicConfig + quiet-libs (side-effect setup, like tracking.py)
+    "core/data/eeg/bnci2014_001.py",   # MOABB BNCI2014_001 adapter (download/disk, like the things_eeg*/shin2017 adapters)
 ]
 
 # Coverage floor is ENFORCED at 80% (logic %) in CI (coverage report --fail-under=80) — regression guard
