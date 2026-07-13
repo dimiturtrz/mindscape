@@ -69,6 +69,15 @@ jobs:
       # grimp parses ASTs statically — no project install needed. Contracts live in [tool.importlinter].
       - name: Import layers — enforced (import-linter)
         run: uvx --from import-linter lint-imports
+      # Duplication (bd apl) — the DRY axis. ADVISORY (continue-on-error) until the class-extraction refactor
+      # (bd ylq) settles + dup is driven under the 1% threshold, then graduates to blocking. Config +
+      # ignore/threshold in devtools/jscpd.json; paths on the CLI.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Duplication — advisory (jscpd, warns)
+        continue-on-error: true
+        run: npx --yes jscpd@4 core neuroscan --config devtools/jscpd.json
       - name: Dead code — advisory (vulture conf>=60, warns)
         if: always()
         run: |
