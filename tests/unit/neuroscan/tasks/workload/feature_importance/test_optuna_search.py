@@ -2,7 +2,7 @@
 metric reads top-family agreement across seeds correctly (the deliverable's validity check)."""
 import numpy as np
 
-from core.features import extract_bank, family_names
+from core.features import DescriptorBank
 from neuroscan.tasks.workload.feature_importance.optuna_search import Bank, _cv_score, _stability
 
 
@@ -16,8 +16,8 @@ def test_cv_score_returns_accuracy_in_range():
             X.append(rng.standard_normal((8, 40)) + c)          # [ch, t] shifted by class
             y.append(c); groups.append(s)
     X = np.asarray(X); y = np.asarray(y); groups = np.asarray(groups)
-    F, fam = extract_bank(X)
-    acc = _cv_score(Bank(F, fam, y, groups), {f: 1.0 for f in family_names()}, fold_seeds=[0], k=3)
+    F, fam = DescriptorBank.extract_bank(X)
+    acc = _cv_score(Bank(F, fam, y, groups), {f: 1.0 for f in DescriptorBank.family_names()}, fold_seeds=[0], k=3)
     assert 0.0 <= acc <= 1.0
     assert acc > 1 / 3                                           # separable signal -> beats 3-class chance
 

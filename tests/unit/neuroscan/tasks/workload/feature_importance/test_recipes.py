@@ -3,13 +3,13 @@ integration concern (needs the dataset); here we pin the pure pieces: folds are 
 and every recipe references only real descriptor families."""
 import numpy as np
 
-from core.features import extract_bank, family_names
+from core.features import DescriptorBank
 from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
 from neuroscan.tasks.workload.feature_importance.recipes import _RECIPES, _cv
 
 
 def test_recipes_reference_only_real_families():
-    known = set(family_names())
+    known = set(DescriptorBank.family_names())
     for key, (_label, fams) in _RECIPES.items():
         assert fams, f"{key} is empty"
         assert set(fams) <= known, f"{key} references unknown families {set(fams) - known}"
@@ -41,7 +41,7 @@ def test_cv_selects_families_and_scores_above_chance():
                 y.append(cls)
                 groups.append(s)
     X, y, groups = np.asarray(X), np.asarray(y), np.asarray(groups)
-    F, fam = extract_bank(X)
+    F, fam = DescriptorBank.extract_bank(X)
     acc, sd, kap = _cv(F, fam, y, groups, ["mean", "slope"])
     assert 0.0 <= acc <= 1.0 and sd >= 0.0 and -1.0 <= kap <= 1.0
     assert acc > 0.7

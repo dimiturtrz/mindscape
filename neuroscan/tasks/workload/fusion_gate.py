@@ -35,7 +35,7 @@ from baselines.fusion.gate import GateConfig, GatedFusion
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
-from core.features import amplitude_features, band_powers, zscore_per_subject
+from core.features import Amplitude, BandPower, SubjectNorm
 from neuroscan.evaluation import metrics, results
 
 logger = logging.getLogger(__name__)
@@ -57,8 +57,8 @@ def _load_features():
     Xf, yf = store.gather(qf)
     assert np.array_equal(ye, yf), "EEG/fNIRS blocks misaligned — fusion invalid"
     groups = qe["subject"].to_numpy()
-    Fe = band_powers(Xe, _EEG_CFG.resample).astype(np.float32)         # [n, 28*3]
-    Ff = amplitude_features(Xf).astype(np.float32)                     # [n, ch*3]
+    Fe = BandPower.band_powers(Xe, _EEG_CFG.resample).astype(np.float32)   # [n, 28*3]
+    Ff = Amplitude.amplitude_features(Xf).astype(np.float32)               # [n, ch*3]
     return Fe, Ff, ye.astype(np.int64), groups
 
 
@@ -73,7 +73,7 @@ def main():
     args = ap.parse_args()
 
     Fe, Ff, y, groups = _load_features()
-    Fe, Ff = zscore_per_subject(Fe, groups), zscore_per_subject(Ff, groups)
+    Fe, Ff = SubjectNorm.zscore_per_subject(Fe, groups), SubjectNorm.zscore_per_subject(Ff, groups)
     subs = np.array(sorted(set(groups)))
     n_classes = int(y.max()) + 1
     logger.info(f"gated fusion: {len(y)} blocks · {len(subs)} subjects · EEG {Fe.shape[1]}d · fNIRS {Ff.shape[1]}d · "

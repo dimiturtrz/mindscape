@@ -26,11 +26,11 @@ def _maps(subject: int, block: int, band: str):
     s = str(subject)
     Xe, ye = store.gather(me.filter(me["subject"] == s))
     Xf, _ = store.gather(mf.filter(mf["subject"] == s))
-    Xe = bc.csd_transform(Xe, eegmod.adapter().channels(), 100.0)      # surface-Laplacian deblur (match export)
-    pos_e = bc.eeg_positions(eegmod.adapter().channels())
-    pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(subject))
-    X = bc.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=16,
-                        series=bc.SeriesConfig(fps=10.0, t_end=20.0))    # [n,C=5,16,16,T], lag derived
+    Xe = bc.CSD.csd_transform(Xe, eegmod.adapter().channels(), 100.0)  # surface-Laplacian deblur (match export)
+    pos_e = bc.EegMontage.eeg_positions(eegmod.adapter().channels())
+    pos_f = bc.FnirsMontage.fnirs_positions(fnmod.adapter()._subject_dir(subject))
+    X = bc.BrainCamera.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=16,
+                                    series=bc.SeriesConfig(fps=10.0, t_end=20.0))  # [n,C=5,16,16,T], lag derived
     band_idx = {"theta": 0, "alpha": 1, "beta": 2}[band]
     eeg = X[block, band_idx]            # [16,16,T] EEG band-power map
     neural = X[block, 3]               # [16,16,T] fNIRS CBSI neural map (lag-aligned; ch 3, ch 4 = coverage)

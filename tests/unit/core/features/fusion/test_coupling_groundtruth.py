@@ -9,8 +9,8 @@ import numpy as np
 from scipy.signal import fftconvolve
 
 from core.data.fnirs.synthetic import SynthConfig, double_gamma_hrf, synthesize_paired
-from core.features.fnirs.chromophore import cbsi_neural
-from core.features.fusion.coupling import estimate_coupling
+from core.features.fnirs.chromophore import Chromophore
+from core.features.fusion.coupling import Coupling
 
 _FS = 5.0
 
@@ -28,7 +28,7 @@ def test_cbsi_recovers_neural_from_systemic():
     rng = np.random.default_rng(0)
     drive = _drive(rng)
     hbo, hbr = synthesize_paired(drive, _FS, cfg, seed=1)
-    cbsi = cbsi_neural(hbo[:, None, :], hbr[:, None, :])[:, 0, :]
+    cbsi = Chromophore.cbsi_neural(hbo[:, None, :], hbr[:, None, :])[:, 0, :]
     true_resp = fftconvolve(drive, double_gamma_hrf(_FS, cfg)[None, :], axes=1)[:, :drive.shape[1]]
     assert np.corrcoef(cbsi[0], true_resp[0])[0, 1] > 0.9        # neural recovered, systemic cancelled
 
@@ -43,8 +43,8 @@ def test_estimate_coupling_recovers_lag_and_sign():
         rng = np.random.default_rng(seed)
         drive = _drive(rng)
         hbo, hbr = synthesize_paired(drive, _FS, cfg, seed=seed + 10)
-        cbsi = cbsi_neural(hbo[:, None, :], hbr[:, None, :])[:, 0, :]
-        lag, _decay, beta = estimate_coupling(drive, cbsi, _FS)
+        cbsi = Chromophore.cbsi_neural(hbo[:, None, :], hbr[:, None, :])[:, 0, :]
+        lag, _decay, beta = Coupling.estimate_coupling(drive, cbsi, _FS)
         assert beta > 0                                          # neural -> HbO up: positive coupling
         assert 2.0 <= lag <= 9.0                                 # physiological, near the 6 s HRF peak
         lags.append(lag)

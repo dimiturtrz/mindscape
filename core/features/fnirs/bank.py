@@ -18,87 +18,100 @@ from __future__ import annotations
 import numpy as np
 from scipy.stats import kurtosis, skew
 
-from core.features.fnirs.amplitude import _time_axis
+from core.features.fnirs.amplitude import Amplitude
 
 
-def _slope(X: np.ndarray, tc: np.ndarray, tc_ss: float) -> np.ndarray:
-    """OLS slope of each channel over the (centred) time axis — the response's trend."""
-    return (X * tc).sum(axis=2) / tc_ss
+class DescriptorBank:
+    """fNIRS descriptor bank — the wide per-channel temporal-feature family set (free helpers folded in as
+    staticmethods, public names kept). `FNIRS_FEATURE_FNS` maps family name -> the staticmethod."""
 
+    @staticmethod
+    def _slope(X: np.ndarray, tc: np.ndarray, tc_ss: float) -> np.ndarray:
+        """OLS slope of each channel over the (centred) time axis — the response's trend."""
+        return (X * tc).sum(axis=2) / tc_ss
 
-def _f_mean(X):    return X.mean(axis=2)                                    # response amplitude
-def _f_var(X):     return X.var(axis=2)                                     # response variability
-def _f_min(X):     return X.min(axis=2)
-def _f_max(X):     return X.max(axis=2)
-def _f_range(X):   return X.max(axis=2) - X.min(axis=2)
-def _f_auc(X):     return np.trapezoid(X, axis=2)                           # area under the response (trapezoid)
-def _f_final(X):   return X[:, :, -max(1, X.shape[2] // 10):].mean(axis=2)  # plateau (last ~10% of window)
+    @staticmethod
+    def _f_mean(X):    return X.mean(axis=2)                                    # response amplitude
+    @staticmethod
+    def _f_var(X):     return X.var(axis=2)                                     # response variability
+    @staticmethod
+    def _f_min(X):     return X.min(axis=2)
+    @staticmethod
+    def _f_max(X):     return X.max(axis=2)
+    @staticmethod
+    def _f_range(X):   return X.max(axis=2) - X.min(axis=2)
+    @staticmethod
+    def _f_auc(X):     return np.trapezoid(X, axis=2)                           # area under the response (trapezoid)
+    @staticmethod
+    def _f_final(X):   return X[:, :, -max(1, X.shape[2] // 10):].mean(axis=2)  # plateau (last ~10% of window)
 
+    @staticmethod
+    def _f_peak(X):
+        idx = np.abs(X).argmax(axis=2)                                          # signed extreme (max |value|)
+        return np.take_along_axis(X, idx[:, :, None], axis=2)[:, :, 0]
 
-def _f_peak(X):
-    idx = np.abs(X).argmax(axis=2)                                          # signed extreme (max |value|)
-    return np.take_along_axis(X, idx[:, :, None], axis=2)[:, :, 0]
+    @staticmethod
+    def _f_time_to_peak(X):
+        return np.abs(X).argmax(axis=2).astype(np.float32) / X.shape[2]         # latency of the extreme, in [0,1)
 
+    @staticmethod
+    def _f_skew(X):
+        return np.nan_to_num(skew(X, axis=2)).astype(np.float32)               # asymmetry (flat channel -> 0)
 
-def _f_time_to_peak(X):
-    return np.abs(X).argmax(axis=2).astype(np.float32) / X.shape[2]         # latency of the extreme, in [0,1)
+    @staticmethod
+    def _f_kurtosis(X):
+        return np.nan_to_num(kurtosis(X, axis=2)).astype(np.float32)          # peakedness (flat channel -> 0)
 
+    @staticmethod
+    def _f_zero_crossings(X):
+        return (np.diff(np.signbit(X), axis=2).sum(axis=2)).astype(np.float32)  # # sign changes over time
 
-def _f_skew(X):
-    return np.nan_to_num(skew(X, axis=2)).astype(np.float32)               # asymmetry (flat channel -> 0)
+    @staticmethod
+    def _f_slope(X):
+        tc, tc_ss = Amplitude._time_axis(X.shape[2])
+        return DescriptorBank._slope(X, tc, tc_ss)
 
+    @staticmethod
+    def _f_early_slope(X):
+        h = X.shape[2] // 2                                                     # first-half rise
+        tc, tc_ss = Amplitude._time_axis(h)
+        return DescriptorBank._slope(X[:, :, :h], tc, tc_ss)
 
-def _f_kurtosis(X):
-    return np.nan_to_num(kurtosis(X, axis=2)).astype(np.float32)          # peakedness (flat channel -> 0)
+    @staticmethod
+    def _f_late_slope(X):
+        h = X.shape[2] // 2                                                     # second-half plateau/decay
+        Xl = X[:, :, h:]
+        tc, tc_ss = Amplitude._time_axis(Xl.shape[2])
+        return DescriptorBank._slope(Xl, tc, tc_ss)
 
+    @staticmethod
+    def family_names() -> list[str]:
+        """The descriptor families, in column order."""
+        return list(FNIRS_FEATURE_FNS)
 
-def _f_zero_crossings(X):
-    return (np.diff(np.signbit(X), axis=2).sum(axis=2)).astype(np.float32)  # # sign changes over time
-
-
-def _f_slope(X):
-    tc, tc_ss = _time_axis(X.shape[2])
-    return _slope(X, tc, tc_ss)
-
-
-def _f_early_slope(X):
-    h = X.shape[2] // 2                                                     # first-half rise
-    tc, tc_ss = _time_axis(h)
-    return _slope(X[:, :, :h], tc, tc_ss)
-
-
-def _f_late_slope(X):
-    h = X.shape[2] // 2                                                     # second-half plateau/decay
-    Xl = X[:, :, h:]
-    tc, tc_ss = _time_axis(Xl.shape[2])
-    return _slope(Xl, tc, tc_ss)
+    @staticmethod
+    def extract_bank(X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Extract every family and concatenate: `X[n,ch,t]` -> `(F[n, ch*K], fam[ch*K])`. `fam[j]` is the
+        family name of column j, so a per-family weight maps to its channels via `fam == name`. f64 for a
+        stable scaler downstream (the study standardises then weights)."""
+        X = np.asarray(X, dtype=np.float64)
+        ch = X.shape[1]
+        blocks, fam = [], []
+        for name, fn in FNIRS_FEATURE_FNS.items():
+            blocks.append(np.asarray(fn(X), dtype=np.float64))                 # [n, ch]
+            fam.extend([name] * ch)
+        return np.concatenate(blocks, axis=1), np.array(fam)
 
 
 # name -> fn(X[n,ch,t]) -> [n,ch]. Order fixed (dict is insertion-ordered) so columns are deterministic.
 FNIRS_FEATURE_FNS = {
-    "mean": _f_mean, "slope": _f_slope, "peak": _f_peak, "variance": _f_var,
-    "skew": _f_skew, "kurtosis": _f_kurtosis, "auc": _f_auc, "time_to_peak": _f_time_to_peak,
-    "min": _f_min, "max": _f_max, "range": _f_range, "final": _f_final,
-    "early_slope": _f_early_slope, "late_slope": _f_late_slope, "zero_crossings": _f_zero_crossings,
+    "mean": DescriptorBank._f_mean, "slope": DescriptorBank._f_slope, "peak": DescriptorBank._f_peak,
+    "variance": DescriptorBank._f_var, "skew": DescriptorBank._f_skew, "kurtosis": DescriptorBank._f_kurtosis,
+    "auc": DescriptorBank._f_auc, "time_to_peak": DescriptorBank._f_time_to_peak, "min": DescriptorBank._f_min,
+    "max": DescriptorBank._f_max, "range": DescriptorBank._f_range, "final": DescriptorBank._f_final,
+    "early_slope": DescriptorBank._f_early_slope, "late_slope": DescriptorBank._f_late_slope,
+    "zero_crossings": DescriptorBank._f_zero_crossings,
 }
-
-
-def family_names() -> list[str]:
-    """The descriptor families, in column order."""
-    return list(FNIRS_FEATURE_FNS)
-
-
-def extract_bank(X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Extract every family and concatenate: `X[n,ch,t]` -> `(F[n, ch*K], fam[ch*K])`. `fam[j]` is the
-    family name of column j, so a per-family weight maps to its channels via `fam == name`. f64 for a
-    stable scaler downstream (the study standardises then weights)."""
-    X = np.asarray(X, dtype=np.float64)
-    ch = X.shape[1]
-    blocks, fam = [], []
-    for name, fn in FNIRS_FEATURE_FNS.items():
-        blocks.append(np.asarray(fn(X), dtype=np.float64))                 # [n, ch]
-        fam.extend([name] * ch)
-    return np.concatenate(blocks, axis=1), np.array(fam)
 
 
 class WeightedFamilyScaler:

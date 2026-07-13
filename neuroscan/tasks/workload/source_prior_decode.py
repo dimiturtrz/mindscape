@@ -33,10 +33,10 @@ from core.data.eeg import shin2017_nback_eeg as eegmod
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs import shin2017 as fnmod
 from core.data.fnirs.base import FnirsCfg
-from core.features.eeg.montage import _to_unit_disk
-from core.features.eeg.source import source_positions, to_parcels
-from core.features.fnirs.montage import fnirs_positions
-from core.features.fusion.source_prior import parcels_from_leadfield, prior_leadfield
+from core.features.eeg.montage import EegMontage
+from core.features.eeg.source import Source
+from core.features.fnirs.montage import FnirsMontage
+from core.features.fusion.source_prior import SourcePrior
 from neuroscan.evaluation import metrics
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ def _fnirs_prior(x_fnirs: np.ndarray, subject_dir, src2d: np.ndarray) -> np.ndar
     mean over epochs — unsupervised) RBF-interpolated from the optode disk onto the source-space vertices."""
     act = np.asarray(x_fnirs[:, :36, :], dtype=np.float64).std(axis=-1).mean(axis=0)   # [36] HbO channels
     act = act / (act.max() + 1e-12)
-    pos_f = fnirs_positions(subject_dir)                                                # [36, 2] unit disk
+    pos_f = FnirsMontage.fnirs_positions(subject_dir)                                   # [36, 2] unit disk
     d2 = ((src2d[:, None, :] - pos_f[None, :, :]) ** 2).sum(-1)                          # [n_src, 36]
     wgt = np.exp(-d2 / (2 * _RBF_SIGMA ** 2))
     a_src = (wgt @ act) / (wgt.sum(1) + 1e-12)                                           # [n_src]
@@ -72,8 +72,8 @@ def _build():
     mf = store.load("shin2017_nback", FnirsCfg())
     subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
     ch_e = eegmod.adapter().channels()
-    g, agg = prior_leadfield(ch_e, _SFREQ)
-    src2d = _to_unit_disk(source_positions(ch_e, _SFREQ)[:, :2])                         # source flatmap
+    g, agg = SourcePrior.prior_leadfield(ch_e, _SFREQ)
+    src2d = EegMontage._to_unit_disk(Source.source_positions(ch_e, _SFREQ)[:, :2])       # source flatmap
     arms = {"sensor": [], "dSPM": [], "uniform": [], "fNIRS": []}
     ys, gs = [], []
     for s in subs:
@@ -82,9 +82,9 @@ def _build():
         assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
         w = _fnirs_prior(xf, fnmod.adapter()._subject_dir(int(s)), src2d)
         arms["sensor"].append(_cov(xe))
-        arms["dSPM"].append(_cov(to_parcels(xe, ch_e, _SFREQ)))
-        arms["uniform"].append(_cov(parcels_from_leadfield(xe, g, agg, None)))
-        arms["fNIRS"].append(_cov(parcels_from_leadfield(xe, g, agg, w)))
+        arms["dSPM"].append(_cov(Source.to_parcels(xe, ch_e, _SFREQ)))
+        arms["uniform"].append(_cov(SourcePrior.parcels_from_leadfield(xe, g, agg, None)))
+        arms["fNIRS"].append(_cov(SourcePrior.parcels_from_leadfield(xe, g, agg, w)))
         ys.append(ye)
         gs.append(np.array([s] * len(ye)))
         logger.info(f"  subject {s}: {len(ye)} blocks · prior w∈[{w.min():.2f},{w.max():.2f}]")

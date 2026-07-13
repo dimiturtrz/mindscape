@@ -33,7 +33,7 @@ from pydantic import BaseModel
 from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
-from core.features.eeg.covariance import recenter_signals
+from core.features.eeg.covariance import Covariance
 from neuroscan.models import foundation  # noqa: F401 — registers the "cbramod" encoder in the registry
 from neuroscan.models.encoders import EncoderSpec, build_encoder
 from neuroscan.models.nice import SubjectDiscriminator, clip_infonce, retrieval_topk
@@ -114,7 +114,7 @@ def _load_split(subjects: list[int], split: str, resample: float, *, recenter: b
     epochs, concept, image_files, meta = things.get_epochs(
         subjects, things.ThingsEpochCfg(split=split, resample=resample))
     if recenter:
-        epochs = recenter_signals(epochs, meta["subject"].to_numpy(), shrinkage=shrinkage)   # per-subj M^-1/2 X
+        epochs = Covariance.recenter_signals(epochs, meta["subject"].to_numpy(), shrinkage=shrinkage)  # M^-1/2 X
     return epochs, concept, _clip_targets(image_files, split), meta["subject"].to_numpy().astype(np.int64)
 
 

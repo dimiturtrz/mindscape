@@ -6,27 +6,16 @@ Split by role:
   camera.py    ⚠️ the LOSSY viz rasterization (grid maps) + decode-negatives (build_tensor, fused_node_series)
 
 This `__init__` is a convenience facade re-exporting the pipeline API (incl. the single-modality prep it uses —
-`eeg_positions`/`csd_transform` live in `core.features.eeg`, `fnirs_positions`/`cbsi_neural` in
-`core.features.fnirs`; re-exported here for the fusion workflow). Import as `from core.features import fusion`.
+`EegMontage`/`CSD` live in `core.features.eeg`, `FnirsMontage`/`Chromophore` in `core.features.fnirs`;
+re-exported here for the fusion workflow). Import as `from core.features import fusion`.
 """
-from core.features.eeg.csd import csd_transform
-from core.features.eeg.montage import eeg_positions
-from core.features.fnirs.chromophore import cbsi_neural
-from core.features.fnirs.montage import fnirs_positions
-from core.features.fusion.camera import (
-    PairedModalities,
-    _apply,
-    _bary,
-    _broadcast,
-    _interp_weights,
-    _zscore,
-    build_tensor,
-    coverage_map,
-    fused_node_series,
-)
-from core.features.fusion.coupling import _HRF_WIDTH, _gamma_kernel, estimate_coupling
-from core.features.fusion.series import _BANDS, SeriesConfig, _band_env, _resample_time, channel_series
+from core.features.eeg.csd import CSD
+from core.features.eeg.montage import EegMontage
+from core.features.fnirs.chromophore import Chromophore
+from core.features.fnirs.montage import FnirsMontage
+from core.features.fusion.camera import BrainCamera, PairedModalities
+from core.features.fusion.coupling import _HRF_WIDTH, Coupling
+from core.features.fusion.series import _BANDS, Series, SeriesConfig
 
-__all__ = ["eeg_positions", "fnirs_positions", "csd_transform", "cbsi_neural", "estimate_coupling",
-           "channel_series", "coverage_map", "build_tensor", "fused_node_series",
-           "PairedModalities", "SeriesConfig"]
+__all__ = ["EegMontage", "FnirsMontage", "CSD", "Chromophore", "Coupling",
+           "Series", "BrainCamera", "PairedModalities", "SeriesConfig"]

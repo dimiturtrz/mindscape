@@ -3,19 +3,19 @@ one thing that's easy to get wrong — the weight must land AFTER standardisatio
 import numpy as np
 import pytest
 
-from core.features import extract_bank, family_names
+from core.features import DescriptorBank
 from core.features.fnirs.bank import FNIRS_FEATURE_FNS, WeightedFamilyScaler
 
 
 def test_extract_bank_shape_and_column_map():
     n, ch, t = 5, 72, 220
     X = np.random.default_rng(0).standard_normal((n, ch, t))
-    F, fam = extract_bank(X)
-    K = len(family_names())
+    F, fam = DescriptorBank.extract_bank(X)
+    K = len(DescriptorBank.family_names())
     assert F.shape == (n, ch * K)
     assert fam.shape == (ch * K,)
-    # each family owns a contiguous ch-wide block, in family_names() order
-    for i, name in enumerate(family_names()):
+    # each family owns a contiguous ch-wide block, in DescriptorBank.family_names() order
+    for i, name in enumerate(DescriptorBank.family_names()):
         assert (fam[i * ch:(i + 1) * ch] == name).all()
     assert np.isfinite(F).all()
 

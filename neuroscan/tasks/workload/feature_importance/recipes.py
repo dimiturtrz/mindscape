@@ -20,7 +20,7 @@ from sklearn.preprocessing import StandardScaler
 from core.config import REPO
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
-from core.features import extract_bank, family_names
+from core.features import DescriptorBank
 from neuroscan.evaluation import metrics, results
 from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
 
@@ -29,13 +29,13 @@ logger = logging.getLogger(__name__)
 # key -> (label, family list). `amplitude` = the current fnirs_lda triple; `full` = the whole bank. Keys are
 # marker-/run-name-safe (they become results.json run names -> README markers).
 _RECIPES = {
-    "full":         ("full (15 families)",                   family_names()),
+    "full":         ("full (15 families)",                   DescriptorBank.family_names()),
     "amplitude":    ("amplitude — mean+slope+peak (baseline)", ["mean", "slope", "peak"]),
     "slope_only":   ("slope only",                            ["slope"]),
     "dynamics":     ("dynamics (slope + early/late-slope)",   ["slope", "early_slope", "late_slope"]),
     "mean_only":    ("mean only",                             ["mean"]),
     "peak_only":    ("peak only",                             ["peak"]),
-    "all_but_slope": ("all but slope",                        [f for f in family_names() if f != "slope"]),
+    "all_but_slope": ("all but slope",                        [f for f in DescriptorBank.family_names() if f != "slope"]),
 }
 _SEEDS = [0, 1, 2]
 _K = 5
@@ -73,7 +73,7 @@ def main():
     meta = store.load(_DATASET, FnirsCfg())
     X, y = store.gather(meta)
     groups = meta["subject"].to_numpy()
-    F, fam = extract_bank(X)
+    F, fam = DescriptorBank.extract_bank(X)
     n_classes = int(y.max()) + 1
     chance = 1.0 / n_classes
     logger.info(f"fNIRS feature recipes · Shin n-back · {len(y)} blocks · {meta['subject'].n_unique()} subjects · "

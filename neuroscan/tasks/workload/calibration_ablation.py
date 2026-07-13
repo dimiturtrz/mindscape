@@ -28,7 +28,7 @@ from sklearn.model_selection import GroupKFold
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
-from core.features import amplitude_features, band_powers, zscore_per_subject
+from core.features import Amplitude, BandPower, SubjectNorm
 from neuroscan.evaluation import metrics, results
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ def _cv_raw_or_transductive(F, y, g, subs, zt):
     accs = []
     for tr, te in GroupKFold(_K).split(subs, groups=subs):
         mtr, mte = np.isin(g, subs[tr]), np.isin(g, subs[te])
-        Fz = zscore_per_subject(F, g) if zt else F
+        Fz = SubjectNorm.zscore_per_subject(F, g) if zt else F
         accs.append(metrics.accuracy(y[mte], _lda().fit(Fz[mtr], y[mtr]).predict(Fz[mte])))
     return float(np.mean(accs))
 
@@ -56,7 +56,7 @@ def _cv_calib_half(F, y, g, subs, rng):
     a random half of its blocks and score the other half."""
     accs = []
     for tr, te in GroupKFold(_K).split(subs, groups=subs):
-        Ftr = zscore_per_subject(F, g)                        # train side: per-subject z (train subjects only used)
+        Ftr = SubjectNorm.zscore_per_subject(F, g)            # train side: per-subject z (train subjects only used)
         mtr = np.isin(g, subs[tr])
         clf = _lda().fit(Ftr[mtr], y[mtr])
         yt, yp = [], []
@@ -86,7 +86,7 @@ def main():
     Xf, yf = store.gather(qf)
     assert np.array_equal(y, yf), "EEG/fNIRS blocks misaligned"
     ge = qe["subject"].to_numpy()
-    Fe, Ff = band_powers(Xe, _EEG_CFG.resample), amplitude_features(Xf)
+    Fe, Ff = BandPower.band_powers(Xe, _EEG_CFG.resample), Amplitude.amplitude_features(Xf)
 
     out = {
         "eeg_raw": _cv_raw_or_transductive(Fe, y, ge, subs, zt=False),
@@ -96,7 +96,7 @@ def main():
         "fnirs_ztrans": _cv_raw_or_transductive(Ff, y, ge, subs, zt=True),
     }
     # fusion picture on the z-scored (transductive) features: EEG becomes the strong modality; oracle grows
-    Fez, Ffz = zscore_per_subject(Fe, ge), zscore_per_subject(Ff, ge)
+    Fez, Ffz = SubjectNorm.zscore_per_subject(Fe, ge), SubjectNorm.zscore_per_subject(Ff, ge)
     CE, CF, LATE = [], [], []
     for tr, te in GroupKFold(_K).split(subs, groups=subs):
         mtr, mte = np.isin(ge, subs[tr]), np.isin(ge, subs[te])

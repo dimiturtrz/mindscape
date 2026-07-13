@@ -41,7 +41,7 @@ from core import config
 from core.reference import Reference
 from core.data import splits, store
 from core.data.eeg.base import EpochCfg
-from core.features import time_delay_embed
+from core.features import Covariance
 from neuroscan import tracking
 from neuroscan.evaluation import metrics, results
 
@@ -66,7 +66,7 @@ class AlignConfig(BaseModel):
 
 def _covariances(X, augment, order, lag, estimator="oas"):
     if augment:
-        X = time_delay_embed(X.astype(np.float64), order, lag)
+        X = Covariance.time_delay_embed(X.astype(np.float64), order, lag)
     return Covariances(estimator=estimator).transform(X.astype(np.float64))
 
 

@@ -12,7 +12,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from baselines.fusion.base import FusionData, ModalityModels, PooledProbs
-from core.features import amplitude_features
+from core.features import Amplitude
 from neuroscan.evaluation.calibrate import TemperatureScaler
 
 
@@ -20,8 +20,8 @@ def feature_fusion(Fe_tr, Xf_tr, y_tr, Fe_te, Xf_te) -> np.ndarray:
     """Feature-level fusion: concat the EEG feature `Fe` (the re-centered tangent-space vector — the strong
     EEG representation, so this is a fair test) + fNIRS mean/slope/peak -> shrinkage-LDA. Test probs. The
     caller supplies `Fe` (via `transfer.recentered_tangent_features`) so the EEG side matches the probs side."""
-    ftr = np.concatenate([Fe_tr, amplitude_features(Xf_tr)], axis=1)
-    fte = np.concatenate([Fe_te, amplitude_features(Xf_te)], axis=1)
+    ftr = np.concatenate([Fe_tr, Amplitude.amplitude_features(Xf_tr)], axis=1)
+    fte = np.concatenate([Fe_te, Amplitude.amplitude_features(Xf_te)], axis=1)
     clf = make_pipeline(StandardScaler(),
                         LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")).fit(ftr, y_tr)
     return clf.predict_proba(fte)

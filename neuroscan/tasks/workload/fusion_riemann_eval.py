@@ -45,17 +45,17 @@ def _build_all(band="sum"):
     mf = store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))
     subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
     ch_e = eegmod.adapter().channels()
-    pos_e = bc.eeg_positions(ch_e)
+    pos_e = bc.EegMontage.eeg_positions(ch_e)
     Cs, ys, gs = [], [], []
     for s in subs:
         Xe, ye = store.gather(me.filter(me["subject"] == s))
         Xf, yf = store.gather(mf.filter(mf["subject"] == s))
         assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
         if _CSD:
-            Xe = bc.csd_transform(Xe, ch_e, 100.0)                     # spatial deblur before fusion
-        pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
-        joint, _ = bc.fused_node_series(bc.PairedModalities(Xe, Xf, pos_e, pos_f), band=band,
-                                        series=bc.SeriesConfig(fps=_FPS, t_end=_TEND))
+            Xe = bc.CSD.csd_transform(Xe, ch_e, 100.0)                 # spatial deblur before fusion
+        pos_f = bc.FnirsMontage.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
+        joint, _ = bc.BrainCamera.fused_node_series(bc.PairedModalities(Xe, Xf, pos_e, pos_f), band=band,
+                                                    series=bc.SeriesConfig(fps=_FPS, t_end=_TEND))
         Cs.append(_cov(joint))
         ys.append(ye)
         gs.append(np.array([s] * len(ye)))

@@ -32,7 +32,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from core.config import REPO
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
-from core.features import WeightedFamilyScaler, extract_bank, family_names
+from core.features import DescriptorBank, WeightedFamilyScaler
 from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
 
 logger = logging.getLogger(__name__)
@@ -128,9 +128,9 @@ def main():
     meta = store.load(cfg.dataset, FnirsCfg())
     X, y = store.gather(meta)
     groups = meta["subject"].to_numpy()
-    F, fam = extract_bank(X)
+    F, fam = DescriptorBank.extract_bank(X)
     bank = Bank(F, fam, y, groups)
-    families = family_names()
+    families = DescriptorBank.family_names()
     out = REPO / cfg.out
     storage = _storage(out)
     logger.info(f"fNIRS bank: {F.shape[0]} blocks · {meta['subject'].n_unique()} subjects · {len(families)} families "

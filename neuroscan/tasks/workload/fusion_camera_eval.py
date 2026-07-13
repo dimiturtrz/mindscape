@@ -35,14 +35,14 @@ def _build_all():
     me = store.load("shin2017_nback_eeg", _EEG_CFG)
     mf = store.load("shin2017_nback", FnirsCfg(tmax=32.0))     # past _TEND so read-forward (τ+lag) fills the tail
     subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
-    pos_e = bc.eeg_positions(eegmod.adapter().channels())
+    pos_e = bc.EegMontage.eeg_positions(eegmod.adapter().channels())
     Xs, ys, gs = [], [], []
     for s in subs:
         Xe, ye = store.gather(me.filter(me["subject"] == s))
         Xf, yf = store.gather(mf.filter(mf["subject"] == s))
         assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
-        pos_f = bc.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
-        Xs.append(bc.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=_GRID,
+        pos_f = bc.FnirsMontage.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
+        Xs.append(bc.BrainCamera.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=_GRID,
                                   series=bc.SeriesConfig(fps=_FPS, t_end=_TEND)))
         ys.append(ye)
         gs.append(np.array([s] * len(ye)))

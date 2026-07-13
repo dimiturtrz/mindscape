@@ -28,7 +28,7 @@ from pyriemann.transfer import (
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 
-from core.features import recenter_covariances, scale_to_identity
+from core.features import Covariance
 
 
 @dataclass
@@ -52,8 +52,8 @@ def align_domains(Csrc, groups, Cte, *, scale: bool, target_groups=None):
     would align to a shared blob and undo the fix. `target_groups=None` treats the target as one domain (the
     LOSO case: a single held-out subject). Returns (source-aligned, target-aligned)."""
     def _align(C):
-        rc = recenter_covariances(C)
-        return scale_to_identity(rc) if scale else rc
+        rc = Covariance.recenter_covariances(C)
+        return Covariance.scale_to_identity(rc) if scale else rc
 
     def _by_group(C, g):
         out = np.empty_like(C)
@@ -73,7 +73,7 @@ def recentered_tangent_features(C, groups) -> np.ndarray:
     uses (not a crude log-variance). `groups` = subject per row (re-centering is per-domain)."""
     rc = np.empty_like(C)
     for g in np.unique(groups):
-        rc[groups == g] = recenter_covariances(C[groups == g])
+        rc[groups == g] = Covariance.recenter_covariances(C[groups == g])
     return tangent_space(rc, np.eye(C.shape[-1]))           # tangent at I: the covariances are centred there
 
 

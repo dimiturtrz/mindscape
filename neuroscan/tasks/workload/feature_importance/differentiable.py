@@ -36,7 +36,7 @@ from sklearn.model_selection import GroupShuffleSplit
 from core.config import REPO
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
-from core.features import extract_bank, family_names
+from core.features import DescriptorBank
 from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
 
 logger = logging.getLogger(__name__)
@@ -164,8 +164,8 @@ def main():
     meta = store.load(cfg.dataset, FnirsCfg())
     X, y = store.gather(meta)
     groups = meta["subject"].to_numpy()
-    Fb, fam = extract_bank(X)
-    families = family_names()
+    Fb, fam = DescriptorBank.extract_bank(X)
+    families = DescriptorBank.family_names()
     n_classes = int(y.max()) + 1
 
     # weight-group per column: family id (grain=family) or the column itself (grain=channel)

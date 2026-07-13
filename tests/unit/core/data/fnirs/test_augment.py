@@ -3,7 +3,7 @@ import numpy as np
 
 from core.data.fnirs.augment import AugConfig, domain_randomize
 from core.data.fnirs.synthetic import SynthConfig, synthesize_paired
-from core.features.fnirs.chromophore import cbsi_neural
+from core.features.fnirs.chromophore import Chromophore
 
 
 def _paired(n=4, ch=6, t=400):
@@ -24,7 +24,7 @@ def test_cbsi_neural_contrast_survives():
     equally and the added systemic is common-mode, so CBSI cancels the injected nuisance."""
     hbo, hbr = _paired()
     ao, ar = domain_randomize(hbo, hbr, 5.0, AugConfig(max_shift_s=0.0), seed=2)
-    base = cbsi_neural(hbo, hbr)
-    aug = cbsi_neural(ao, ar)
+    base = Chromophore.cbsi_neural(hbo, hbr)
+    aug = Chromophore.cbsi_neural(ao, ar)
     corr = np.mean([np.corrcoef(base[i, 0], aug[i, 0])[0, 1] for i in range(hbo.shape[0])])
     assert corr > 0.8                                            # neural contrast preserved through the aug

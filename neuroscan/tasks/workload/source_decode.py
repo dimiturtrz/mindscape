@@ -21,7 +21,7 @@ from baselines.eeg import transfer
 from core.data import store
 from core.data.eeg import shin2017_nback_eeg as eegmod
 from core.data.eeg.base import EpochCfg
-from core.features.eeg.source import to_parcels
+from core.features.eeg.source import Source
 from neuroscan.evaluation import metrics
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def _build():
     for s in subs:
         x, y = store.gather(meta.filter(meta["subject"] == s))
         c_sensor.append(_cov(x))
-        c_source.append(_cov(to_parcels(x, ch, _CFG.resample)))       # [n,68,t] cortical parcels
+        c_source.append(_cov(Source.to_parcels(x, ch, _CFG.resample)))   # [n,68,t] cortical parcels
         ys.append(y)
         gs.append(np.array([s] * len(y)))
         logger.info(f"  subject {s}: {len(y)} blocks -> sensor {c_sensor[-1].shape[1:]}, source {c_source[-1].shape[1:]}")

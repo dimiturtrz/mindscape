@@ -32,7 +32,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from core.data.eeg import things_eeg2 as things
-from core.features.eeg.montage import eeg_positions
+from core.features.eeg.montage import EegMontage
 from neuroscan.models.foundation import _load_backbone
 from neuroscan.models.nice import clip_infonce, retrieval_topk
 from neuroscan.tasks.visual import clip_targets
@@ -193,7 +193,7 @@ def _build_cache(train_subjects: list[int], test_subject: int, device: str) -> C
     test_feat = _features(backbone, te_eeg, device)
     tr_tgt = torch.tensor(_clip_targets(tr_files, "training"))
     test_bank = torch.tensor(clip_targets.concept_prototypes("test"))
-    pos = eeg_positions(things.channels())          # [C, 2], same channel order as the features
+    pos = EegMontage.eeg_positions(things.channels())   # [C, 2], same channel order as the features
     logger.info(f"features: train {tuple(tr_feat.shape)} · test {tuple(test_feat.shape)} (float16, RAM)")
     return Cache(tr_feat, tr_tgt, tr_concept, test_feat, te_concept, test_bank,
                  n_tok=tr_feat.shape[1], d=tr_feat.shape[2], pos=pos)

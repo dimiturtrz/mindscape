@@ -16,8 +16,8 @@ import numpy as np
 from scipy.signal import fftconvolve
 
 from core.data.fnirs.synthetic import SynthConfig, double_gamma_hrf, synthesize_paired
-from core.features.fnirs.chromophore import cbsi_neural
-from core.features.fusion.coupling import estimate_coupling
+from core.features.fnirs.chromophore import Chromophore
+from core.features.fusion.coupling import Coupling
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +38,10 @@ def run(n_seeds: int = 5) -> dict:
         for s in rng.integers(0, 1900, 25):
             drive[0, s:s + rng.integers(20, 60)] += 1.0
         hbo, hbr = synthesize_paired(drive, _FS, cfg, seed=seed + 100)
-        cbsi = cbsi_neural(hbo[:, None, :], hbr[:, None, :])[:, 0, :]
+        cbsi = Chromophore.cbsi_neural(hbo[:, None, :], hbr[:, None, :])[:, 0, :]
         true_resp = fftconvolve(drive, hrf[None, :], axes=1)[:, :drive.shape[1]]
         corrs.append(float(np.corrcoef(cbsi[0], true_resp[0])[0, 1]))
-        lag, _decay, beta = estimate_coupling(drive, cbsi, _FS)
+        lag, _decay, beta = Coupling.estimate_coupling(drive, cbsi, _FS)
         lags.append(lag)
         signs.append(beta > 0)
     return {"hrf_com_s": com, "cbsi_corr_mean": float(np.mean(corrs)),

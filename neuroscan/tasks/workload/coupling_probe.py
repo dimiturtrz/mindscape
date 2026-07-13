@@ -39,10 +39,10 @@ def _global_series(subject_frames):
     for s, (Xe, Xf) in subject_frames:
         ch_f = Xf.shape[1] // 2
         te = np.arange(Xe.shape[2]) / _FS_E
-        beta = bc._resample_time(bc._band_env(Xe, _FS_E, _BETA), te, t_dst).mean(1)          # [n, T]
+        beta = bc.Series._resample_time(bc.Series._band_env(Xe, _FS_E, _BETA), te, t_dst).mean(1)   # [n, T]
         tf = _TMIN_F + np.arange(Xf.shape[2]) / _FS_F
-        cbsi = bc.cbsi_neural(bc._resample_time(Xf[:, :ch_f, :], tf, t_dst),
-                              bc._resample_time(Xf[:, ch_f:, :], tf, t_dst)).mean(1)          # [n, T]
+        cbsi = bc.Chromophore.cbsi_neural(bc.Series._resample_time(Xf[:, :ch_f, :], tf, t_dst),
+                                          bc.Series._resample_time(Xf[:, ch_f:, :], tf, t_dst)).mean(1)   # [n, T]
         drives.append(beta)
         resps.append(cbsi)
         groups.append([s] * len(beta))
@@ -73,9 +73,9 @@ def main():
         dz = (d - d.mean(1, keepdims=True)) / (d.std(1, keepdims=True) + 1e-9)
         logger.info(f"  {sh:2d}   {float((dz * Rz).mean(1).mean()):+.3f}")
 
-    lag, decay, beta = bc.estimate_coupling(D, R, _FPS)
+    lag, decay, beta = bc.Coupling.estimate_coupling(D, R, _FPS)
     logger.info(f"\nPOOLED gamma fit: lag {lag:.1f}s · decay {decay:.2f}s · β {beta:.2g}")
-    per = np.array([bc.estimate_coupling(dv, rp, _FPS)[0] for dv, rp in zip(drives, resps, strict=True)])
+    per = np.array([bc.Coupling.estimate_coupling(dv, rp, _FPS)[0] for dv, rp in zip(drives, resps, strict=True)])
     logger.info(f"per-subject lag: mean {per.mean():.1f}s · std {per.std():.1f}s · range [{per.min():.1f}, {per.max():.1f}] "
           f"-> {'STABLE' if per.std() < _LAG_STABLE_STD_S else 'UNSTABLE (pool instead)'}")
 
