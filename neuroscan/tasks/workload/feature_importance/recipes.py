@@ -22,7 +22,7 @@ from core.data import store
 from core.data.fnirs.base import FnirsCfg
 from core.features import DescriptorBank
 from neuroscan.evaluation import metrics, results
-from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
+from neuroscan.tasks.workload.feature_importance._cv import Cv
 
 logger = logging.getLogger(__name__)
 
@@ -42,28 +42,33 @@ _K = 5
 _DATASET = "shin2017_nback"
 
 
-def _cv(F, fam, y, groups, families):
-    Fr = F[:, np.isin(fam, families)]
-    accs, kaps = [], []
-    for tr, te in grouped_folds(Fr, y, groups, _SEEDS, _K):
-        clf = make_pipeline(StandardScaler(),
-                            LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")).fit(Fr[tr], y[tr])
-        pred = clf.predict(Fr[te])
-        accs.append(metrics.Metrics.accuracy(y[te], pred))
-        kaps.append(metrics.Metrics.kappa(y[te], pred))
-    return float(np.mean(accs)), float(np.std(accs)), float(np.mean(kaps))
+class Recipes:
+    """The fixed-recipe fNIRS confirmation helpers (free functions folded in as staticmethods, public names
+    kept)."""
 
+    @staticmethod
+    def _cv(F, fam, y, groups, families):
+        Fr = F[:, np.isin(fam, families)]
+        accs, kaps = [], []
+        for tr, te in Cv.grouped_folds(Fr, y, groups, _SEEDS, _K):
+            clf = make_pipeline(StandardScaler(),
+                                LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")).fit(Fr[tr], y[tr])
+            pred = clf.predict(Fr[te])
+            accs.append(metrics.Metrics.accuracy(y[te], pred))
+            kaps.append(metrics.Metrics.kappa(y[te], pred))
+        return float(np.mean(accs)), float(np.std(accs)), float(np.mean(kaps))
 
-def _record(key, acc, kappa, n_classes):
-    """Write a harness-schema aggregate for this recipe and merge it into results.json (marker-backing)."""
-    run = f"fnirs_recipe_{key}_{_DATASET}"
-    run_dir = REPO / "runs" / run
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "aggregate.json").write_text(json.dumps({
-        "method": f"fnirs_recipe_{key}", "regime": "cross_subject", "n_classes": n_classes,
-        "fold_mean": {"acc": acc, "kappa": kappa, "ece": None},
-    }, indent=2))
-    return results.Results.record(run_dir)
+    @staticmethod
+    def _record(key, acc, kappa, n_classes):
+        """Write a harness-schema aggregate for this recipe and merge it into results.json (marker-backing)."""
+        run = f"fnirs_recipe_{key}_{_DATASET}"
+        run_dir = REPO / "runs" / run
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "aggregate.json").write_text(json.dumps({
+            "method": f"fnirs_recipe_{key}", "regime": "cross_subject", "n_classes": n_classes,
+            "fold_mean": {"acc": acc, "kappa": kappa, "ece": None},
+        }, indent=2))
+        return results.Results.record(run_dir)
 
 
 def main():
@@ -81,9 +86,9 @@ def main():
     logger.info(f"  {'recipe':<22}{'acc':>7} {'±sd':>6} {'kappa':>7}  #fam")
     accs = {}
     for key, (label, fams) in _RECIPES.items():
-        acc, sd, kap = _cv(F, fam, y, groups, fams)
+        acc, sd, kap = Recipes._cv(F, fam, y, groups, fams)
         accs[key] = acc
-        _record(key, acc, kap, n_classes)
+        Recipes._record(key, acc, kap, n_classes)
         logger.info(f"  {label:<22}{acc:>7.3f} {sd:>6.3f} {kap:>7.3f}  {len(fams)}")
     logger.info(f"\n  slope-only vs amplitude-baseline: {accs['slope_only'] - accs['amplitude']:+.3f}  "
           f"({'slope alone matches/beats the triple' if accs['slope_only'] >= accs['amplitude'] - 0.01 else 'triple beats slope alone'})")

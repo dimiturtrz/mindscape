@@ -38,38 +38,42 @@ _K = 5
 _SEED = 0
 
 
-def _lda():
-    return LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")
+class CalibrationAblation:
+    """Per-subject calibration ablation helpers — the free helpers folded in as staticmethods."""
 
+    @staticmethod
+    def _lda():
+        return LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")
 
-def _cv_raw_or_transductive(F, y, g, subs, zt):
-    accs = []
-    for tr, te in GroupKFold(_K).split(subs, groups=subs):
-        mtr, mte = np.isin(g, subs[tr]), np.isin(g, subs[te])
-        Fz = SubjectNorm.zscore_per_subject(F, g) if zt else F
-        accs.append(metrics.Metrics.accuracy(y[mte], _lda().fit(Fz[mtr], y[mtr]).predict(Fz[mte])))
-    return float(np.mean(accs))
+    @staticmethod
+    def _cv_raw_or_transductive(F, y, g, subs, zt):
+        accs = []
+        for tr, te in GroupKFold(_K).split(subs, groups=subs):
+            mtr, mte = np.isin(g, subs[tr]), np.isin(g, subs[te])
+            Fz = SubjectNorm.zscore_per_subject(F, g) if zt else F
+            accs.append(metrics.Metrics.accuracy(y[mte], CalibrationAblation._lda().fit(Fz[mtr], y[mtr]).predict(Fz[mte])))
+        return float(np.mean(accs))
 
-
-def _cv_calib_half(F, y, g, subs, rng):
-    """Leakage-free per-subject calibration: train z-scored on train subjects; for each test subject, fit stats on
-    a random half of its blocks and score the other half."""
-    accs = []
-    for tr, te in GroupKFold(_K).split(subs, groups=subs):
-        Ftr = SubjectNorm.zscore_per_subject(F, g)            # train side: per-subject z (train subjects only used)
-        mtr = np.isin(g, subs[tr])
-        clf = _lda().fit(Ftr[mtr], y[mtr])
-        yt, yp = [], []
-        for s in subs[te]:
-            idx = np.where(g == s)[0]
-            perm = rng.permutation(idx)
-            h = len(perm) // 2
-            mu, sd = F[perm[:h]].mean(0), F[perm[:h]].std(0)  # stats from the calibration half only
-            ev = perm[h:]
-            yp.extend(clf.predict((F[ev] - mu) / (sd + 1e-6)))
-            yt.extend(y[ev])
-        accs.append(metrics.Metrics.accuracy(np.array(yt), np.array(yp)))
-    return float(np.mean(accs))
+    @staticmethod
+    def _cv_calib_half(F, y, g, subs, rng):
+        """Leakage-free per-subject calibration: train z-scored on train subjects; for each test subject, fit stats on
+        a random half of its blocks and score the other half."""
+        accs = []
+        for tr, te in GroupKFold(_K).split(subs, groups=subs):
+            Ftr = SubjectNorm.zscore_per_subject(F, g)            # train side: per-subject z (train subjects only used)
+            mtr = np.isin(g, subs[tr])
+            clf = CalibrationAblation._lda().fit(Ftr[mtr], y[mtr])
+            yt, yp = [], []
+            for s in subs[te]:
+                idx = np.where(g == s)[0]
+                perm = rng.permutation(idx)
+                h = len(perm) // 2
+                mu, sd = F[perm[:h]].mean(0), F[perm[:h]].std(0)  # stats from the calibration half only
+                ev = perm[h:]
+                yp.extend(clf.predict((F[ev] - mu) / (sd + 1e-6)))
+                yt.extend(y[ev])
+            accs.append(metrics.Metrics.accuracy(np.array(yt), np.array(yp)))
+        return float(np.mean(accs))
 
 
 def main():
@@ -89,19 +93,19 @@ def main():
     Fe, Ff = BandPower.band_powers(Xe, _EEG_CFG.resample), Amplitude.amplitude_features(Xf)
 
     out = {
-        "eeg_raw": _cv_raw_or_transductive(Fe, y, ge, subs, zt=False),
-        "eeg_ztrans": _cv_raw_or_transductive(Fe, y, ge, subs, zt=True),
-        "eeg_zcalib": _cv_calib_half(Fe, y, ge, subs, rng),
-        "fnirs_raw": _cv_raw_or_transductive(Ff, y, ge, subs, zt=False),
-        "fnirs_ztrans": _cv_raw_or_transductive(Ff, y, ge, subs, zt=True),
+        "eeg_raw": CalibrationAblation._cv_raw_or_transductive(Fe, y, ge, subs, zt=False),
+        "eeg_ztrans": CalibrationAblation._cv_raw_or_transductive(Fe, y, ge, subs, zt=True),
+        "eeg_zcalib": CalibrationAblation._cv_calib_half(Fe, y, ge, subs, rng),
+        "fnirs_raw": CalibrationAblation._cv_raw_or_transductive(Ff, y, ge, subs, zt=False),
+        "fnirs_ztrans": CalibrationAblation._cv_raw_or_transductive(Ff, y, ge, subs, zt=True),
     }
     # fusion picture on the z-scored (transductive) features: EEG becomes the strong modality; oracle grows
     Fez, Ffz = SubjectNorm.zscore_per_subject(Fe, ge), SubjectNorm.zscore_per_subject(Ff, ge)
     CE, CF, LATE = [], [], []
     for tr, te in GroupKFold(_K).split(subs, groups=subs):
         mtr, mte = np.isin(ge, subs[tr]), np.isin(ge, subs[te])
-        pe = _lda().fit(Fez[mtr], y[mtr]).predict_proba(Fez[mte])
-        pf = _lda().fit(Ffz[mtr], y[mtr]).predict_proba(Ffz[mte])
+        pe = CalibrationAblation._lda().fit(Fez[mtr], y[mtr]).predict_proba(Fez[mte])
+        pf = CalibrationAblation._lda().fit(Ffz[mtr], y[mtr]).predict_proba(Ffz[mte])
         CE.append(pe.argmax(1) == y[mte])
         CF.append(pf.argmax(1) == y[mte])
         LATE.append(((pe + pf) / 2).argmax(1) == y[mte])

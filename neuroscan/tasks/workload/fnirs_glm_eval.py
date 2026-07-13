@@ -14,7 +14,7 @@ from baselines.fnirs.features import FnirsLda
 from baselines.fnirs.glm import GlmBeta
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
-from neuroscan.tasks.workload._eval import CvConfig, CvData, cv_score
+from neuroscan.tasks.workload._eval import CvConfig, CvData, Eval
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,12 @@ _ARMS = [("collapse (mean+slope+peak)", lambda: FnirsLda()),
          ("glm-β (HRF + derivs)", lambda: GlmBeta(derivatives=True))]
 
 
-def _acc(build, data: CvData, config: CvConfig):
-    return cv_score(build, data, config)[0]
+class FnirsGlmEval:
+    """GLM-β fNIRS eval helpers — the free helpers folded in as staticmethods."""
+
+    @staticmethod
+    def _acc(build, data: CvData, config: CvConfig):
+        return Eval.cv_score(build, data, config)[0]
 
 
 def main():
@@ -39,10 +43,10 @@ def main():
           f"3x5-fold · no cleaning\n")
     logger.info(f"  {'arm':<28}{'within':>8}{'cross':>8}   {'0v-load':>8}{'2-v-3':>7}   (3-class chance .333)")
     for name, build in _ARMS:
-        wa = _acc(build, data, CvConfig(grouped=False))
-        ca = _acc(build, data, CvConfig(grouped=True))
-        ol = _acc(build, data, CvConfig(grouped=True, classes=[0, 2]))   # 0-back vs 3-back (load on/off proxy)
-        lv = _acc(build, data, CvConfig(grouped=True, classes=[1, 2]))   # 2-back vs 3-back (level)
+        wa = FnirsGlmEval._acc(build, data, CvConfig(grouped=False))
+        ca = FnirsGlmEval._acc(build, data, CvConfig(grouped=True))
+        ol = FnirsGlmEval._acc(build, data, CvConfig(grouped=True, classes=[0, 2]))   # 0-back vs 3-back (load on/off proxy)
+        lv = FnirsGlmEval._acc(build, data, CvConfig(grouped=True, classes=[1, 2]))   # 2-back vs 3-back (level)
         logger.info(f"  {name:<28}{wa:>8.3f}{ca:>8.3f}   {ol:>8.3f}{lv:>7.3f}")
     logger.info("\n  0v-load / 2-v-3 are cross-subject binary (chance 0.5). GLM-β sharpening 0v-load but NOT 2-v-3\n"
           "  = it's physiology, not features (the robust diagnostic).")

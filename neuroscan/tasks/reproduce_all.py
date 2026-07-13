@@ -28,18 +28,22 @@ from neuroscan.models.decoders import MODELS
 logger = logging.getLogger(__name__)
 
 
-def _canonical_runs():
-    """The harness runs the README cites, straight from experiments.yaml (task: decode | fnirs) — one source
-    of truth. align/fusion carry their own aggregation + entrypoints, so `align` / `run_fusion` regenerate
-    those, not this. Returns (name, dataset, method, regime, cfg, test_session) tuples."""
-    runs = []
-    for name in config.experiment_names():
-        exp = config.load_experiment(name)
-        if exp.task not in ("decode", "fnirs"):
-            continue
-        cfg = FnirsCfg(**exp.recipe) if exp.task == "fnirs" else EpochCfg(**exp.recipe)
-        runs.append((name, exp.dataset, exp.method, exp.regime, cfg, exp.test_session))
-    return runs
+class ReproduceAll:
+    """Canonical-decode reproduction helpers — the free helpers folded in as staticmethods."""
+
+    @staticmethod
+    def _canonical_runs():
+        """The harness runs the README cites, straight from experiments.yaml (task: decode | fnirs) — one source
+        of truth. align/fusion carry their own aggregation + entrypoints, so `align` / `run_fusion` regenerate
+        those, not this. Returns (name, dataset, method, regime, cfg, test_session) tuples."""
+        runs = []
+        for name in config.experiment_names():
+            exp = config.load_experiment(name)
+            if exp.task not in ("decode", "fnirs"):
+                continue
+            cfg = FnirsCfg(**exp.recipe) if exp.task == "fnirs" else EpochCfg(**exp.recipe)
+            runs.append((name, exp.dataset, exp.method, exp.regime, cfg, exp.test_session))
+        return runs
 
 
 def main():
@@ -53,7 +57,7 @@ def main():
     args = ap.parse_args()
 
     only = set(args.only.split(",")) if args.only else None
-    runs = _canonical_runs()
+    runs = ReproduceAll._canonical_runs()
     if only:
         runs = [r for r in runs if r[0] in only]
         missing = only - {r[0] for r in runs}

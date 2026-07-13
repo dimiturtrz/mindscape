@@ -1,7 +1,7 @@
 """Robustness-grid aggregation for the EEG->image retrieval audit — pure, synthetic accuracies."""
 from pytest import approx
 
-from neuroscan.tasks.visual.retrieval_audit import _ROBUST, summarize
+from neuroscan.tasks.visual.retrieval_audit import _ROBUST, RetrievalAudit
 
 
 def _row(ws1, wa1, cs1, ca1):
@@ -14,7 +14,7 @@ def _row(ws1, wa1, cs1, ca1):
 
 def test_summarize_means_grid_and_inflation_over_robust():
     rows = [_row(0.40, 0.60, 0.20, 0.30), _row(0.50, 0.70, 0.30, 0.40)]
-    out = summarize(rows)
+    out = RetrievalAudit.summarize(rows)
     assert out["n_subjects"] == 2 and out["robust_cell"] == _ROBUST == "cross_single"
     # cell means
     assert out["grid"]["within_single"][1] == approx(0.45) and out["grid"]["cross_single"][1] == approx(0.25)
@@ -27,7 +27,7 @@ def test_summarize_means_grid_and_inflation_over_robust():
 
 
 def test_summarize_single_subject_zero_self_inflation():
-    out = summarize([_row(0.40, 0.60, 0.20, 0.30)])
+    out = RetrievalAudit.summarize([_row(0.40, 0.60, 0.20, 0.30)])
     assert out["n_subjects"] == 1
     # a leaky cell equal to robust would show 0 inflation; here cross_single is the robust ref
     assert all(v == 0.0 for v in _self_delta(out).values())

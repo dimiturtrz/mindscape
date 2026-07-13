@@ -3,7 +3,7 @@ metric reads top-family agreement across seeds correctly (the deliverable's vali
 import numpy as np
 
 from core.features import DescriptorBank
-from neuroscan.tasks.workload.feature_importance.optuna_search import Bank, _cv_score, _stability
+from neuroscan.tasks.workload.feature_importance.optuna_search import Bank, OptunaSearch
 
 
 def test_cv_score_returns_accuracy_in_range():
@@ -17,7 +17,7 @@ def test_cv_score_returns_accuracy_in_range():
             y.append(c); groups.append(s)
     X = np.asarray(X); y = np.asarray(y); groups = np.asarray(groups)
     F, fam = DescriptorBank.extract_bank(X)
-    acc = _cv_score(Bank(F, fam, y, groups), {f: 1.0 for f in DescriptorBank.family_names()}, fold_seeds=[0], k=3)
+    acc = OptunaSearch._cv_score(Bank(F, fam, y, groups), {f: 1.0 for f in DescriptorBank.family_names()}, fold_seeds=[0], k=3)
     assert 0.0 <= acc <= 1.0
     assert acc > 1 / 3                                           # separable signal -> beats 3-class chance
 
@@ -25,7 +25,7 @@ def test_cv_score_returns_accuracy_in_range():
 def test_stability_high_when_top_families_agree():
     fams = [f"f{i}" for i in range(10)]
     same = {f"f{i}": (10 - i) for i in range(10)}               # identical ranking across "seeds"
-    st = _stability([same, dict(same), dict(same)], fams, topn=5)
+    st = OptunaSearch._stability([same, dict(same), dict(same)], fams, topn=5)
     assert st["mean_jaccard"] == 1.0                            # perfect agreement
     assert st["consensus_order"][0] == "f0"
 
@@ -34,5 +34,5 @@ def test_stability_low_when_top_families_disagree():
     fams = [f"f{i}" for i in range(10)]
     a = {f"f{i}": (10 - i) for i in range(10)}                  # top = f0..f4
     b = {f"f{i}": i for i in range(10)}                         # top = f9..f5 (disjoint)
-    st = _stability([a, b], fams, topn=5)
+    st = OptunaSearch._stability([a, b], fams, topn=5)
     assert st["mean_jaccard"] == 0.0                            # no overlap -> unstable

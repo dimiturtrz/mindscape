@@ -32,21 +32,25 @@ _BETA = (13.0, 30.0)                                 # β power ~ the (de)synchr
 _LAG_STABLE_STD_S = 2                                # per-subject lag std (s) below which the coupling fit is STABLE
 
 
-def _global_series(subject_frames):
-    """Whole-head-mean EEG-β envelope + zero-lag fNIRS CBSI per block, on the shared grid -> `[n, T]` each."""
-    t_dst = np.arange(0, _TEND, 1.0 / _FPS)
-    drives, resps, groups = [], [], []
-    for s, (Xe, Xf) in subject_frames:
-        ch_f = Xf.shape[1] // 2
-        te = np.arange(Xe.shape[2]) / _FS_E
-        beta = bc.Series._resample_time(bc.Series._band_env(Xe, _FS_E, _BETA), te, t_dst).mean(1)   # [n, T]
-        tf = _TMIN_F + np.arange(Xf.shape[2]) / _FS_F
-        cbsi = bc.Chromophore.cbsi_neural(bc.Series._resample_time(Xf[:, :ch_f, :], tf, t_dst),
-                                          bc.Series._resample_time(Xf[:, ch_f:, :], tf, t_dst)).mean(1)   # [n, T]
-        drives.append(beta)
-        resps.append(cbsi)
-        groups.append([s] * len(beta))
-    return drives, resps, groups
+class CouplingProbe:
+    """EEG->blood coupling-lag probe helpers — the free helpers folded in as staticmethods."""
+
+    @staticmethod
+    def _global_series(subject_frames):
+        """Whole-head-mean EEG-β envelope + zero-lag fNIRS CBSI per block, on the shared grid -> `[n, T]` each."""
+        t_dst = np.arange(0, _TEND, 1.0 / _FPS)
+        drives, resps, groups = [], [], []
+        for s, (Xe, Xf) in subject_frames:
+            ch_f = Xf.shape[1] // 2
+            te = np.arange(Xe.shape[2]) / _FS_E
+            beta = bc.Series._resample_time(bc.Series._band_env(Xe, _FS_E, _BETA), te, t_dst).mean(1)   # [n, T]
+            tf = _TMIN_F + np.arange(Xf.shape[2]) / _FS_F
+            cbsi = bc.Chromophore.cbsi_neural(bc.Series._resample_time(Xf[:, :ch_f, :], tf, t_dst),
+                                              bc.Series._resample_time(Xf[:, ch_f:, :], tf, t_dst)).mean(1)   # [n, T]
+            drives.append(beta)
+            resps.append(cbsi)
+            groups.append([s] * len(beta))
+        return drives, resps, groups
 
 
 def main():
@@ -58,7 +62,7 @@ def main():
     subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
     frames = [(s, (store.Store.gather(me.filter(me["subject"] == s))[0], store.Store.gather(mf.filter(mf["subject"] == s))[0]))
               for s in subs]
-    drives, resps, _ = _global_series(frames)
+    drives, resps, _ = CouplingProbe._global_series(frames)
     D, R = np.concatenate(drives), np.concatenate(resps)
     logger.info(f"pooled n={D.shape[0]} blocks · {len(subs)} subjects")
 

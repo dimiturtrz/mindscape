@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-from neuroscan.tasks.visual.train_nice import TrainConfig, train
+from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
 
 logger = logging.getLogger(__name__)
 
@@ -29,21 +29,26 @@ _METRICS = [("single_trial", "1"), ("single_trial", "5"), ("concept_avg", "1")]
 _N_PAIR = 2   # print the A−B delta only when exactly two models are compared
 
 
-def _fold(model: str, seed: int, test_subject: int, pool: list[int], base: dict) -> dict:
-    """One LOSO fold: train on `pool \\ {test_subject}`, retrieve on the held-out subject."""
-    train_subjects = [s for s in pool if s != test_subject]
-    cfg = TrainConfig(**{**base, "model": model, "seed": seed})
-    return train(train_subjects, test_subject, cfg)
+class LosoEval:
+    """Leave-one-subject-out retrieval eval — the free helpers folded in as staticmethods (public names kept).
+    `_fold` runs one held-out-subject training run; `_summary` reduces folds to mean ± SE."""
 
+    @staticmethod
+    def _fold(model: str, seed: int, test_subject: int, pool: list[int], base: dict) -> dict:
+        """One LOSO fold: train on `pool \\ {test_subject}`, retrieve on the held-out subject."""
+        train_subjects = [s for s in pool if s != test_subject]
+        cfg = TrainConfig(**{**base, "model": model, "seed": seed})
+        return TrainNice.train(train_subjects, test_subject, cfg)
 
-def _summary(folds: list[dict]) -> dict:
-    """Mean ± SE over folds for each reported metric (SE = std / √n_folds — the decision quantity)."""
-    out = {}
-    n = len(folds)
-    for block, k in _METRICS:
-        vals = np.array([f[block][k] for f in folds], dtype=float)
-        out[f"{block}.{k}"] = (float(vals.mean()), float(vals.std() / np.sqrt(max(1, n))))
-    return out
+    @staticmethod
+    def _summary(folds: list[dict]) -> dict:
+        """Mean ± SE over folds for each reported metric (SE = std / √n_folds — the decision quantity)."""
+        out = {}
+        n = len(folds)
+        for block, k in _METRICS:
+            vals = np.array([f[block][k] for f in folds], dtype=float)
+            out[f"{block}.{k}"] = (float(vals.mean()), float(vals.std() / np.sqrt(max(1, n))))
+        return out
 
 
 def main():
@@ -71,9 +76,9 @@ def main():
                 f"· {len(args.subjects) * len(args.seeds)} folds/model")
     results = {}
     for model in args.models:
-        folds = [_fold(model, seed, test, args.subjects, base)
+        folds = [LosoEval._fold(model, seed, test, args.subjects, base)
                  for seed in args.seeds for test in args.subjects]
-        results[model] = {"folds": folds, "summary": _summary(folds)}
+        results[model] = {"folds": folds, "summary": LosoEval._summary(folds)}
         logger.info(f"\n=== {model} ===")
         for key, (mean, se) in results[model]["summary"].items():
             logger.info(f"  {key:16s} {mean * 100:5.2f}% ± {se * 100:.2f}")

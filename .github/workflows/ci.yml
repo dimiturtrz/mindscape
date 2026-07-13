@@ -75,6 +75,12 @@ jobs:
       # grimp parses ASTs statically — no project install needed. Contracts live in [tool.importlinter].
       - name: Import layers — enforced (import-linter)
         run: uvx --from import-linter lint-imports
+      # Semantic module-shape (bd ylq) — the AST axis ruff's token rules can't express. Two rules
+      # (devtools/sg-rules/): py-top-level-function (everything is a method — the owner's everything-in-a-class
+      # house rule; `main` exempt) + py-top-level-side-effect (no import-time calls). ENFORCED: severity error
+      # -> nonzero exit blocks. The whole core+neuroscan tree was migrated to 0 violations.
+      - name: Module shape — enforced (ast-grep)
+        run: uvx --from ast-grep-cli ast-grep scan -c devtools/sgconfig.yml core neuroscan
       # Duplication (bd apl) — the DRY axis. ADVISORY (continue-on-error) until the class-extraction refactor
       # (bd ylq) settles + dup is driven under the 1% threshold, then graduates to blocking. Config +
       # ignore/threshold in devtools/jscpd.json; paths on the CLI.

@@ -102,3 +102,14 @@ test-mirror (source modules without a `tests/unit/<path>/test_<name>.py` — adv
 are coverage-omitted shells; graduates to blocking once a "mirror logic, exempt omitted shells" policy is
 backfilled). Thresholds live in `[tool.structure]`, chosen clean against today's graph — they **ratchet only
 tighter, never relax**. Runs in the CI `tests` job (needs the `[devtools]` extra).
+
+### Module shape — ast-grep gate (bd ylq)
+
+Semantic AST rules ruff's token linters can't express (`devtools/sgconfig.yml` → `devtools/sg-rules/`,
+enforced in CI: `ast-grep scan -c devtools/sgconfig.yml core neuroscan`, severity `error` blocks). Two rules:
+**`py-top-level-function`** — everything meaningful is a method: a top-level `def` must live on the class that
+owns it (`main`/`_main` exempt). The whole `core`+`neuroscan` tree was migrated (269 free funcs → 0), so any
+NEW top-level function fails CI. **`py-top-level-side-effect`** — no import-time call statements (move them into
+a method / lazy-populate, as the registries do; `matplotlib.use()` exempt). Fix by refactoring, never a `# noqa`.
+Constants, `logger`, dataclasses, pydantic models, enums, and `nn.Module`/`Dataset` subclasses stay top-level —
+only plain `def`s move.

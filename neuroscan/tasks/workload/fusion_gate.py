@@ -45,21 +45,25 @@ _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _FNIRS_CFG = FnirsCfg()
 
 
-def _load_features():
-    """Return per-block EEG band-power + fNIRS mean/slope/peak features, the label, and the subject id —
-    block-aligned across the two modalities (hard guard on the label sequence)."""
-    me = store.Store.load(_EEG, _EEG_CFG)
-    mf = store.Store.load(_FNIRS, _FNIRS_CFG)
-    subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
-    qe = me.filter(me["subject"].is_in(subs))
-    qf = mf.filter(mf["subject"].is_in(subs))
-    Xe, ye = store.Store.gather(qe)
-    Xf, yf = store.Store.gather(qf)
-    assert np.array_equal(ye, yf), "EEG/fNIRS blocks misaligned — fusion invalid"
-    groups = qe["subject"].to_numpy()
-    Fe = BandPower.band_powers(Xe, _EEG_CFG.resample).astype(np.float32)   # [n, 28*3]
-    Ff = Amplitude.amplitude_features(Xf).astype(np.float32)               # [n, ch*3]
-    return Fe, Ff, ye.astype(np.int64), groups
+class FusionGate:
+    """Gated-fusion helpers — the free helpers folded in as staticmethods."""
+
+    @staticmethod
+    def _load_features():
+        """Return per-block EEG band-power + fNIRS mean/slope/peak features, the label, and the subject id —
+        block-aligned across the two modalities (hard guard on the label sequence)."""
+        me = store.Store.load(_EEG, _EEG_CFG)
+        mf = store.Store.load(_FNIRS, _FNIRS_CFG)
+        subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
+        qe = me.filter(me["subject"].is_in(subs))
+        qf = mf.filter(mf["subject"].is_in(subs))
+        Xe, ye = store.Store.gather(qe)
+        Xf, yf = store.Store.gather(qf)
+        assert np.array_equal(ye, yf), "EEG/fNIRS blocks misaligned — fusion invalid"
+        groups = qe["subject"].to_numpy()
+        Fe = BandPower.band_powers(Xe, _EEG_CFG.resample).astype(np.float32)   # [n, 28*3]
+        Ff = Amplitude.amplitude_features(Xf).astype(np.float32)               # [n, ch*3]
+        return Fe, Ff, ye.astype(np.int64), groups
 
 
 def main():
@@ -72,7 +76,7 @@ def main():
     ap.add_argument("--no-record", action="store_true")
     args = ap.parse_args()
 
-    Fe, Ff, y, groups = _load_features()
+    Fe, Ff, y, groups = FusionGate._load_features()
     Fe, Ff = SubjectNorm.zscore_per_subject(Fe, groups), SubjectNorm.zscore_per_subject(Ff, groups)
     subs = np.array(sorted(set(groups)))
     n_classes = int(y.max()) + 1

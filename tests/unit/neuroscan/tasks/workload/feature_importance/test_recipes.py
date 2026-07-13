@@ -4,8 +4,8 @@ and every recipe references only real descriptor families."""
 import numpy as np
 
 from core.features import DescriptorBank
-from neuroscan.tasks.workload.feature_importance._cv import grouped_folds
-from neuroscan.tasks.workload.feature_importance.recipes import _RECIPES, _cv
+from neuroscan.tasks.workload.feature_importance._cv import Cv
+from neuroscan.tasks.workload.feature_importance.recipes import _RECIPES, Recipes
 
 
 def test_recipes_reference_only_real_families():
@@ -22,14 +22,14 @@ def test_grouped_folds_are_subject_disjoint():
     groups = np.array([s for s in range(n_subj) for _ in range(per)])
     F = rng.standard_normal((len(y), 5))
     n_folds = 0
-    for tr, te in grouped_folds(F, y, groups, seeds=[0, 1], k=3):
+    for tr, te in Cv.grouped_folds(F, y, groups, seeds=[0, 1], k=3):
         assert set(groups[tr]).isdisjoint(set(groups[te]))       # whole subjects per side — no leakage
         n_folds += 1
     assert n_folds == 2 * 3                                       # seeds x k
 
 
 def test_cv_selects_families_and_scores_above_chance():
-    """`_cv` restricts the bank to the requested families, runs the shared grouped folds, and returns
+    """`Recipes._cv` restricts the bank to the requested families, runs the shared grouped folds, and returns
     (acc, sd, kappa). A class-separable amplitude signal decodes above 2-class chance."""
     rng = np.random.default_rng(0)
     n_subj, per = 8, 4
@@ -42,7 +42,7 @@ def test_cv_selects_families_and_scores_above_chance():
                 groups.append(s)
     X, y, groups = np.asarray(X), np.asarray(y), np.asarray(groups)
     F, fam = DescriptorBank.extract_bank(X)
-    acc, sd, kap = _cv(F, fam, y, groups, ["mean", "slope"])
+    acc, sd, kap = Recipes._cv(F, fam, y, groups, ["mean", "slope"])
     assert 0.0 <= acc <= 1.0 and sd >= 0.0 and -1.0 <= kap <= 1.0
     assert acc > 0.7
     # the family filter really subsets columns: 'mean' alone uses fewer columns than 'mean'+'slope'

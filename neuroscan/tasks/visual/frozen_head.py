@@ -48,25 +48,6 @@ _RBF_SIGMA = 0.2      # topo_cnn: RBF interp width on the unit-disk montage
 _NHEAD = 4            # pos_attn: transformer heads (d_model=200 divisible)
 
 
-def _mlp(in_dim: int, hidden: int, dropout: float) -> nn.Module:
-    """Shared head tail: bare linear (hidden=0) or one GELU-MLP block → CLIP dim."""
-    if hidden == 0:
-        return nn.Linear(in_dim, _EMBED)
-    return nn.Sequential(nn.Linear(in_dim, hidden), nn.GELU(), nn.Dropout(dropout), nn.Linear(hidden, _EMBED))
-
-
-def _topo_weights(pos: np.ndarray) -> torch.Tensor:
-    """Fixed RBF interpolation operator `[H·W, C]` mapping the C electrode features onto a `_GRID×_GRID` scalp
-    image (Bashivan 2016). Computed once from the montage; applied per batch as one einsum."""
-    axis = np.linspace(-1.0, 1.0, _GRID)
-    gx, gy = np.meshgrid(axis, axis)
-    grid = np.stack([gx.ravel(), gy.ravel()], axis=1)                    # [H·W, 2]
-    d2 = ((grid[:, None, :] - pos[None, :, :]) ** 2).sum(-1)             # [H·W, C]
-    w = np.exp(-d2 / (2 * _RBF_SIGMA ** 2))
-    w = w / (w.sum(1, keepdims=True) + 1e-8)
-    return torch.tensor(w, dtype=torch.float32)
-
-
 @dataclass
 class HeadSpec:
     """One head arm: how to pool the C·S token grid + the MLP depth. `pool`: mean | attn | flat.
@@ -110,15 +91,15 @@ class Head(nn.Module):
             self.pos_proj = nn.Linear(2, d)
             self.enc = nn.TransformerEncoderLayer(d, _NHEAD, dim_feedforward=spec.hidden or d,
                                                   dropout=spec.dropout, batch_first=True, activation="gelu")
-            self.mlp = _mlp(d, spec.hidden, spec.dropout)
+            self.mlp = FrozenHead._mlp(d, spec.hidden, spec.dropout)
         elif spec.pool == "topo":
-            self.register_buffer("wtopo", _topo_weights(pos))                            # [H·W, C]
+            self.register_buffer("wtopo", FrozenHead._topo_weights(pos))                 # [H·W, C]
             self.conv = nn.Sequential(
                 nn.Conv2d(d, 64, 3, padding=1), nn.GELU(),
                 nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.GELU(), nn.AdaptiveAvgPool2d(1))
-            self.mlp = _mlp(64, spec.hidden, spec.dropout)
+            self.mlp = FrozenHead._mlp(64, spec.hidden, spec.dropout)
         else:
-            self.mlp = _mlp(n_tok * d if spec.pool == "flat" else d, spec.hidden, spec.dropout)
+            self.mlp = FrozenHead._mlp(n_tok * d if spec.pool == "flat" else d, spec.hidden, spec.dropout)
 
     def forward(self, f: torch.Tensor) -> torch.Tensor:
         if self.pool == "mean":
@@ -136,38 +117,6 @@ class Head(nn.Module):
         return F.normalize(self.mlp(z), dim=-1)
 
 
-@torch.no_grad()
-def _features(backbone, eeg: np.ndarray, device: str) -> torch.Tensor:
-    """Frozen CBraMod token grid for every epoch, `[N, C·S, d]` float16 on CPU (the one-time cost)."""
-    out = []
-    for i in range(0, len(eeg), _FEAT_BATCH):
-        x = torch.tensor(eeg[i:i + _FEAT_BATCH]).to(device)
-        b, c, t = x.shape
-        s = t // _PATCH
-        x = x[:, :, :s * _PATCH]
-        x = (x - x.mean(-1, keepdim=True)) / (x.std(-1, keepdim=True) + 1e-6)   # match foundation.forward
-        feats = backbone(x.reshape(b, c, s, _PATCH))                            # [B, C, S, d]
-        out.append(feats.reshape(b, c * s, feats.shape[-1]).half().cpu())
-    return torch.cat(out)
-
-
-def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
-    by_file = clip_targets.embeddings_by_file(split)
-    return np.stack([by_file[name] for name in image_files]).astype(np.float32)
-
-
-def _val_concepts(concept: np.ndarray, targets: np.ndarray, seed: int, fraction: float):
-    """Hold out a fraction of TRAIN concepts as a leak-free early-stop bank (mirrors train_nice._val_split)."""
-    rng = np.random.default_rng(seed)
-    concepts = np.unique(concept)
-    val = sorted(rng.choice(concepts, max(1, int(len(concepts) * fraction)), replace=False).tolist())
-    remap = {c: i for i, c in enumerate(val)}
-    bank = np.stack([targets[concept == c].mean(0) for c in val]).astype(np.float32)
-    bank /= (np.linalg.norm(bank, axis=1, keepdims=True) + 1e-8)
-    mask = np.isin(concept, val)
-    return ~mask, mask, np.array([remap[c] for c in concept[mask]]), bank
-
-
 @dataclass
 class Cache:
     """Precomputed frozen features + targets/labels for one train/test pair — shared across every head arm."""
@@ -182,68 +131,125 @@ class Cache:
     pos: np.ndarray          # [C, 2] electrode positions on the unit-disk scalp (for the geometry heads)
 
 
-def _build_cache(train_subjects: list[int], test_subject: int, device: str) -> Cache:
-    backbone = Foundation._load_backbone().to(device).eval()
-    for p in backbone.parameters():
-        p.requires_grad = False
-    tr_eeg, tr_concept, tr_files, _ = _load(train_subjects, "training")
-    te_eeg, te_concept, _, _ = _load([test_subject], "test")
-    logger.info(f"precompute: train {tr_eeg.shape} · test {te_eeg.shape}")
-    tr_feat = _features(backbone, tr_eeg, device)
-    test_feat = _features(backbone, te_eeg, device)
-    tr_tgt = torch.tensor(_clip_targets(tr_files, "training"))
-    test_bank = torch.tensor(clip_targets.concept_prototypes("test"))
-    pos = EegMontage.eeg_positions(things.ThingsEeg2.channels())   # [C, 2], same channel order as the features
-    logger.info(f"features: train {tuple(tr_feat.shape)} · test {tuple(test_feat.shape)} (float16, RAM)")
-    return Cache(tr_feat, tr_tgt, tr_concept, test_feat, te_concept, test_bank,
-                 n_tok=tr_feat.shape[1], d=tr_feat.shape[2], pos=pos)
+class FrozenHead:
+    """Frozen-backbone head-architecture search — the free helpers folded in as staticmethods (public names
+    kept). Precomputes CBraMod's frozen token grid once (`_build_cache`), then `_train_arm` fits each head
+    architecture on the cached features."""
 
+    @staticmethod
+    def _mlp(in_dim: int, hidden: int, dropout: float) -> nn.Module:
+        """Shared head tail: bare linear (hidden=0) or one GELU-MLP block → CLIP dim."""
+        if hidden == 0:
+            return nn.Linear(in_dim, _EMBED)
+        return nn.Sequential(nn.Linear(in_dim, hidden), nn.GELU(), nn.Dropout(dropout), nn.Linear(hidden, _EMBED))
 
-def _load(subjects: list[int], split: str):
-    eeg, concept, files, meta = things.ThingsEeg2.get_epochs(
-        subjects, things.ThingsEpochCfg(split=split, resample=_RESAMPLE), n_jobs=4)
-    return eeg, concept, files, meta
+    @staticmethod
+    def _topo_weights(pos: np.ndarray) -> torch.Tensor:
+        """Fixed RBF interpolation operator `[H·W, C]` mapping the C electrode features onto a `_GRID×_GRID` scalp
+        image (Bashivan 2016). Computed once from the montage; applied per batch as one einsum."""
+        axis = np.linspace(-1.0, 1.0, _GRID)
+        gx, gy = np.meshgrid(axis, axis)
+        grid = np.stack([gx.ravel(), gy.ravel()], axis=1)                    # [H·W, 2]
+        d2 = ((grid[:, None, :] - pos[None, :, :]) ** 2).sum(-1)             # [H·W, C]
+        w = np.exp(-d2 / (2 * _RBF_SIGMA ** 2))
+        w = w / (w.sum(1, keepdims=True) + 1e-8)
+        return torch.tensor(w, dtype=torch.float32)
 
+    @staticmethod
+    @torch.no_grad()
+    def _features(backbone, eeg: np.ndarray, device: str) -> torch.Tensor:
+        """Frozen CBraMod token grid for every epoch, `[N, C·S, d]` float16 on CPU (the one-time cost)."""
+        out = []
+        for i in range(0, len(eeg), _FEAT_BATCH):
+            x = torch.tensor(eeg[i:i + _FEAT_BATCH]).to(device)
+            b, c, t = x.shape
+            s = t // _PATCH
+            x = x[:, :, :s * _PATCH]
+            x = (x - x.mean(-1, keepdim=True)) / (x.std(-1, keepdim=True) + 1e-6)   # match foundation.forward
+            feats = backbone(x.reshape(b, c, s, _PATCH))                            # [B, C, S, d]
+            out.append(feats.reshape(b, c * s, feats.shape[-1]).half().cpu())
+        return torch.cat(out)
 
-@torch.no_grad()
-def _retrieval(head, feat: torch.Tensor, concept: np.ndarray, bank: torch.Tensor, device: str) -> dict:
-    head.eval()
-    emb = torch.cat([head(feat[i:i + 4096].float().to(device)).cpu() for i in range(0, len(feat), 4096)])
-    labels = torch.tensor(concept)
-    single = Nice.retrieval_topk(emb, bank, labels)
-    n = int(concept.max()) + 1
-    averaged = torch.stack([F.normalize(emb[labels == c].mean(0), dim=-1) for c in range(n)])
-    return {"single_trial": single, "concept_avg": Nice.retrieval_topk(averaged, bank, torch.arange(n))}
+    @staticmethod
+    def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
+        by_file = clip_targets.ClipTargets.embeddings_by_file(split)
+        return np.stack([by_file[name] for name in image_files]).astype(np.float32)
 
+    @staticmethod
+    def _val_concepts(concept: np.ndarray, targets: np.ndarray, seed: int, fraction: float):
+        """Hold out a fraction of TRAIN concepts as a leak-free early-stop bank (mirrors train_nice._val_split)."""
+        rng = np.random.default_rng(seed)
+        concepts = np.unique(concept)
+        val = sorted(rng.choice(concepts, max(1, int(len(concepts) * fraction)), replace=False).tolist())
+        remap = {c: i for i, c in enumerate(val)}
+        bank = np.stack([targets[concept == c].mean(0) for c in val]).astype(np.float32)
+        bank /= (np.linalg.norm(bank, axis=1, keepdims=True) + 1e-8)
+        mask = np.isin(concept, val)
+        return ~mask, mask, np.array([remap[c] for c in concept[mask]]), bank
 
-def _train_arm(spec: HeadSpec, cache: Cache, device: str, cfg: FitCfg) -> dict:
-    torch.manual_seed(cfg.seed)
-    fit_mask, val_mask, val_lab, val_bank = _val_concepts(cache.tr_concept, cache.tr_tgt.numpy(), cfg.seed, 0.1)
-    fit_idx = np.where(fit_mask)[0]
-    val_feat, val_bank_t = cache.tr_feat[val_mask], torch.tensor(val_bank)
-    head = Head(spec, cache.n_tok, cache.d, cache.pos).to(device)
-    logit_scale = nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
-    opt = torch.optim.AdamW([*head.parameters(), logit_scale], lr=cfg.lr, weight_decay=1e-4)
-    rng = np.random.default_rng(cfg.seed)
-    best_val, best_state, best_ep = -1.0, None, -1
-    for ep in range(cfg.epochs):
-        head.train()
-        perm = rng.permutation(fit_idx)
-        for i in range(0, len(perm) - 512, 512):
-            idx = perm[i:i + 512]
-            f = cache.tr_feat[idx].float().to(device)
-            tgt = F.normalize(cache.tr_tgt[idx].to(device), dim=-1)
-            opt.zero_grad()
-            loss = Nice.clip_infonce(head(f), tgt, logit_scale.exp().clamp(max=100))
-            loss.backward()
-            opt.step()
-        val_top1 = _retrieval(head, val_feat, val_lab, val_bank_t, device)["single_trial"][1]
-        if val_top1 > best_val:
-            best_val, best_ep = val_top1, ep
-            best_state = {k: v.detach().cpu().clone() for k, v in head.state_dict().items()}
-    head.load_state_dict(best_state)
-    test = _retrieval(head, cache.test_feat, cache.test_concept, cache.test_bank, device)
-    return {"arm": spec.name, "best_val_epoch": best_ep, "val_top1": best_val, **test}
+    @staticmethod
+    def _build_cache(train_subjects: list[int], test_subject: int, device: str) -> Cache:
+        backbone = Foundation._load_backbone().to(device).eval()
+        for p in backbone.parameters():
+            p.requires_grad = False
+        tr_eeg, tr_concept, tr_files, _ = FrozenHead._load(train_subjects, "training")
+        te_eeg, te_concept, _, _ = FrozenHead._load([test_subject], "test")
+        logger.info(f"precompute: train {tr_eeg.shape} · test {te_eeg.shape}")
+        tr_feat = FrozenHead._features(backbone, tr_eeg, device)
+        test_feat = FrozenHead._features(backbone, te_eeg, device)
+        tr_tgt = torch.tensor(FrozenHead._clip_targets(tr_files, "training"))
+        test_bank = torch.tensor(clip_targets.ClipTargets.concept_prototypes("test"))
+        pos = EegMontage.eeg_positions(things.ThingsEeg2.channels())   # [C, 2], same channel order as the features
+        logger.info(f"features: train {tuple(tr_feat.shape)} · test {tuple(test_feat.shape)} (float16, RAM)")
+        return Cache(tr_feat, tr_tgt, tr_concept, test_feat, te_concept, test_bank,
+                     n_tok=tr_feat.shape[1], d=tr_feat.shape[2], pos=pos)
+
+    @staticmethod
+    def _load(subjects: list[int], split: str):
+        eeg, concept, files, meta = things.ThingsEeg2.get_epochs(
+            subjects, things.ThingsEpochCfg(split=split, resample=_RESAMPLE), n_jobs=4)
+        return eeg, concept, files, meta
+
+    @staticmethod
+    @torch.no_grad()
+    def _retrieval(head, feat: torch.Tensor, concept: np.ndarray, bank: torch.Tensor, device: str) -> dict:
+        head.eval()
+        emb = torch.cat([head(feat[i:i + 4096].float().to(device)).cpu() for i in range(0, len(feat), 4096)])
+        labels = torch.tensor(concept)
+        single = Nice.retrieval_topk(emb, bank, labels)
+        n = int(concept.max()) + 1
+        averaged = torch.stack([F.normalize(emb[labels == c].mean(0), dim=-1) for c in range(n)])
+        return {"single_trial": single, "concept_avg": Nice.retrieval_topk(averaged, bank, torch.arange(n))}
+
+    @staticmethod
+    def _train_arm(spec: HeadSpec, cache: Cache, device: str, cfg: FitCfg) -> dict:
+        torch.manual_seed(cfg.seed)
+        fit_mask, val_mask, val_lab, val_bank = FrozenHead._val_concepts(cache.tr_concept, cache.tr_tgt.numpy(), cfg.seed, 0.1)
+        fit_idx = np.where(fit_mask)[0]
+        val_feat, val_bank_t = cache.tr_feat[val_mask], torch.tensor(val_bank)
+        head = Head(spec, cache.n_tok, cache.d, cache.pos).to(device)
+        logit_scale = nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
+        opt = torch.optim.AdamW([*head.parameters(), logit_scale], lr=cfg.lr, weight_decay=1e-4)
+        rng = np.random.default_rng(cfg.seed)
+        best_val, best_state, best_ep = -1.0, None, -1
+        for ep in range(cfg.epochs):
+            head.train()
+            perm = rng.permutation(fit_idx)
+            for i in range(0, len(perm) - 512, 512):
+                idx = perm[i:i + 512]
+                f = cache.tr_feat[idx].float().to(device)
+                tgt = F.normalize(cache.tr_tgt[idx].to(device), dim=-1)
+                opt.zero_grad()
+                loss = Nice.clip_infonce(head(f), tgt, logit_scale.exp().clamp(max=100))
+                loss.backward()
+                opt.step()
+            val_top1 = FrozenHead._retrieval(head, val_feat, val_lab, val_bank_t, device)["single_trial"][1]
+            if val_top1 > best_val:
+                best_val, best_ep = val_top1, ep
+                best_state = {k: v.detach().cpu().clone() for k, v in head.state_dict().items()}
+        head.load_state_dict(best_state)
+        test = FrozenHead._retrieval(head, cache.test_feat, cache.test_concept, cache.test_bank, device)
+        return {"arm": spec.name, "best_val_epoch": best_ep, "val_top1": best_val, **test}
 
 
 def main():
@@ -260,13 +266,13 @@ def main():
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    cache = _build_cache(args.train, args.test, device)
+    cache = FrozenHead._build_cache(args.train, args.test, device)
     fit = FitCfg(epochs=args.epochs, lr=args.lr, seed=args.seed)
     logger.info(f"\nhead sweep · train={args.train} test={args.test} · {args.epochs}ep lr{args.lr} · "
                 f"chance {1 / (int(cache.test_concept.max()) + 1):.3f}")
     results = []
     for spec in _ARMS:
-        r = _train_arm(spec, cache, device, fit)
+        r = FrozenHead._train_arm(spec, cache, device, fit)
         s, a = r["single_trial"], r["concept_avg"]
         logger.info(f"  {spec.name:9s} (val {r['val_top1']*100:.2f}% ep{r['best_val_epoch']:2d})  "
                     f"single {s[1]*100:.2f}%/{s[5]*100:.2f}%  concept {a[1]*100:.2f}%/{a[5]*100:.2f}%")

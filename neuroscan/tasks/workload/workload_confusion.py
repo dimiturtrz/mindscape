@@ -25,8 +25,12 @@ _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _SEEDS, _K = [0], 5          # 1 seed default (escalate-on-signal, bd); k-fold = validity not rigor
 
 
-def _cov(X):
-    return Covariances("oas").transform(X.astype(np.float64))
+class WorkloadConfusion:
+    """Workload confusion-matrix diagnostic helpers — the free helpers folded in as staticmethods."""
+
+    @staticmethod
+    def _cov(X):
+        return Covariances("oas").transform(X.astype(np.float64))
 
 
 def main():
@@ -38,7 +42,7 @@ def main():
     Cs, ys, gs = [], [], []
     for s in subs:
         X, y = store.Store.gather(me.filter(me["subject"] == s))
-        Cs.append(_cov(X))
+        Cs.append(WorkloadConfusion._cov(X))
         ys.append(y)
         gs.append(np.array([s] * len(y)))
     C, y, g = np.concatenate(Cs), np.concatenate(ys), np.concatenate(gs)

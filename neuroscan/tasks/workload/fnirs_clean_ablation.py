@@ -11,7 +11,7 @@ import logging
 
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
-from neuroscan.tasks.workload._eval import CvConfig, CvData, cv_score
+from neuroscan.tasks.workload._eval import CvConfig, CvData, Eval
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,8 @@ def main():
         meta = store.Store.load(_DATASET, FnirsCfg(clean=spec))
         X, y = store.Store.gather(meta)
         data = CvData(X, y, meta["subject"].to_numpy())
-        wa, ws, wk = cv_score(None, data, CvConfig(grouped=False))
-        ca, cs, ck = cv_score(None, data, CvConfig(grouped=True))
+        wa, ws, wk = Eval.cv_score(None, data, CvConfig(grouped=False))
+        ca, cs, ck = Eval.cv_score(None, data, CvConfig(grouped=True))
         if base_cross is None:
             base_cross = ca
         dc = "" if spec is None else f"{ca - base_cross:+.3f}"

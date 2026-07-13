@@ -18,7 +18,7 @@ import logging
 from baselines.fnirs.windowed import WindowedConfig, WindowedFnirs
 from core.data import store
 from core.data.fnirs.base import FnirsCfg
-from neuroscan.tasks.workload._eval import CvConfig, CvData, cv_score
+from neuroscan.tasks.workload._eval import CvConfig, CvData, Eval
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,8 @@ def main():
     data = CvData(X, y, groups)
     base_cross = None
     for name, build in _ARMS:
-        wa, ws, _ = cv_score(build, data, CvConfig(grouped=False))
-        ca, cs, _ = cv_score(build, data, CvConfig(grouped=True))
+        wa, ws, _ = Eval.cv_score(build, data, CvConfig(grouped=False))
+        ca, cs, _ = Eval.cv_score(build, data, CvConfig(grouped=True))
         if base_cross is None:
             base_cross = ca
         dc = "" if build is None else f"{ca - base_cross:+.3f}"
