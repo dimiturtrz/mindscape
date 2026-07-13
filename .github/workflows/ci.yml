@@ -36,6 +36,12 @@ jobs:
       # not the target. Ratchet the floor up deliberately as coverage settles higher.
       - name: Coverage floor — enforced (>=80, blocks)
         run: uv run coverage report --fail-under=80
+      # Advisory reach target (bd jmy — superset parity with cardiac-seg/synthscape): warn (never block) below
+      # 95% so the gap between the enforced floor and the aspiration stays visible; ratchet the ENFORCED floor
+      # up toward it deliberately, don't relax it.
+      - name: Coverage target — advisory (>=95, warns)
+        if: always()
+        run: uv run coverage report --fail-under=95 || true
       # Architecture fitness (bd 3nn): the METRIC arch axis import-linter's categorical layer contracts can't
       # express — god-module (fan-in AND fan-out both >8) / import-cycle / god-file (>750 lines) BLOCK;
       # line-floor / betweenness-chokepoint / test-mirror are advisory (logged, never block). Needs the devtools
