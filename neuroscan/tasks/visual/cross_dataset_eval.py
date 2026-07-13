@@ -73,12 +73,12 @@ def run(cfg: CrossDatasetConfig) -> dict:
     name_to_proto, eval_names = _shared_prototypes()
     holdout = set(eval_names)          # EEG2's 200 test concepts — never seen in EEG1 training
 
-    e1_ch, e2_ch = things_eeg1.channels(), things_eeg2.channels()
+    e1_ch, e2_ch = things_eeg1.ThingsEeg1.channels(), things_eeg2.ThingsEeg2.channels()
     common_ch = bridge.common_channel_order(e2_ch, e1_ch)      # 62 shared electrodes, in EEG2 order
     logger.info(f"montage align: {len(common_ch)}/{len(e1_ch)} shared electrodes "
           f"(EEG1-only {sorted(set(e1_ch) - set(e2_ch))}, EEG2-only {sorted(set(e2_ch) - set(e1_ch))})")
 
-    e1_eeg, e1_concept, _, _ = things_eeg1.get_epochs(
+    e1_eeg, e1_concept, _, _ = things_eeg1.ThingsEeg1.get_epochs(
         list(cfg.eeg1_subjects), things_eeg1.ThingsEeg1EpochCfg(resample=cfg.resample))
     e1_eeg = bridge.align_channels(e1_eeg, e1_ch, common_ch)   # reorder EEG1 to the shared montage
     keep = bridge.holdout_mask(e1_concept, holdout) & np.array([n in name_to_proto for n in e1_concept])
@@ -91,7 +91,7 @@ def run(cfg: CrossDatasetConfig) -> dict:
 
     encoder, stats = train_encoder(TrainData(e1_eeg, targets, concept_ids), train_cfg, device)
 
-    e2_eeg, e2_concept, _, _ = things_eeg2.get_epochs(
+    e2_eeg, e2_concept, _, _ = things_eeg2.ThingsEeg2.get_epochs(
         list(cfg.eeg2_subjects), things_eeg2.ThingsEpochCfg(split="test", resample=cfg.resample))
     e2_eeg = bridge.align_channels(e2_eeg, e2_ch, common_ch)   # same shared montage the encoder trained on
     test_bank = clip_targets.concept_prototypes("test")

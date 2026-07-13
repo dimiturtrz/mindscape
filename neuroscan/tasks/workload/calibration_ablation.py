@@ -77,13 +77,13 @@ def main():
     for lib_name in ("mne", "moabb", "braindecode"):
         logging.getLogger(lib_name).setLevel(logging.WARNING)
     rng = np.random.default_rng(_SEED)
-    me = store.load("shin2017_nback_eeg", _EEG_CFG)
-    mf = store.load("shin2017_nback", FnirsCfg())
+    me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
+    mf = store.Store.load("shin2017_nback", FnirsCfg())
     subs = np.array(sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list())))
     qe = me.filter(me["subject"].is_in([str(s) for s in subs]))
     qf = mf.filter(mf["subject"].is_in([str(s) for s in subs]))
-    Xe, y = store.gather(qe)
-    Xf, yf = store.gather(qf)
+    Xe, y = store.Store.gather(qe)
+    Xf, yf = store.Store.gather(qf)
     assert np.array_equal(y, yf), "EEG/fNIRS blocks misaligned"
     ge = qe["subject"].to_numpy()
     Fe, Ff = BandPower.band_powers(Xe, _EEG_CFG.resample), Amplitude.amplitude_features(Xf)

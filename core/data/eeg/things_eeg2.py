@@ -16,7 +16,7 @@ file by download-link, so we enumerate the component's files via the OSF API and
 (resumable). Run once, in the background.
 
 Fetch (needs the `data` extra -> `uv sync --extra data`):
-    python -c "from core.data.eeg.things_eeg2 import download; download()"   # raw EEG (~110 GB) + image set
+    python -c "from core.data.eeg.things_eeg2 import ThingsEeg2; ThingsEeg2.download()"  # raw EEG + image set
 Lands in `<data>/raw/things_eeg2/{raw/sub-XX/, images/}`. The decoder/get_data is deferred until the split
 design lands (bd qoa) — this module currently provides the fetch + an on-disk subject index only, so it is
 NOT yet registered.
@@ -35,8 +35,8 @@ import polars as pl
 from pydantic import BaseModel
 from scipy.signal import resample as _resample
 
-from core.config import raw_dir
-from core.data.signal import bandpass
+from core.config import Config
+from core.data.signal import Signal
 
 logger = logging.getLogger(__name__)
 
@@ -48,124 +48,9 @@ _RAW_PROVIDER = "figshare"
 _IMG_NODE = "y63gw"      # "Image set" component — osfstorage, ~0.66 GB
 _API = "https://api.osf.io/v2/nodes/{node}/files/{prov}/?page[size]=100"
 
-
-def _provider_files(node: str, prov: str) -> list[tuple[str, str]]:
-    """[(filename, download_url)] for a component's storage provider, via the OSF API (public -> no auth)."""
-    out: list[tuple[str, str]] = []
-    url = _API.format(node=node, prov=prov)
-    while url:
-        d = json.load(urllib.request.urlopen(url, timeout=60))
-        for f in d["data"]:
-            a = f["attributes"]
-            if a["kind"] == "file":
-                out.append((a["name"], f["links"]["download"]))
-        url = d["links"].get("next")
-    return out
-
-
-def _stream(url: str, dest, chunk: int = 1 << 20) -> None:
-    """Stream a URL to `dest` (atomic via .part), following OSF's redirect to files.osf.io."""
-    tmp = dest.with_suffix(dest.suffix + ".part")
-    with urllib.request.urlopen(url, timeout=120) as r, open(tmp, "wb") as fh:
-        while True:
-            b = r.read(chunk)
-            if not b:
-                break
-            fh.write(b)
-    tmp.rename(dest)
-
-
-def download(*, raw: bool = True) -> None:
-    """Fetch THINGS-EEG2 raw EEG (~110 GB) + the image set into `<data>/raw/things_eeg2/`.
-
-    Streams each subject zip from OSF (figshare-backed) and unzips it; skips subjects already extracted, so a
-    killed run resumes cleanly. Large — run in the background.
-    """
-    base = raw_dir() / _ROOT
-    rawdir = base / "raw"
-    rawdir.mkdir(parents=True, exist_ok=True)
-
-    # --- raw EEG: 10 per-subject zips ---
-    for name, url in sorted(_provider_files(_RAW_NODE, _RAW_PROVIDER)):
-        sub = name.replace(".zip", "")
-        if (rawdir / sub).is_dir():
-            logger.info(f"[things_eeg2] {sub} already present — skip")
-            continue
-        zpath = rawdir / name
-        logger.info(f"[things_eeg2] downloading {name} ...")
-        _stream(url, zpath)
-        logger.info(f"[things_eeg2] extracting {name} ...")
-        with zipfile.ZipFile(zpath) as z:
-            z.extractall(rawdir)
-        zpath.unlink()
-        logger.info(f"[things_eeg2] {sub} done")
-
-    # --- image set (osfstorage, ~0.66 GB) ---
-    imgdir = base / "images"
-    imgdir.mkdir(parents=True, exist_ok=True)
-    for name, url in _provider_files(_IMG_NODE, "osfstorage"):
-        dest = imgdir / name
-        if dest.exists():
-            continue
-        logger.info(f"[things_eeg2] image file {name} ...")
-        _stream(url, dest)
-        if name.endswith(".zip"):
-            with zipfile.ZipFile(dest) as z:
-                z.extractall(imgdir)
-    logger.info(f"[things_eeg2] all done -> {base}")
-
-
-def _index() -> dict[int, object]:
-    """{subject int -> its dir}, discovered on disk under `<data>/raw/things_eeg2/raw/` (naming-robust)."""
-    out: dict[int, object] = {}
-    for d in sorted((raw_dir() / _ROOT / "raw").glob("sub-*")):
-        m = re.search(r"sub-0*(\d+)", d.name)
-        if m and d.is_dir():
-            out[int(m.group(1))] = d
-    return out
-
-
-def subjects() -> list[int]:
-    return sorted(_index())
-
-
-def channels() -> list[str]:
-    """The 63 EEG channel names (drops the trailing 'stim'), read from a session file — constant across
-    subjects. Used to montage-align against THINGS-EEG1 for the cross-dataset test."""
-    index = _index()
-    session_path = next(iter(sorted(index[subjects()[0]].glob("ses-*/raw_eeg_test.npy"))))
-    session = np.load(session_path, allow_pickle=True).item()
-    return [str(name) for name, kind in zip(session["ch_names"], session["ch_types"], strict=True)
-            if str(kind) == "eeg"]
-
-
-# ── image-metadata mapping (global; the stim code is a 1-based index into these ordered lists) ──
+# image-metadata mapping (module global; the stim code is a 1-based index into these ordered lists)
 _META = None
 
-
-def _meta() -> dict:
-    global _META
-    if _META is None:
-        _META = np.load(raw_dir() / _ROOT / "images" / "image_metadata.npy", allow_pickle=True).item()
-    return _META
-
-
-def _concept_idx(concept_str: str) -> int:
-    """'00001_aardvark' -> 0 — the leading number IS the 1-based concept id (matches clip_targets' sort)."""
-    return int(str(concept_str)[:5]) - 1
-
-
-def _labels_for(split: str) -> tuple[np.ndarray, np.ndarray]:
-    """(concept_idx per code, img_file per code) as arrays indexed by code-1, for 'training' | 'test'."""
-    meta = _meta()
-    key = "train" if split == "training" else "test"
-    concepts = np.asarray(meta[f"{key}_img_concepts"])
-    files = np.asarray(meta[f"{key}_img_files"])
-    concept_idx = np.array([_concept_idx(name) for name in concepts], dtype=np.int64)
-    return concept_idx, files
-
-
-# ── epoching ──
 
 class ThingsEpochCfg(BaseModel):
     """THINGS-EEG2 epoching knobs. `split` = 'training'|'test'; `tmin`/`tmax` = the epoch window (s) around
@@ -178,74 +63,193 @@ class ThingsEpochCfg(BaseModel):
     fmax: float | None = None
 
 
-def _session_epochs(path, cfg: ThingsEpochCfg):
-    """One session .npy -> (X [n,63,t] float32, concept[n], img_file[n]). Stim code -> image via metadata."""
-    session = np.load(path, allow_pickle=True).item()
-    raw = np.asarray(session["raw_eeg_data"])
-    eeg, stim = raw[:_N_EEG], raw[_N_EEG]
-    fs = float(np.asarray(session["sfreq"]))
+class ThingsEeg2:
+    """THINGS-EEG2 fetch + on-disk index + own-preprocessing epoching — the free helpers folded in as
+    staticmethods (public names kept). The EEG->image visual-semantic spine (Stage 3)."""
 
-    if cfg.fmin is not None or cfg.fmax is not None:
-        eeg = bandpass(eeg, cfg.fmin or 0.1, cfg.fmax or (fs / 2 - 1), fs)
+    @staticmethod
+    def _provider_files(node: str, prov: str) -> list[tuple[str, str]]:
+        """[(filename, download_url)] for a component's storage provider, via the OSF API (public -> no auth)."""
+        out: list[tuple[str, str]] = []
+        url = _API.format(node=node, prov=prov)
+        while url:
+            d = json.load(urllib.request.urlopen(url, timeout=60))
+            for f in d["data"]:
+                a = f["attributes"]
+                if a["kind"] == "file":
+                    out.append((a["name"], f["links"]["download"]))
+            url = d["links"].get("next")
+        return out
 
-    onset = np.where((stim[1:] != 0) & (stim[:-1] == 0))[0] + 1
-    codes = stim[onset].astype(int)                                  # 1-based image id
-    concept_by_code, file_by_code = _labels_for(cfg.split)
-    valid = (codes >= 1) & (codes <= len(concept_by_code))          # drop target/catch trials out of range
-    onset, codes = onset[valid], codes[valid]
+    @staticmethod
+    def _stream(url: str, dest, chunk: int = 1 << 20) -> None:
+        """Stream a URL to `dest` (atomic via .part), following OSF's redirect to files.osf.io."""
+        tmp = dest.with_suffix(dest.suffix + ".part")
+        with urllib.request.urlopen(url, timeout=120) as r, open(tmp, "wb") as fh:
+            while True:
+                b = r.read(chunk)
+                if not b:
+                    break
+                fh.write(b)
+        tmp.rename(dest)
 
-    start, stop = int(round(cfg.tmin * fs)), int(round(cfg.tmax * fs))
-    keep = (onset + start >= 0) & (onset + stop <= eeg.shape[1])
-    onset, codes = onset[keep], codes[keep]
+    @staticmethod
+    def download(*, raw: bool = True) -> None:
+        """Fetch THINGS-EEG2 raw EEG (~110 GB) + the image set into `<data>/raw/things_eeg2/`.
 
-    epochs = np.stack([eeg[:, at + start:at + stop] for at in onset]).astype(np.float32)   # [n,63,t]
-    # per-channel z-score: EEG is in volts (~1e-5), which leaves BatchNorm's running variance
-    # ill-conditioned -> eval-mode embeddings collapse to chance. Standardizing to O(1) fixes it.
-    epochs = (epochs - epochs.mean(axis=2, keepdims=True)) / (epochs.std(axis=2, keepdims=True) + 1e-7)
-    if cfg.resample and cfg.resample != fs:
-        epochs = _resample(epochs, int(round(epochs.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
-    return epochs, concept_by_code[codes - 1], file_by_code[codes - 1]
+        Streams each subject zip from OSF (figshare-backed) and unzips it; skips subjects already extracted, so a
+        killed run resumes cleanly. Large — run in the background.
+        """
+        base = Config.raw_dir() / _ROOT
+        rawdir = base / "raw"
+        rawdir.mkdir(parents=True, exist_ok=True)
 
+        # --- raw EEG: 10 per-subject zips ---
+        for name, url in sorted(ThingsEeg2._provider_files(_RAW_NODE, _RAW_PROVIDER)):
+            sub = name.replace(".zip", "")
+            if (rawdir / sub).is_dir():
+                logger.info(f"[things_eeg2] {sub} already present — skip")
+                continue
+            zpath = rawdir / name
+            logger.info(f"[things_eeg2] downloading {name} ...")
+            ThingsEeg2._stream(url, zpath)
+            logger.info(f"[things_eeg2] extracting {name} ...")
+            with zipfile.ZipFile(zpath) as z:
+                z.extractall(rawdir)
+            zpath.unlink()
+            logger.info(f"[things_eeg2] {sub} done")
 
-def get_epochs(subjects_: list[int] | None = None, config: ThingsEpochCfg | None = None, *, n_jobs: int = 1
-               ) -> tuple[np.ndarray, np.ndarray, np.ndarray, pl.DataFrame]:
-    """Epoch THINGS-EEG2 for the EEG->image task (our own preprocessing off the raw).
+        # --- image set (osfstorage, ~0.66 GB) ---
+        imgdir = base / "images"
+        imgdir.mkdir(parents=True, exist_ok=True)
+        for name, url in ThingsEeg2._provider_files(_IMG_NODE, "osfstorage"):
+            dest = imgdir / name
+            if dest.exists():
+                continue
+            logger.info(f"[things_eeg2] image file {name} ...")
+            ThingsEeg2._stream(url, dest)
+            if name.endswith(".zip"):
+                with zipfile.ZipFile(dest) as z:
+                    z.extractall(imgdir)
+        logger.info(f"[things_eeg2] all done -> {base}")
 
-    Returns (eeg [n,63,t] float32, concept [n] int in [0,1653]/[0,199], img_file [n] str, meta {subject,session}).
-    `config.split` = 'training' (16,540 concept-images) or 'test' (200 held-out concepts). The concept index
-    matches `neuroscan/tasks/visual/clip_targets.py` (sorted concept order), so retrieval lines up.
+    @staticmethod
+    def _index() -> dict[int, object]:
+        """{subject int -> its dir}, discovered on disk under `<data>/raw/things_eeg2/raw/` (naming-robust)."""
+        out: dict[int, object] = {}
+        for d in sorted((Config.raw_dir() / _ROOT / "raw").glob("sub-*")):
+            m = re.search(r"sub-0*(\d+)", d.name)
+            if m and d.is_dir():
+                out[int(m.group(1))] = d
+        return out
 
-    `n_jobs > 1` loads sessions concurrently on a THREAD pool — each session is a ~2.7 GB `.npy` load +
-    band-pass + resample, all of which release the GIL, so threads overlap the disk read with the CPU work
-    without pickling gigabytes across processes. Order is preserved (reproducible). Memory scales with
-    n_jobs (each in-flight session holds its raw array), so keep it modest.
-    """
-    cfg = config or ThingsEpochCfg()
-    index = _index()
-    chosen = subjects_ or sorted(index)
-    work = [(subject, path) for subject in chosen
-            for path in sorted(index[subject].glob(f"ses-*/raw_eeg_{cfg.split}.npy"))]
+    @staticmethod
+    def subjects() -> list[int]:
+        return sorted(ThingsEeg2._index())
 
-    def _epoch(item):
-        subject, path = item
-        return subject, path, _session_epochs(path, cfg)
+    @staticmethod
+    def channels() -> list[str]:
+        """The 63 EEG channel names (drops the trailing 'stim'), read from a session file — constant across
+        subjects. Used to montage-align against THINGS-EEG1 for the cross-dataset test."""
+        index = ThingsEeg2._index()
+        session_path = next(iter(sorted(index[ThingsEeg2.subjects()[0]].glob("ses-*/raw_eeg_test.npy"))))
+        session = np.load(session_path, allow_pickle=True).item()
+        return [str(name) for name, kind in zip(session["ch_names"], session["ch_types"], strict=True)
+                if str(kind) == "eeg"]
 
-    if n_jobs and n_jobs > 1:
-        with ThreadPoolExecutor(max_workers=n_jobs) as pool:
-            results = list(pool.map(_epoch, work))          # map preserves input order
-    else:
-        results = [_epoch(item) for item in work]
+    @staticmethod
+    def _meta() -> dict:
+        global _META
+        if _META is None:
+            _META = np.load(Config.raw_dir() / _ROOT / "images" / "image_metadata.npy",
+                            allow_pickle=True).item()
+        return _META
 
-    eeg_parts, concept_parts, file_parts, subject_col, session_col = [], [], [], [], []
-    for subject, path, (eeg, concept, files) in results:
-        eeg_parts.append(eeg)
-        concept_parts.append(concept)
-        file_parts.append(files)
-        subject_col += [str(subject)] * len(concept)
-        session_col += [path.parent.name] * len(concept)
-    return (np.concatenate(eeg_parts).astype(np.float32),
-            np.concatenate(concept_parts), np.concatenate(file_parts),
-            pl.DataFrame({"subject": subject_col, "session": session_col}))
+    @staticmethod
+    def _concept_idx(concept_str: str) -> int:
+        """'00001_aardvark' -> 0 — the leading number IS the 1-based concept id (matches clip_targets' sort)."""
+        return int(str(concept_str)[:5]) - 1
+
+    @staticmethod
+    def _labels_for(split: str) -> tuple[np.ndarray, np.ndarray]:
+        """(concept_idx per code, img_file per code) as arrays indexed by code-1, for 'training' | 'test'."""
+        meta = ThingsEeg2._meta()
+        key = "train" if split == "training" else "test"
+        concepts = np.asarray(meta[f"{key}_img_concepts"])
+        files = np.asarray(meta[f"{key}_img_files"])
+        concept_idx = np.array([ThingsEeg2._concept_idx(name) for name in concepts], dtype=np.int64)
+        return concept_idx, files
+
+    @staticmethod
+    def _session_epochs(path, cfg: ThingsEpochCfg):
+        """One session .npy -> (X [n,63,t] float32, concept[n], img_file[n]). Stim code -> image via metadata."""
+        session = np.load(path, allow_pickle=True).item()
+        raw = np.asarray(session["raw_eeg_data"])
+        eeg, stim = raw[:_N_EEG], raw[_N_EEG]
+        fs = float(np.asarray(session["sfreq"]))
+
+        if cfg.fmin is not None or cfg.fmax is not None:
+            eeg = Signal.bandpass(eeg, cfg.fmin or 0.1, cfg.fmax or (fs / 2 - 1), fs)
+
+        onset = np.where((stim[1:] != 0) & (stim[:-1] == 0))[0] + 1
+        codes = stim[onset].astype(int)                                  # 1-based image id
+        concept_by_code, file_by_code = ThingsEeg2._labels_for(cfg.split)
+        valid = (codes >= 1) & (codes <= len(concept_by_code))          # drop target/catch trials out of range
+        onset, codes = onset[valid], codes[valid]
+
+        start, stop = int(round(cfg.tmin * fs)), int(round(cfg.tmax * fs))
+        keep = (onset + start >= 0) & (onset + stop <= eeg.shape[1])
+        onset, codes = onset[keep], codes[keep]
+
+        epochs = np.stack([eeg[:, at + start:at + stop] for at in onset]).astype(np.float32)   # [n,63,t]
+        # per-channel z-score: EEG is in volts (~1e-5), which leaves BatchNorm's running variance
+        # ill-conditioned -> eval-mode embeddings collapse to chance. Standardizing to O(1) fixes it.
+        epochs = (epochs - epochs.mean(axis=2, keepdims=True)) / (epochs.std(axis=2, keepdims=True) + 1e-7)
+        if cfg.resample and cfg.resample != fs:
+            epochs = _resample(epochs, int(round(epochs.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
+        return epochs, concept_by_code[codes - 1], file_by_code[codes - 1]
+
+    @staticmethod
+    def get_epochs(subjects_: list[int] | None = None, config: ThingsEpochCfg | None = None, *, n_jobs: int = 1
+                   ) -> tuple[np.ndarray, np.ndarray, np.ndarray, pl.DataFrame]:
+        """Epoch THINGS-EEG2 for the EEG->image task (our own preprocessing off the raw).
+
+        Returns (eeg [n,63,t] float32, concept [n] int in [0,1653]/[0,199], img_file [n] str,
+        meta {subject,session}). `config.split` = 'training' (16,540 concept-images) or 'test' (200 held-out
+        concepts). The concept index matches `neuroscan/tasks/visual/clip_targets.py` (sorted concept order),
+        so retrieval lines up.
+
+        `n_jobs > 1` loads sessions concurrently on a THREAD pool — each session is a ~2.7 GB `.npy` load +
+        band-pass + resample, all of which release the GIL, so threads overlap the disk read with the CPU work
+        without pickling gigabytes across processes. Order is preserved (reproducible). Memory scales with
+        n_jobs (each in-flight session holds its raw array), so keep it modest.
+        """
+        cfg = config or ThingsEpochCfg()
+        index = ThingsEeg2._index()
+        chosen = subjects_ or sorted(index)
+        work = [(subject, path) for subject in chosen
+                for path in sorted(index[subject].glob(f"ses-*/raw_eeg_{cfg.split}.npy"))]
+
+        def _epoch(item):
+            subject, path = item
+            return subject, path, ThingsEeg2._session_epochs(path, cfg)
+
+        if n_jobs and n_jobs > 1:
+            with ThreadPoolExecutor(max_workers=n_jobs) as pool:
+                results = list(pool.map(_epoch, work))          # map preserves input order
+        else:
+            results = [_epoch(item) for item in work]
+
+        eeg_parts, concept_parts, file_parts, subject_col, session_col = [], [], [], [], []
+        for subject, path, (eeg, concept, files) in results:
+            eeg_parts.append(eeg)
+            concept_parts.append(concept)
+            file_parts.append(files)
+            subject_col += [str(subject)] * len(concept)
+            session_col += [path.parent.name] * len(concept)
+        return (np.concatenate(eeg_parts).astype(np.float32),
+                np.concatenate(concept_parts), np.concatenate(file_parts),
+                pl.DataFrame({"subject": subject_col, "session": session_col}))
 
 
 # NOTE: not registered in core/data/registry.py — the EEG->image retrieval paradigm has its own

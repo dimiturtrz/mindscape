@@ -48,7 +48,7 @@ def main():
     exp = config.load_experiment(args.exp, args.overrides)
     dataset, method, regime = exp.dataset, exp.method, exp.regime
     cfg = EpochCfg(**exp.recipe)
-    meta = store.load(dataset, cfg)
+    meta = store.Store.load(dataset, cfg)
     n_classes = int(meta["label_id"].max()) + 1                  # derived from data, not assumed 4-class
     logger.info(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · {n_classes} classes · "
           f"sessions {sorted(meta['session'].unique().to_list())} · recipe {cfg.key()}")

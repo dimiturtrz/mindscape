@@ -44,8 +44,8 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     for lib_name in ("mne", "moabb", "braindecode"):
         logging.getLogger(lib_name).setLevel(logging.WARNING)
-    meta = store.load(_DATASET, FnirsCfg())
-    X, y = store.gather(meta)
+    meta = store.Store.load(_DATASET, FnirsCfg())
+    X, y = store.Store.gather(meta)
     groups = meta["subject"].to_numpy()
     chance = 1.0 / (int(y.max()) + 1)
     logger.info(f"fNIRS windowed-aggregation sweep vs collapse · Shin n-back · {len(y)} blocks · "

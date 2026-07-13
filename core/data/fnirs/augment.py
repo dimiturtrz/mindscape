@@ -20,7 +20,7 @@ from __future__ import annotations
 import numpy as np
 from pydantic import BaseModel
 
-from core.data.fnirs.synthetic import SynthConfig, _systemic
+from core.data.fnirs.synthetic import SynthConfig, Synthetic
 
 
 class AugConfig(BaseModel):
@@ -30,29 +30,34 @@ class AugConfig(BaseModel):
     max_shift_s: float = 1.0       # circular hemodynamic-timing jitter (s)
 
 
-def domain_randomize(hbo: np.ndarray, hbr: np.ndarray, fs: float, cfg: AugConfig | None = None,
-                     seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
-    """Randomize the nuisance axes of paired (HbO, HbR) `[n, ch, t]` for cross-subject robustness (bd jdh).
+class Augment:
+    """Domain-randomization augmentation for fNIRS cross-subject robustness (bd jdh) — the free helper folded
+    in as a staticmethod (public name kept)."""
 
-    Per epoch: log-normal per-channel gain (coupling variability), an added common-mode systemic burst, and a
-    circular temporal shift (hemodynamic-timing jitter) — strengths from `cfg` (AugConfig). Common-mode terms
-    hit HbO and HbR alike, so CBSI still cancels them: the neural contrast is preserved, only the nuisance is
-    diversified."""
-    cfg = cfg or AugConfig()
-    gain_sigma, systemic_amp, max_shift_s = cfg.gain_sigma, cfg.systemic_amp, cfg.max_shift_s
-    rng = np.random.default_rng(seed)
-    o = np.asarray(hbo, dtype=np.float64)
-    r = np.asarray(hbr, dtype=np.float64)
-    n, ch, t = o.shape
+    @staticmethod
+    def domain_randomize(hbo: np.ndarray, hbr: np.ndarray, fs: float, cfg: AugConfig | None = None,
+                         seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
+        """Randomize the nuisance axes of paired (HbO, HbR) `[n, ch, t]` for cross-subject robustness (bd jdh).
 
-    gain = rng.lognormal(0.0, gain_sigma, (n, ch, 1))
-    sys_cfg = SynthConfig(systemic_amp=systemic_amp)
-    systemic = _systemic(n * ch, t, fs, sys_cfg, rng).reshape(n, ch, t)      # common-mode, per channel
-    shifts = rng.integers(-int(max_shift_s * fs), int(max_shift_s * fs) + 1, n)
+        Per epoch: log-normal per-channel gain (coupling variability), an added common-mode systemic burst, and a
+        circular temporal shift (hemodynamic-timing jitter) — strengths from `cfg` (AugConfig). Common-mode terms
+        hit HbO and HbR alike, so CBSI still cancels them: the neural contrast is preserved, only the nuisance is
+        diversified."""
+        cfg = cfg or AugConfig()
+        gain_sigma, systemic_amp, max_shift_s = cfg.gain_sigma, cfg.systemic_amp, cfg.max_shift_s
+        rng = np.random.default_rng(seed)
+        o = np.asarray(hbo, dtype=np.float64)
+        r = np.asarray(hbr, dtype=np.float64)
+        n, ch, t = o.shape
 
-    out_o = np.empty_like(o)
-    out_r = np.empty_like(r)
-    for i in range(n):
-        out_o[i] = np.roll(o[i] * gain[i] + systemic[i], shifts[i], axis=-1)
-        out_r[i] = np.roll(r[i] * gain[i] + systemic[i], shifts[i], axis=-1)
-    return out_o.astype(np.float32), out_r.astype(np.float32)
+        gain = rng.lognormal(0.0, gain_sigma, (n, ch, 1))
+        sys_cfg = SynthConfig(systemic_amp=systemic_amp)
+        systemic = Synthetic._systemic(n * ch, t, fs, sys_cfg, rng).reshape(n, ch, t)   # common-mode, per channel
+        shifts = rng.integers(-int(max_shift_s * fs), int(max_shift_s * fs) + 1, n)
+
+        out_o = np.empty_like(o)
+        out_r = np.empty_like(r)
+        for i in range(n):
+            out_o[i] = np.roll(o[i] * gain[i] + systemic[i], shifts[i], axis=-1)
+            out_r[i] = np.roll(r[i] * gain[i] + systemic[i], shifts[i], axis=-1)
+        return out_o.astype(np.float32), out_r.astype(np.float32)

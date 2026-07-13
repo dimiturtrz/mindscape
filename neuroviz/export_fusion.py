@@ -28,13 +28,13 @@ _OUT = Path(__file__).parent / "web" / "data" / "fusion.json"
 
 def _gather(meta, subs):
     q = meta.filter(meta["subject"].is_in([str(s) for s in subs]))
-    X, y = store.gather(q)
+    X, y = store.Store.gather(q)
     return X, y, q["subject"].to_numpy()
 
 
 def main():
-    me = store.load(_EEG, _EEG_CFG)
-    mf = store.load(_FNIRS, FnirsCfg())
+    me = store.Store.load(_EEG, _EEG_CFG)
+    mf = store.Store.load(_FNIRS, FnirsCfg())
     subs = np.array(sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list())))
     classes = sorted(me["label"].unique().to_list())
     id2lab = dict(enumerate(sorted(me["label"].unique().to_list())))     # label_id -> name (matches gather order)

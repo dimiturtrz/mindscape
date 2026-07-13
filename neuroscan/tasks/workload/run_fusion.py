@@ -70,8 +70,8 @@ def _gather_aligned(meta_e, meta_f, subs) -> FusionData:
     fusion gain."""
     q_e = meta_e.filter(meta_e["subject"].is_in([str(s) for s in subs]))
     q_f = meta_f.filter(meta_f["subject"].is_in([str(s) for s in subs]))
-    eeg, y_eeg = store.gather(q_e)
-    fnirs, y_fnirs = store.gather(q_f)
+    eeg, y_eeg = store.Store.gather(q_e)
+    fnirs, y_fnirs = store.Store.gather(q_f)
     assert len(y_eeg) == len(y_fnirs) and np.array_equal(y_eeg, y_fnirs), \
         "EEG/fNIRS blocks misaligned — fusion invalid"
     return FusionData(eeg=eeg, fnirs=fnirs, y=y_eeg, groups=q_e["subject"].to_numpy())
@@ -154,8 +154,8 @@ def main():
 
     exp = config.load_experiment(args.exp, args.overrides)
     regime = exp.regime
-    meta_e = store.load(_EEG, _EEG_CFG)
-    meta_f = store.load(_FNIRS, _FNIRS_CFG)
+    meta_e = store.Store.load(_EEG, _EEG_CFG)
+    meta_f = store.Store.load(_FNIRS, _FNIRS_CFG)
     subs = sorted(set(meta_e["subject"].unique().to_list()) & set(meta_f["subject"].unique().to_list()))
     n_classes = int(meta_e["label_id"].max()) + 1
     recenter = not exp.params.get("plain_eeg", False)

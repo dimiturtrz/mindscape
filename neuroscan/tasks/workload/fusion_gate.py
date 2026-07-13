@@ -48,13 +48,13 @@ _FNIRS_CFG = FnirsCfg()
 def _load_features():
     """Return per-block EEG band-power + fNIRS mean/slope/peak features, the label, and the subject id —
     block-aligned across the two modalities (hard guard on the label sequence)."""
-    me = store.load(_EEG, _EEG_CFG)
-    mf = store.load(_FNIRS, _FNIRS_CFG)
+    me = store.Store.load(_EEG, _EEG_CFG)
+    mf = store.Store.load(_FNIRS, _FNIRS_CFG)
     subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
     qe = me.filter(me["subject"].is_in(subs))
     qf = mf.filter(mf["subject"].is_in(subs))
-    Xe, ye = store.gather(qe)
-    Xf, yf = store.gather(qf)
+    Xe, ye = store.Store.gather(qe)
+    Xf, yf = store.Store.gather(qf)
     assert np.array_equal(ye, yf), "EEG/fNIRS blocks misaligned — fusion invalid"
     groups = qe["subject"].to_numpy()
     Fe = BandPower.band_powers(Xe, _EEG_CFG.resample).astype(np.float32)   # [n, 28*3]

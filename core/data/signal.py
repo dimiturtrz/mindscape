@@ -16,13 +16,6 @@ from scipy.signal import butter, filtfilt
 CANONICAL_NBACK: dict[str, int] = {"0-back": 0, "2-back": 1, "3-back": 2}
 
 
-def bandpass(X: np.ndarray, l_freq: float, h_freq: float, fs: float, order: int = 4) -> np.ndarray:
-    """Zero-phase Butterworth bandpass on continuous [ch, T] (filtfilt — no phase shift)."""
-    nyq = fs / 2.0
-    b, a = butter(order, [l_freq / nyq, min(h_freq, nyq * 0.99) / nyq], btype="band")
-    return filtfilt(b, a, X, axis=-1)
-
-
 @dataclass
 class BlockedRecording:
     """A continuous [ch, T] recording plus the per-block onset samples and labels that carve it into epochs —
@@ -32,23 +25,35 @@ class BlockedRecording:
     labels: np.ndarray
 
 
-def block_epochs(rec: BlockedRecording, fs: float, tmin: float, tmax: float, baseline_s: float = 0.0
-                 ) -> tuple[np.ndarray, np.ndarray]:
-    """Cut a continuous [ch, T] recording into epochs [onset+tmin, onset+tmax) at each onset (samples).
+class Signal:
+    """Cross-modality data primitives (bandpass, block epoching) as staticmethods (public names kept) — the
+    neutral data layer both EEG and fNIRS adapters ride on."""
 
-    Optionally subtract the pre-onset `baseline_s` mean per channel (fNIRS uses it; for EEG covariance
-    methods it's left 0 — the covariance is mean-invariant). Epochs whose window falls off the recording
-    edge are dropped. Returns (X [n, ch, t] float32, y [n]). Vectorized: one fancy-index, no per-epoch loop.
-    """
-    cont = rec.cont
-    a, b = int(round(tmin * fs)), int(round(tmax * fs))
-    nb = int(round(baseline_s * fs))
-    T = cont.shape[1]
-    onsets, y = np.asarray(rec.onsets), np.asarray(rec.labels)
-    valid = (onsets + a >= 0) & (onsets + b <= T)                      # window fully on the recording
-    if not valid.any():
-        return np.empty((0, cont.shape[0], b - a), np.float32), np.empty(0, np.int64)
-    idx = onsets[valid][:, None] + np.arange(a, b)                     # [n_valid, b-a] sample indices
-    segs = cont[:, idx].transpose(1, 0, 2).astype(np.float32)          # [n_valid, ch, b-a]
-    base = segs[:, :, :nb].mean(axis=2, keepdims=True) if nb > 0 else 0.0
-    return segs - base, y[valid].astype(np.int64)
+    @staticmethod
+    def bandpass(X: np.ndarray, l_freq: float, h_freq: float, fs: float, order: int = 4) -> np.ndarray:
+        """Zero-phase Butterworth bandpass on continuous [ch, T] (filtfilt — no phase shift)."""
+        nyq = fs / 2.0
+        b, a = butter(order, [l_freq / nyq, min(h_freq, nyq * 0.99) / nyq], btype="band")
+        return filtfilt(b, a, X, axis=-1)
+
+    @staticmethod
+    def block_epochs(rec: BlockedRecording, fs: float, tmin: float, tmax: float, baseline_s: float = 0.0
+                     ) -> tuple[np.ndarray, np.ndarray]:
+        """Cut a continuous [ch, T] recording into epochs [onset+tmin, onset+tmax) at each onset (samples).
+
+        Optionally subtract the pre-onset `baseline_s` mean per channel (fNIRS uses it; for EEG covariance
+        methods it's left 0 — the covariance is mean-invariant). Epochs whose window falls off the recording
+        edge are dropped. Returns (X [n, ch, t] float32, y [n]). Vectorized: one fancy-index, no per-epoch loop.
+        """
+        cont = rec.cont
+        a, b = int(round(tmin * fs)), int(round(tmax * fs))
+        nb = int(round(baseline_s * fs))
+        T = cont.shape[1]
+        onsets, y = np.asarray(rec.onsets), np.asarray(rec.labels)
+        valid = (onsets + a >= 0) & (onsets + b <= T)                      # window fully on the recording
+        if not valid.any():
+            return np.empty((0, cont.shape[0], b - a), np.float32), np.empty(0, np.int64)
+        idx = onsets[valid][:, None] + np.arange(a, b)                     # [n_valid, b-a] sample indices
+        segs = cont[:, idx].transpose(1, 0, 2).astype(np.float32)          # [n_valid, ch, b-a]
+        base = segs[:, :, :nb].mean(axis=2, keepdims=True) if nb > 0 else 0.0
+        return segs - base, y[valid].astype(np.int64)

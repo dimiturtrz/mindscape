@@ -22,9 +22,9 @@ import polars as pl
 import scipy.io as sio
 from scipy.signal import resample as _rs
 
-from core.config import raw_dir
+from core.config import Config
 from core.data.eeg.base import EpochCfg
-from core.data.signal import CANONICAL_NBACK, BlockedRecording, bandpass, block_epochs
+from core.data.signal import CANONICAL_NBACK, BlockedRecording, Signal
 
 _ROOT = "shin2017_eeg"
 _N_EEG = 28              # first 28 clab entries are EEG; the last two (HEOG, VEOG) are EOG — dropped
@@ -44,7 +44,7 @@ class Shin2017NbackEegAdapter:
     def _index(self) -> dict[int, object]:                # pragma: no cover — filesystem glob (disk shell)
         """{subject int -> VP dir holding cnt_nback.mat}, discovered on disk (naming-robust)."""
         out: dict[int, object] = {}
-        for f in sorted((raw_dir() / _ROOT).glob("**/cnt_nback.mat")):
+        for f in sorted((Config.raw_dir() / _ROOT).glob("**/cnt_nback.mat")):
             m = re.search(r"(\d{1,3})", f.parent.name)
             if m:
                 out[int(m.group(1))] = f.parent
@@ -83,10 +83,10 @@ class Shin2017NbackEegAdapter:
         Xs, ys, subj, sess, run = [], [], [], [], []
         for sub in subs:
             cont, fs, onsets, y = self._load_continuous(idx[sub])
-            cont = bandpass(cont, cfg.fmin, cfg.fmax, fs)
+            cont = Signal.bandpass(cont, cfg.fmin, cfg.fmax, fs)
             order = np.argsort(onsets)                                  # chronological
             onsets, y = onsets[order], y[order]
-            X, ye = block_epochs(BlockedRecording(cont, onsets, y), fs, cfg.tmin, tmax, baseline_s=0.0)  # no baseline: CSP/Riemann read covariance
+            X, ye = Signal.block_epochs(BlockedRecording(cont, onsets, y), fs, cfg.tmin, tmax, baseline_s=0.0)  # no baseline: CSP/Riemann read covariance
             if cfg.resample and cfg.resample != fs:
                 X = _rs(X, int(round(X.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
             n = len(ye)
@@ -99,6 +99,6 @@ class Shin2017NbackEegAdapter:
         y = np.concatenate(ys).astype(np.int64)
         return X, y, pl.DataFrame({"subject": subj, "session": sess, "run": run})
 
-
-def adapter() -> Shin2017NbackEegAdapter:
-    return Shin2017NbackEegAdapter()
+    @staticmethod
+    def adapter() -> "Shin2017NbackEegAdapter":
+        return Shin2017NbackEegAdapter()

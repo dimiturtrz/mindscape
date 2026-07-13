@@ -61,7 +61,7 @@ def main():
             raise SystemExit(f"--only names not decode/fnirs experiments: {sorted(missing)}")
     runs = [r for r in runs if not (args.cross_only and r[3] == "within")]
     for name, dataset, method, regime, cfg, test_session in runs:
-        meta = store.load(dataset, cfg)
+        meta = store.Store.load(dataset, cfg)
         n_classes = int(meta["label_id"].max()) + 1
         tsess = [test_session] if (regime == "within" and test_session) else ()
         folds = harness.folds_for(meta, regime, test_sessions=tsess)

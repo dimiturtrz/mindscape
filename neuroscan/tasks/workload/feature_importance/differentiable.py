@@ -161,8 +161,8 @@ def main():
     hp = {"lr": cfg.lr, "weight_decay": cfg.weight_decay, "epochs": cfg.epochs,
           "k": cfg.k, "fold_seeds": list(cfg.fold_seeds)}
 
-    meta = store.load(cfg.dataset, FnirsCfg())
-    X, y = store.gather(meta)
+    meta = store.Store.load(cfg.dataset, FnirsCfg())
+    X, y = store.Store.gather(meta)
     groups = meta["subject"].to_numpy()
     Fb, fam = DescriptorBank.extract_bank(X)
     families = DescriptorBank.family_names()

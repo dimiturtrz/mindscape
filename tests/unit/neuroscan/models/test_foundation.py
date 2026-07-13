@@ -7,11 +7,11 @@ SKIPS where those are absent (CI, a fresh clone). Equivalence classes: the encod
 import pytest
 import torch
 
-from core.config import data_root
+from core.config import Config
 from neuroscan.models import foundation
 from neuroscan.models.encoders import EncoderSpec, build_encoder
 
-_CKPT = data_root("pretrained") / "CBraMod" / "pretrained_weights.pth"
+_CKPT = Config.data_root("pretrained") / "CBraMod" / "pretrained_weights.pth"
 _AVAILABLE = foundation._CBRAMOD_ROOT.exists() and _CKPT.exists()
 pytestmark = pytest.mark.skipif(not _AVAILABLE, reason="CBraMod checkout + weights not present (out-of-repo)")
 

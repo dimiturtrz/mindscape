@@ -28,6 +28,6 @@ def test_train_export_parity_chain(tmp_path, monkeypatch):
     assert probs.shape == (n, 4)
     assert clf.device == "cpu"
 
-    path = export_onnx.export(clf.net, ch, t, tmp_path / "m.onnx", device="cpu")
-    gap = export_onnx.parity(clf.net, path, clf.std(X), device="cpu")
+    path = export_onnx.OnnxExport.export(clf.net, ch, t, tmp_path / "m.onnx", device="cpu")
+    gap = export_onnx.OnnxExport.parity(clf.net, path, clf.std(X), device="cpu")
     assert gap < 1e-3, f"export parity failed: {gap:.2e}"

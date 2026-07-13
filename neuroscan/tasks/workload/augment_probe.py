@@ -23,7 +23,7 @@ from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 
 from baselines.fnirs.features import FnirsLda
 from core.data import store
-from core.data.fnirs.augment import AugConfig, domain_randomize
+from core.data.fnirs.augment import Augment, AugConfig
 from core.data.fnirs.base import FnirsCfg
 from neuroscan.evaluation import metrics
 
@@ -38,10 +38,10 @@ _MIN_HEADROOM = 0.02             # within−cross gap below this = no nuisance l
 
 def _build():
     """Paired (HbO, HbR) epochs restricted to the binary `_CLASSES` contrast, relabelled 0/1."""
-    meta = store.load("shin2017_nback", FnirsCfg())
+    meta = store.Store.load("shin2017_nback", FnirsCfg())
     x, y, g = [], [], []
     for s in sorted(meta["subject"].unique().to_list()):
-        xs, ys = store.gather(meta.filter(meta["subject"] == s))
+        xs, ys = store.Store.gather(meta.filter(meta["subject"] == s))
         m = np.isin(ys, _CLASSES)
         x.append(xs[m])
         y.append((ys[m] == _CLASSES[1]).astype(int))
@@ -53,7 +53,7 @@ def _augment(x_tr: np.ndarray, y_tr: np.ndarray, seed: int) -> tuple[np.ndarray,
     """Append `_N_AUG` domain-randomized copies of the train epochs (HbO=0:36, HbR=36:72)."""
     xs, ys = [x_tr], [y_tr]
     for k in range(_N_AUG):
-        o, r = domain_randomize(x_tr[:, :36], x_tr[:, 36:], _FS, AugConfig(), seed=seed * 97 + k)
+        o, r = Augment.domain_randomize(x_tr[:, :36], x_tr[:, 36:], _FS, AugConfig(), seed=seed * 97 + k)
         xs.append(np.concatenate([o, r], axis=1))
         ys.append(y_tr)
     return np.concatenate(xs), np.concatenate(ys)

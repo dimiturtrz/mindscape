@@ -111,7 +111,7 @@ def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
 
 def _load_split(subjects: list[int], split: str, resample: float, *, recenter: bool = False,
                 shrinkage: float = 0.0):
-    epochs, concept, image_files, meta = things.get_epochs(
+    epochs, concept, image_files, meta = things.ThingsEeg2.get_epochs(
         subjects, things.ThingsEpochCfg(split=split, resample=resample))
     if recenter:
         epochs = Covariance.recenter_signals(epochs, meta["subject"].to_numpy(), shrinkage=shrinkage)  # M^-1/2 X

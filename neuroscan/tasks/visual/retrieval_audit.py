@@ -45,7 +45,7 @@ def _concept_names(split_key: str) -> set[str]:
     """The concept IDENTITIES of a split (folder names minus the split-local 'NNNNN_' index prefix). The
     integer concept index is re-numbered from 0 WITHIN each split, so identity has to be the name, not the
     index — comparing indices would falsely report every test concept as 'seen'."""
-    meta = things._meta()
+    meta = things.ThingsEeg2._meta()
     return {str(name)[6:] if str(name)[:5].isdigit() else str(name)
             for name in meta[f"{split_key}_img_concepts"]}
 
@@ -89,7 +89,7 @@ def run_audit(cfg: AuditConfig, ckpt_dir: str = "runs/retrieval_audit_ckpt") -> 
 
     Checkpoints each subject's row to `ckpt_dir` AS IT COMPLETES and resumes from it (bd 9js) — a stall on the
     Nth subject never loses the first N-1 (this exact loss nearly happened during the qoa run)."""
-    pool = cfg.all_subjects or tuple(things.subjects())
+    pool = cfg.all_subjects or tuple(things.ThingsEeg2.subjects())
     train_cfg = TrainConfig(epochs=cfg.epochs, batch=cfg.batch, lr=cfg.lr,
                             resample=cfg.resample, seed=cfg.seed, patience=cfg.patience)
     ckpt = Path(ckpt_dir)

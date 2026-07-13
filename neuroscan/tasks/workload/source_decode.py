@@ -37,12 +37,12 @@ def _cov(x: np.ndarray) -> np.ndarray:
 
 def _build():
     """Per-subject sensor + source covariances for the workload EEG blocks."""
-    meta = store.load("shin2017_nback_eeg", _CFG)
-    ch = eegmod.adapter().channels()
+    meta = store.Store.load("shin2017_nback_eeg", _CFG)
+    ch = eegmod.Shin2017NbackEegAdapter.adapter().channels()
     subs = sorted(meta["subject"].unique().to_list())
     c_sensor, c_source, ys, gs = [], [], [], []
     for s in subs:
-        x, y = store.gather(meta.filter(meta["subject"] == s))
+        x, y = store.Store.gather(meta.filter(meta["subject"] == s))
         c_sensor.append(_cov(x))
         c_source.append(_cov(Source.to_parcels(x, ch, _CFG.resample)))   # [n,68,t] cortical parcels
         ys.append(y)

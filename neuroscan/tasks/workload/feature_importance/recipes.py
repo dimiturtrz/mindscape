@@ -70,8 +70,8 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     for lib_name in ("mne", "moabb", "braindecode"):
         logging.getLogger(lib_name).setLevel(logging.WARNING)
-    meta = store.load(_DATASET, FnirsCfg())
-    X, y = store.gather(meta)
+    meta = store.Store.load(_DATASET, FnirsCfg())
+    X, y = store.Store.gather(meta)
     groups = meta["subject"].to_numpy()
     F, fam = DescriptorBank.extract_bank(X)
     n_classes = int(y.max()) + 1

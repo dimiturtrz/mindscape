@@ -101,8 +101,8 @@ def _row(s, yte, probs):
 
 def _run_fold(s, tr, te, cfg: AlignConfig):
     """One LOSO fold — module-level so joblib ships it to a worker (folds are independent)."""
-    Xtr, ytr = store.gather(tr)
-    Xte, yte = store.gather(te)
+    Xtr, ytr = store.Store.gather(tr)
+    Xte, yte = store.Store.gather(te)
     train = transfer.Domain(_covariances(Xtr, cfg.augment, cfg.order, cfg.lag), ytr, tr["subject"].to_numpy())
     test = transfer.Domain(_covariances(Xte, cfg.augment, cfg.order, cfg.lag), yte)
     if cfg.method in _ZERO_SHOT:
@@ -134,14 +134,14 @@ def main():
                            order=p.get("order", 4), lag=p.get("lag", 8))
 
     cfg = EpochCfg(**exp.recipe)
-    meta = store.load(dataset, cfg)
+    meta = store.Store.load(dataset, cfg)
     cov = "acm" if augment else "ts"
     regime = "calibrated" if method in _CALIBRATED else "zero_shot"
     name = f"riemann_{method}_{cov}"                # …_ts / …_acm always (keeps riemann_recenter_ts markers)
     logger.info(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · recipe {cfg.key()} · "
           f"{method} ({regime}, cov={cov})" + (f" · calib {calib_frac:.0%}" if regime == "calibrated" else ""))
 
-    folds = list(splits.leave_one_subject_out(meta))
+    folds = list(splits.Splits.leave_one_subject_out(meta))
     logger.info(f"\n=== {name} · cross_subject · {dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
     out_folds = Parallel(n_jobs=args.jobs)(
         delayed(_run_fold)(s, tr, te, fold_cfg) for s, tr, te in folds)

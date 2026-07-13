@@ -21,7 +21,7 @@ import open_clip
 import torch
 from PIL import Image
 
-from core.config import processed_dir, raw_dir
+from core.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class ImageItem:
 
 
 def _image_root(split: str) -> Path:
-    return raw_dir() / _ROOT / "images" / f"{split}_images"
+    return Config.raw_dir() / _ROOT / "images" / f"{split}_images"
 
 
 def concept_dirs(split: str) -> list[Path]:
@@ -72,7 +72,7 @@ def compute(split: str, *, device: str | None = None, batch: int = 256, force: b
     npz: `emb` [N, 512] float32 (L2-normalized), `concept` [N] int (concept index), `paths` [N] str.
     Idempotent — returns the cache path, recomputing only if missing or `force`.
     """
-    cache_path = processed_dir() / _ROOT / f"clip_{split}.npz"
+    cache_path = Config.processed_dir() / _ROOT / f"clip_{split}.npz"
     if cache_path.exists() and not force:
         return cache_path
     cache_path.parent.mkdir(parents=True, exist_ok=True)

@@ -68,19 +68,19 @@ def _fnirs_prior(x_fnirs: np.ndarray, subject_dir, src2d: np.ndarray) -> np.ndar
 
 def _build():
     """Per-subject covariances for the four arms + labels/groups, over the EEG∩fNIRS subjects."""
-    me = store.load("shin2017_nback_eeg", _EEG_CFG)
-    mf = store.load("shin2017_nback", FnirsCfg())
+    me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
+    mf = store.Store.load("shin2017_nback", FnirsCfg())
     subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
-    ch_e = eegmod.adapter().channels()
+    ch_e = eegmod.Shin2017NbackEegAdapter.adapter().channels()
     g, agg = SourcePrior.prior_leadfield(ch_e, _SFREQ)
     src2d = EegMontage._to_unit_disk(Source.source_positions(ch_e, _SFREQ)[:, :2])       # source flatmap
     arms = {"sensor": [], "dSPM": [], "uniform": [], "fNIRS": []}
     ys, gs = [], []
     for s in subs:
-        xe, ye = store.gather(me.filter(me["subject"] == s))
-        xf, yf = store.gather(mf.filter(mf["subject"] == s))
+        xe, ye = store.Store.gather(me.filter(me["subject"] == s))
+        xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
         assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
-        w = _fnirs_prior(xf, fnmod.adapter()._subject_dir(int(s)), src2d)
+        w = _fnirs_prior(xf, fnmod.Shin2017NirsAdapter.adapter()._subject_dir(int(s)), src2d)
         arms["sensor"].append(_cov(xe))
         arms["dSPM"].append(_cov(Source.to_parcels(xe, ch_e, _SFREQ)))
         arms["uniform"].append(_cov(SourcePrior.parcels_from_leadfield(xe, g, agg, None)))

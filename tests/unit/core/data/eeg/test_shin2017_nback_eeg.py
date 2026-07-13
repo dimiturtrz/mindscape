@@ -30,7 +30,7 @@ def synthetic_mat(monkeypatch):
 
 
 def test_load_continuous_parses_channels_onsets_labels(synthetic_mat):
-    cont, fs, onsets, y = mod.adapter()._load_continuous(Path("ignored/path"))
+    cont, fs, onsets, y = mod.Shin2017NbackEegAdapter.adapter()._load_continuous(Path("ignored/path"))
 
     assert cont.shape[0] == mod._N_EEG == 28                          # 30 -> 28: HEOG/VEOG dropped
     assert cont.shape[1] == 800 and fs == synthetic_mat               # [28, T], fs carried
@@ -39,7 +39,7 @@ def test_load_continuous_parses_channels_onsets_labels(synthetic_mat):
 
 
 def test_load_continuous_drops_non_session_markers(synthetic_mat):
-    _, _, onsets, y = mod.adapter()._load_continuous(Path("ignored/path"))
+    _, _, onsets, y = mod.Shin2017NbackEegAdapter.adapter()._load_continuous(Path("ignored/path"))
     assert len(onsets) == len(y) == 3                                 # 'instruction' marker filtered out
 
 
@@ -47,7 +47,7 @@ def test_get_data_epochs_end_to_end(synthetic_mat, monkeypatch):
     """get_data over the mocked parse: bandpass -> block-epoch -> resample -> (X[n,28,t], y, meta)."""
     monkeypatch.setattr(mod.Shin2017NbackEegAdapter, "_index", lambda self: {1: Path("dummy")})
 
-    x, y, meta = mod.adapter().get_data([1], EpochCfg(fmin=1.0, fmax=40.0, tmin=0.0, tmax=0.5, resample=100.0))
+    x, y, meta = mod.Shin2017NbackEegAdapter.adapter().get_data([1], EpochCfg(fmin=1.0, fmax=40.0, tmin=0.0, tmax=0.5, resample=100.0))
 
     assert x.shape[:2] == (3, 28) and x.shape[2] == 50                # 3 blocks, 28 EEG ch, 0.5 s @ 100 Hz
     np.testing.assert_array_equal(sorted(y), [0, 1, 2])              # the 3 back-levels epoched

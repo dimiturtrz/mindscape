@@ -41,19 +41,19 @@ def _cov(X):
 
 
 def _build_all(band="sum"):
-    me = store.load("shin2017_nback_eeg", _EEG_CFG)
-    mf = store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))
+    me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
+    mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))
     subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
-    ch_e = eegmod.adapter().channels()
+    ch_e = eegmod.Shin2017NbackEegAdapter.adapter().channels()
     pos_e = bc.EegMontage.eeg_positions(ch_e)
     Cs, ys, gs = [], [], []
     for s in subs:
-        Xe, ye = store.gather(me.filter(me["subject"] == s))
-        Xf, yf = store.gather(mf.filter(mf["subject"] == s))
+        Xe, ye = store.Store.gather(me.filter(me["subject"] == s))
+        Xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
         assert np.array_equal(ye, yf), f"subject {s} EEG/fNIRS misaligned"
         if _CSD:
             Xe = bc.CSD.csd_transform(Xe, ch_e, 100.0)                 # spatial deblur before fusion
-        pos_f = bc.FnirsMontage.fnirs_positions(fnmod.adapter()._subject_dir(int(s)))
+        pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter()._subject_dir(int(s)))
         joint, _ = bc.BrainCamera.fused_node_series(bc.PairedModalities(Xe, Xf, pos_e, pos_f), band=band,
                                                     series=bc.SeriesConfig(fps=_FPS, t_end=_TEND))
         Cs.append(_cov(joint))

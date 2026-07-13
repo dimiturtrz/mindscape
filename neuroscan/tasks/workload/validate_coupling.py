@@ -15,7 +15,7 @@ import logging
 import numpy as np
 from scipy.signal import fftconvolve
 
-from core.data.fnirs.synthetic import SynthConfig, double_gamma_hrf, synthesize_paired
+from core.data.fnirs.synthetic import Synthetic, SynthConfig
 from core.features.fnirs.chromophore import Chromophore
 from core.features.fusion.coupling import Coupling
 
@@ -29,7 +29,7 @@ _LAG_WINDOW = (2.0, 9.0)        # recovered lag must sit in this physiological w
 def run(n_seeds: int = 5) -> dict:
     """Recover CBSI-vs-neural correlation + coupling lag/sign across seeds against the synthetic ground truth."""
     cfg = SynthConfig()
-    hrf = double_gamma_hrf(_FS, cfg)
+    hrf = Synthetic.double_gamma_hrf(_FS, cfg)
     com = float((np.arange(len(hrf)) * hrf).sum() / hrf.sum() / _FS)
     corrs, lags, signs = [], [], []
     for seed in range(n_seeds):
@@ -37,7 +37,7 @@ def run(n_seeds: int = 5) -> dict:
         drive = np.zeros((1, 2000))
         for s in rng.integers(0, 1900, 25):
             drive[0, s:s + rng.integers(20, 60)] += 1.0
-        hbo, hbr = synthesize_paired(drive, _FS, cfg, seed=seed + 100)
+        hbo, hbr = Synthetic.synthesize_paired(drive, _FS, cfg, seed=seed + 100)
         cbsi = Chromophore.cbsi_neural(hbo[:, None, :], hbr[:, None, :])[:, 0, :]
         true_resp = fftconvolve(drive, hrf[None, :], axes=1)[:, :drive.shape[1]]
         corrs.append(float(np.corrcoef(cbsi[0], true_resp[0])[0, 1]))

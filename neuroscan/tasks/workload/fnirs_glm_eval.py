@@ -32,8 +32,8 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     for lib_name in ("mne", "moabb", "braindecode"):
         logging.getLogger(lib_name).setLevel(logging.WARNING)
-    meta = store.load(_DATASET, FnirsCfg())                          # clean=None (no filter, as requested)
-    X, y = store.gather(meta)
+    meta = store.Store.load(_DATASET, FnirsCfg())                          # clean=None (no filter, as requested)
+    X, y = store.Store.gather(meta)
     data = CvData(X, y, meta["subject"].to_numpy())
     logger.info(f"GLM-β vs collapse · Shin n-back · {len(y)} blocks · {meta['subject'].n_unique()} subj · "
           f"3x5-fold · no cleaning\n")

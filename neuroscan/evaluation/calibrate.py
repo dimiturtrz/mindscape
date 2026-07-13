@@ -89,12 +89,12 @@ def _per_subject_rows(meta, fit, test_session):
     rows = []
     for s in sorted(meta["subject"].unique().to_list()):
         # train+val from the train session (in-session), test = the eval session (cross-session)
-        train, val, test = splits.within_subject(meta, s, test_sessions=[test_session])
+        train, val, test = splits.Splits.within_subject(meta, s, test_sessions=[test_session])
         if val.is_empty() or test.is_empty():
             continue
-        Xtr, ytr = store.gather(train)
-        Xva, yva = store.gather(val)
-        Xte, yte = store.gather(test)
+        Xtr, ytr = store.Store.gather(train)
+        Xva, yva = store.Store.gather(val)
+        Xte, yte = store.Store.gather(test)
         clf = fit(Xtr, ytr)
         lv, lt = clf.predict_logits(Xva), clf.predict_logits(Xte)
         ts = TemperatureScaler().fit(lv, yva)                # fit T on in-session val
@@ -148,7 +148,7 @@ def main():
         logging.getLogger(lib_name).setLevel(logging.WARNING)
     args = _parse_args()
 
-    meta = store.load(args.dataset, EpochCfg(resample=args.resample, fmin=args.fmin, fmax=args.fmax))
+    meta = store.Store.load(args.dataset, EpochCfg(resample=args.resample, fmin=args.fmin, fmax=args.fmax))
     fit, _ = decoders.make(args.method)
 
     rows = _per_subject_rows(meta, fit, args.test_session)

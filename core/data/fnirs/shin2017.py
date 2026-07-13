@@ -17,9 +17,10 @@ import polars as pl
 import scipy.io as sio
 from scipy.signal import resample as _rs
 
-from core.config import raw_dir
-from core.data.fnirs.base import CANONICAL_NBACK, FnirsCfg, bandpass, epoch_blocks
-from core.data.fnirs.clean import make_cleaner
+from core.config import Config
+from core.data.fnirs.base import CANONICAL_NBACK, FnirsCfg, FnirsEpochs
+from core.data.fnirs.clean import Clean
+from core.data.signal import Signal
 
 
 class Shin2017NirsAdapter:
@@ -33,7 +34,7 @@ class Shin2017NirsAdapter:
 
     def subjects(self) -> list[int]:
         """Subjects actually present on disk (this cognitive set ships 26; robust to partial downloads)."""
-        root = raw_dir() / "shin2017"
+        root = Config.raw_dir() / "shin2017"
         subs = []
         for d in sorted(root.glob("VP*-NIRS")):
             if (d / f"cnt_{self.task}.mat").exists():
@@ -41,7 +42,7 @@ class Shin2017NirsAdapter:
         return subs
 
     def _subject_dir(self, sub: int):
-        return raw_dir() / "shin2017" / f"VP{sub:03d}-NIRS"
+        return Config.raw_dir() / "shin2017" / f"VP{sub:03d}-NIRS"
 
     def _load_continuous(self, sub: int):
         """Return (cont [72, T] HbO|HbR, fs, onsets[samples], canonical_labels[n]) for one subject."""
@@ -65,12 +66,12 @@ class Shin2017NirsAdapter:
         Xs, ys, subj, sess, run = [], [], [], [], []
         for sub in subs:
             cont, fs, onsets, y = self._load_continuous(sub)
-            cont = bandpass(cont, cfg.l_freq, cfg.h_freq, fs)
+            cont = Signal.bandpass(cont, cfg.l_freq, cfg.h_freq, fs)
             order = np.argsort(onsets)                                                # chronological
             onsets, y = onsets[order], y[order]
-            X, ye = epoch_blocks(cont, onsets, y, fs, cfg)
+            X, ye = FnirsEpochs.epoch_blocks(cont, onsets, y, fs, cfg)
             if cfg.clean is not None:                                                  # physiological-noise stage
-                X = make_cleaner(cfg.clean).transform(X).astype(np.float32)            # stateless -> leakage-free
+                X = Clean.make_cleaner(cfg.clean).transform(X).astype(np.float32)      # stateless -> leakage-free
             if cfg.resample and cfg.resample != fs:
                 X = _rs(X, int(round(X.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
             n = len(ye)
@@ -84,6 +85,6 @@ class Shin2017NirsAdapter:
         meta = pl.DataFrame({"subject": subj, "session": sess, "run": run})
         return X, y, meta
 
-
-def adapter(task: str = "nback") -> Shin2017NirsAdapter:
-    return Shin2017NirsAdapter(task=task)
+    @staticmethod
+    def adapter(task: str = "nback") -> "Shin2017NirsAdapter":
+        return Shin2017NirsAdapter(task=task)

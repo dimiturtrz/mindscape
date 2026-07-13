@@ -29,8 +29,8 @@ def main():
     logger.info(f"  {'clean':<18}{'within':>9}{'±sd':>7}{'κ':>7}   {'cross':>9}{'±sd':>7}{'κ':>7}{'  Δcross':>9}")
     base_cross = None
     for name, spec in _ARMS:
-        meta = store.load(_DATASET, FnirsCfg(clean=spec))
-        X, y = store.gather(meta)
+        meta = store.Store.load(_DATASET, FnirsCfg(clean=spec))
+        X, y = store.Store.gather(meta)
         data = CvData(X, y, meta["subject"].to_numpy())
         wa, ws, wk = cv_score(None, data, CvConfig(grouped=False))
         ca, cs, ck = cv_score(None, data, CvConfig(grouped=True))

@@ -25,8 +25,8 @@ import polars as pl
 from pydantic import BaseModel
 from scipy.signal import resample as _resample
 
-from core.config import raw_dir
-from core.data.signal import bandpass
+from core.config import Config
+from core.data.signal import Signal
 
 logger = logging.getLogger(__name__)
 
@@ -52,92 +52,99 @@ class ThingsEeg1EpochCfg(BaseModel):
     drop_targets: bool = True
 
 
-def _subject_dir(subject: int):
-    return raw_dir() / _ROOT / f"sub-{subject:02d}"
+class ThingsEeg1:
+    """THINGS-EEG1 on-disk index + own-preprocessing epoching — the free helpers folded in as staticmethods
+    (public names kept). The second EEG->image dataset, matched to EEG2 for the cross-dataset retrieval test."""
 
+    @staticmethod
+    def _subject_dir(subject: int):
+        return Config.raw_dir() / _ROOT / f"sub-{subject:02d}"
 
-def subjects() -> list[int]:
-    """Downloaded subject ids (sub-NN dirs present under the raw tree), sorted."""
-    root = raw_dir() / _ROOT
-    if not root.is_dir():
-        return []
-    return sorted(int(path.name[4:]) for path in root.glob("sub-*") if path.name[4:].isdigit())
+    @staticmethod
+    def subjects() -> list[int]:
+        """Downloaded subject ids (sub-NN dirs present under the raw tree), sorted."""
+        root = Config.raw_dir() / _ROOT
+        if not root.is_dir():
+            return []
+        return sorted(int(path.name[4:]) for path in root.glob("sub-*") if path.name[4:].isdigit())
 
+    @staticmethod
+    def channels() -> list[str]:
+        """The 63 EEG channel names (10-10 montage), read from a subject's BrainVision header — constant across
+        subjects. Used to montage-align against THINGS-EEG2 for the cross-dataset test (they share 62 electrodes,
+        EEG1 has Fz where EEG2 has Cz)."""
+        subject = ThingsEeg1.subjects()[0]
+        raw = mne.io.read_raw_brainvision(
+            ThingsEeg1._subject_dir(subject) / "eeg" / f"sub-{subject:02d}_task-rsvp_eeg.vhdr",
+            preload=False, verbose="ERROR")
+        return list(raw.ch_names[:_N_EEG])
 
-def channels() -> list[str]:
-    """The 63 EEG channel names (10-10 montage), read from a subject's BrainVision header — constant across
-    subjects. Used to montage-align against THINGS-EEG2 for the cross-dataset test (they share 62 electrodes,
-    EEG1 has Fz where EEG2 has Cz)."""
-    subject = subjects()[0]
-    raw = mne.io.read_raw_brainvision(
-        _subject_dir(subject) / "eeg" / f"sub-{subject:02d}_task-rsvp_eeg.vhdr", preload=False, verbose="ERROR")
-    return list(raw.ch_names[:_N_EEG])
+    @staticmethod
+    def _row_mask(events: pl.DataFrame, cfg: ThingsEeg1EpochCfg) -> np.ndarray:
+        """Which events.tsv rows to epoch: drop fixation-colour targets and (by default) the held-out validation
+        stimuli. Flags are optional columns — absent means the dataset doesn't distinguish that split, keep all."""
+        mask = np.ones(len(events), dtype=bool)
+        if cfg.drop_targets and _COL_ISTARGET in events.columns:
+            mask &= (events[_COL_ISTARGET].to_numpy() == 0)
+        if not cfg.include_validation and _COL_ISTEST in events.columns:
+            mask &= (events[_COL_ISTEST].to_numpy() == 0)
+        return mask
 
+    @staticmethod
+    def epochs_from_events(eeg: np.ndarray, fs: float, events: pl.DataFrame, cfg: ThingsEeg1EpochCfg
+                           ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Pure epoching: continuous `eeg` [ch, T] + a BIDS `events` frame -> (epochs [n, ch, t], concept_name[n],
+        img_file[n]). Onset is BIDS seconds -> sample @ fs. Windows overrunning the recording are dropped. Per-
+        channel z-score + optional band-pass/resample mirror the EEG2 adapter so the two datasets are comparable.
+        No file IO here (the BrainVision read is the caller's job), so the windowing/filtering path is testable.
+        """
+        if cfg.fmin is not None or cfg.fmax is not None:
+            eeg = Signal.bandpass(eeg, cfg.fmin or 0.1, cfg.fmax or (fs / 2 - 1), fs)
 
-def _row_mask(events: pl.DataFrame, cfg: ThingsEeg1EpochCfg) -> np.ndarray:
-    """Which events.tsv rows to epoch: drop fixation-colour targets and (by default) the held-out validation
-    stimuli. Flags are optional columns — absent means the dataset doesn't distinguish that split, keep all."""
-    mask = np.ones(len(events), dtype=bool)
-    if cfg.drop_targets and _COL_ISTARGET in events.columns:
-        mask &= (events[_COL_ISTARGET].to_numpy() == 0)
-    if not cfg.include_validation and _COL_ISTEST in events.columns:
-        mask &= (events[_COL_ISTEST].to_numpy() == 0)
-    return mask
+        rows = events.filter(pl.Series(ThingsEeg1._row_mask(events, cfg)))
+        onset = np.rint(rows[_COL_ONSET].to_numpy() * fs).astype(int)      # BIDS onset is SECONDS
+        if len(onset) and onset.max() >= eeg.shape[1]:
+            raise ValueError(f"onset sample {onset.max()} exceeds recording length {eeg.shape[1]} — "
+                             "check the events.tsv onset units (BIDS = seconds)")
 
+        start, stop = int(round(cfg.tmin * fs)), int(round(cfg.tmax * fs))
+        keep = (onset + start >= 0) & (onset + stop <= eeg.shape[1])
+        onset = onset[keep]
+        rows = rows.filter(pl.Series(keep))
 
-def epochs_from_events(eeg: np.ndarray, fs: float, events: pl.DataFrame, cfg: ThingsEeg1EpochCfg
-                       ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Pure epoching: continuous `eeg` [ch, T] + a BIDS `events` frame -> (epochs [n, ch, t], concept_name[n],
-    img_file[n]). Onset is BIDS seconds -> sample @ fs. Windows overrunning the recording are dropped. Per-
-    channel z-score + optional band-pass/resample mirror the EEG2 adapter so the two datasets are comparable.
-    No file IO here (the BrainVision read is the caller's job), so the whole windowing/filtering path is testable.
-    """
-    if cfg.fmin is not None or cfg.fmax is not None:
-        eeg = bandpass(eeg, cfg.fmin or 0.1, cfg.fmax or (fs / 2 - 1), fs)
+        epochs = np.stack([eeg[:, at + start:at + stop] for at in onset]).astype(np.float32)   # [n, ch, t]
+        # per-channel z-score: EEG is in volts (~1e-5); O(1) scaling keeps the encoder's BatchNorm conditioned
+        # (the same fix as EEG2 — without it eval-mode embeddings collapse).
+        epochs = (epochs - epochs.mean(axis=2, keepdims=True)) / (epochs.std(axis=2, keepdims=True) + 1e-7)
+        if cfg.resample and cfg.resample != fs:
+            epochs = _resample(epochs, int(round(epochs.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
+        return epochs, rows[_COL_CONCEPT].to_numpy(), rows[_COL_FILE].to_numpy()
 
-    rows = events.filter(pl.Series(_row_mask(events, cfg)))
-    onset = np.rint(rows[_COL_ONSET].to_numpy() * fs).astype(int)      # BIDS onset is SECONDS
-    if len(onset) and onset.max() >= eeg.shape[1]:
-        raise ValueError(f"onset sample {onset.max()} exceeds recording length {eeg.shape[1]} — "
-                         "check the events.tsv onset units (BIDS = seconds)")
+    @staticmethod
+    def _subject_epochs(subject: int, cfg: ThingsEeg1EpochCfg):
+        """Read one subject's BrainVision raw + events.tsv, then epoch (the IO shell around epochs_from_events)."""
+        eeg_dir = ThingsEeg1._subject_dir(subject) / "eeg"
+        raw = mne.io.read_raw_brainvision(
+            eeg_dir / f"sub-{subject:02d}_task-rsvp_eeg.vhdr", preload=True, verbose="ERROR")
+        events = pl.read_csv(eeg_dir / f"sub-{subject:02d}_task-rsvp_events.tsv", separator="\t")
+        return ThingsEeg1.epochs_from_events(raw.get_data()[:_N_EEG], raw.info["sfreq"], events, cfg)
 
-    start, stop = int(round(cfg.tmin * fs)), int(round(cfg.tmax * fs))
-    keep = (onset + start >= 0) & (onset + stop <= eeg.shape[1])
-    onset = onset[keep]
-    rows = rows.filter(pl.Series(keep))
-
-    epochs = np.stack([eeg[:, at + start:at + stop] for at in onset]).astype(np.float32)   # [n, ch, t]
-    # per-channel z-score: EEG is in volts (~1e-5); O(1) scaling keeps the encoder's BatchNorm conditioned
-    # (the same fix as EEG2 — without it eval-mode embeddings collapse).
-    epochs = (epochs - epochs.mean(axis=2, keepdims=True)) / (epochs.std(axis=2, keepdims=True) + 1e-7)
-    if cfg.resample and cfg.resample != fs:
-        epochs = _resample(epochs, int(round(epochs.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
-    return epochs, rows[_COL_CONCEPT].to_numpy(), rows[_COL_FILE].to_numpy()
-
-
-def _subject_epochs(subject: int, cfg: ThingsEeg1EpochCfg):
-    """Read one subject's BrainVision raw + events.tsv, then epoch (the IO shell around epochs_from_events)."""
-    eeg_dir = _subject_dir(subject) / "eeg"
-    raw = mne.io.read_raw_brainvision(eeg_dir / f"sub-{subject:02d}_task-rsvp_eeg.vhdr", preload=True, verbose="ERROR")
-    events = pl.read_csv(eeg_dir / f"sub-{subject:02d}_task-rsvp_events.tsv", separator="\t")
-    return epochs_from_events(raw.get_data()[:_N_EEG], raw.info["sfreq"], events, cfg)
-
-
-def get_epochs(subjects_: list[int] | None = None, config: ThingsEeg1EpochCfg | None = None
-               ) -> tuple[np.ndarray, np.ndarray, np.ndarray, pl.DataFrame]:
-    """Epoch THINGS-EEG1 for the EEG->image task off the raw. Returns (eeg [n,63,t] float32, concept_name [n]
-    str, img_file [n] str, meta {subject}). concept_name is the THINGS name — the cross-dataset bridge to EEG2
-    (map name -> the shared CLIP target the same way clip_targets does)."""
-    cfg = config or ThingsEeg1EpochCfg()
-    chosen = subjects_ or subjects()
-    eeg_parts, concept_parts, file_parts, subject_col = [], [], [], []
-    for subject in chosen:
-        eeg, concept, files = _subject_epochs(subject, cfg)
-        eeg_parts.append(eeg)
-        concept_parts.append(concept)
-        file_parts.append(files)
-        subject_col += [str(subject)] * len(concept)
-        logger.info(f"sub-{subject:02d}: {len(concept)} epochs {eeg.shape[1:]}")
-    return (np.concatenate(eeg_parts).astype(np.float32),
-            np.concatenate(concept_parts), np.concatenate(file_parts),
-            pl.DataFrame({"subject": subject_col}))
+    @staticmethod
+    def get_epochs(subjects_: list[int] | None = None, config: ThingsEeg1EpochCfg | None = None
+                   ) -> tuple[np.ndarray, np.ndarray, np.ndarray, pl.DataFrame]:
+        """Epoch THINGS-EEG1 for the EEG->image task off the raw. Returns (eeg [n,63,t] float32, concept_name [n]
+        str, img_file [n] str, meta {subject}). concept_name is the THINGS name — the cross-dataset bridge to EEG2
+        (map name -> the shared CLIP target the same way clip_targets does)."""
+        cfg = config or ThingsEeg1EpochCfg()
+        chosen = subjects_ or ThingsEeg1.subjects()
+        eeg_parts, concept_parts, file_parts, subject_col = [], [], [], []
+        for subject in chosen:
+            eeg, concept, files = ThingsEeg1._subject_epochs(subject, cfg)
+            eeg_parts.append(eeg)
+            concept_parts.append(concept)
+            file_parts.append(files)
+            subject_col += [str(subject)] * len(concept)
+            logger.info(f"sub-{subject:02d}: {len(concept)} epochs {eeg.shape[1:]}")
+        return (np.concatenate(eeg_parts).astype(np.float32),
+                np.concatenate(concept_parts), np.concatenate(file_parts),
+                pl.DataFrame({"subject": subject_col}))

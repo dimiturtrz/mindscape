@@ -8,7 +8,7 @@ common-mode systemic; (2) estimate_coupling recovers a physiologically-correct l
 import numpy as np
 from scipy.signal import fftconvolve
 
-from core.data.fnirs.synthetic import SynthConfig, double_gamma_hrf, synthesize_paired
+from core.data.fnirs.synthetic import Synthetic, SynthConfig
 from core.features.fnirs.chromophore import Chromophore
 from core.features.fusion.coupling import Coupling
 
@@ -27,9 +27,9 @@ def test_cbsi_recovers_neural_from_systemic():
     cfg = SynthConfig()
     rng = np.random.default_rng(0)
     drive = _drive(rng)
-    hbo, hbr = synthesize_paired(drive, _FS, cfg, seed=1)
+    hbo, hbr = Synthetic.synthesize_paired(drive, _FS, cfg, seed=1)
     cbsi = Chromophore.cbsi_neural(hbo[:, None, :], hbr[:, None, :])[:, 0, :]
-    true_resp = fftconvolve(drive, double_gamma_hrf(_FS, cfg)[None, :], axes=1)[:, :drive.shape[1]]
+    true_resp = fftconvolve(drive, Synthetic.double_gamma_hrf(_FS, cfg)[None, :], axes=1)[:, :drive.shape[1]]
     assert np.corrcoef(cbsi[0], true_resp[0])[0, 1] > 0.9        # neural recovered, systemic cancelled
 
 
@@ -42,7 +42,7 @@ def test_estimate_coupling_recovers_lag_and_sign():
     for seed in range(3):
         rng = np.random.default_rng(seed)
         drive = _drive(rng)
-        hbo, hbr = synthesize_paired(drive, _FS, cfg, seed=seed + 10)
+        hbo, hbr = Synthetic.synthesize_paired(drive, _FS, cfg, seed=seed + 10)
         cbsi = Chromophore.cbsi_neural(hbo[:, None, :], hbr[:, None, :])[:, 0, :]
         lag, _decay, beta = Coupling.estimate_coupling(drive, cbsi, _FS)
         assert beta > 0                                          # neural -> HbO up: positive coupling

@@ -44,123 +44,128 @@ class Experiment(BaseModel):
     params: dict = {}
 
 
-def _experiments_doc():
-    path = REPO / "experiments.yaml"
-    if not path.exists():
-        raise FileNotFoundError(f"{path} not found — the named-experiment registry (see experiments.yaml)")
-    return OmegaConf.load(path)
+class Config:
+    """Path + experiment-registry resolution for the one data root — the free helpers folded in as
+    staticmethods (public names kept), so `paths.yaml`/`experiments.yaml` have one resolution home."""
 
+    @staticmethod
+    def _experiments_doc():
+        path = REPO / "experiments.yaml"
+        if not path.exists():
+            raise FileNotFoundError(f"{path} not found — the named-experiment registry (see experiments.yaml)")
+        return OmegaConf.load(path)
 
-def experiment_names() -> list[str]:
-    """All registered experiment names (for --exp choices / error messages)."""
-    return sorted(_experiments_doc().experiments.keys())
+    @staticmethod
+    def experiment_names() -> list[str]:
+        """All registered experiment names (for --exp choices / error messages)."""
+        return sorted(Config._experiments_doc().experiments.keys())
 
+    @staticmethod
+    def load_experiment(name: str, overrides: list[str] | None = None) -> Experiment:
+        """Resolve a named experiment, applying any `--set key=val` dotlist overrides (e.g. `recipe.fmin=4`).
+        Unknown name -> a listing SystemExit, so the CLI fails helpfully instead of KeyError-ing."""
+        doc = Config._experiments_doc()
+        if name not in doc.experiments:
+            raise SystemExit(f"unknown --exp {name!r}; known: {Config.experiment_names()}")
+        node = doc.experiments[name]
+        if overrides:
+            node = OmegaConf.merge(node, OmegaConf.from_dotlist(overrides))
+        return Experiment(**OmegaConf.to_container(node, resolve=True))
 
-def load_experiment(name: str, overrides: list[str] | None = None) -> Experiment:
-    """Resolve a named experiment, applying any `--set key=val` dotlist overrides (e.g. `recipe.fmin=4`).
-    Unknown name -> a listing SystemExit, so the CLI fails helpfully instead of KeyError-ing."""
-    doc = _experiments_doc()
-    if name not in doc.experiments:
-        raise SystemExit(f"unknown --exp {name!r}; known: {experiment_names()}")
-    node = doc.experiments[name]
-    if overrides:
-        node = OmegaConf.merge(node, OmegaConf.from_dotlist(overrides))
-    return Experiment(**OmegaConf.to_container(node, resolve=True))
+    @staticmethod
+    def to_native_path(path_str: str) -> str:
+        """Translate a configured path to the current platform so ONE paths.yaml works on Windows + WSL.
 
+        Windows drive 'X:/...' <-> POSIX/WSL '/mnt/x/...'. A bare Windows drive path on POSIX would
+        otherwise be treated as relative and leak the data tree into the repo; a POSIX
+        mount path on Windows would be unresolvable. There's no solid pip lib for this (wslpath is WSL-only),
+        so this small, tested mapping is the dependency-free fix. The default WSL mount is /mnt/<drive>;
+        MINDSCAPE_DATA can always override with an explicit native path.
+        """
+        # Parse with PurePath (robust to '\\', mixed slashes, 'D:' w/o slash); only the /mnt mapping is
+        # explicit (no lib does the WSL drive<->mount convention).
+        drive = PureWindowsPath(path_str).drive              # 'D:' for a drive path, '' otherwise
+        if len(drive) == _DRIVE_PREFIX_LEN and drive.endswith(":"):
+            rest = "/".join(PureWindowsPath(path_str).parts[1:])
+            if os.name == "nt":
+                return f"{drive}/{rest}".rstrip("/")
+            return f"/mnt/{drive[0].lower()}/{rest}".rstrip("/")
+        parts = PurePosixPath(path_str).parts                # /mnt/<x>/... on Windows -> drive
+        if os.name == "nt" and len(parts) >= _MNT_MIN_PARTS and parts[1] == "mnt" and len(parts[2]) == 1:
+            return f"{parts[2].upper()}:/" + "/".join(parts[3:])
+        return path_str
 
-def to_native_path(path_str: str) -> str:
-    """Translate a configured path to the current platform so ONE paths.yaml works on Windows + WSL.
+    @staticmethod
+    def data_root(sub: str | None = None) -> Path:
+        """The single data root (platform-translated), or a named subdir under it (`raw` / `processed`)."""
+        env = os.environ.get("MINDSCAPE_DATA")
+        if env:
+            raw = env
+        else:
+            cfg = REPO / "paths.yaml"
+            if not cfg.exists():
+                raise FileNotFoundError(
+                    f"{cfg} not found — copy paths.example.yaml -> paths.yaml and set `data:` "
+                    f"(or set the MINDSCAPE_DATA env var)."
+                )
+            raw = str(OmegaConf.load(cfg).data)
+        root = Path(Config.to_native_path(raw))
+        return root / sub if sub else root
 
-    Windows drive 'X:/...' <-> POSIX/WSL '/mnt/x/...'. A bare Windows drive path on POSIX would
-    otherwise be treated as relative and leak the data tree into the repo; a POSIX
-    mount path on Windows would be unresolvable. There's no solid pip lib for this (wslpath is WSL-only),
-    so this small, tested mapping is the dependency-free fix. The default WSL mount is /mnt/<drive>;
-    MINDSCAPE_DATA can always override with an explicit native path.
-    """
-    # Parse with PurePath (robust to '\\', mixed slashes, 'D:' w/o slash); only the /mnt mapping is
-    # explicit (no lib does the WSL drive<->mount convention).
-    drive = PureWindowsPath(path_str).drive              # 'D:' for a drive path, '' otherwise
-    if len(drive) == _DRIVE_PREFIX_LEN and drive.endswith(":"):
-        rest = "/".join(PureWindowsPath(path_str).parts[1:])
+    @staticmethod
+    def raw_dir() -> Path:
+        return Config.data_root("raw")
+
+    @staticmethod
+    def processed_dir() -> Path:
+        return Config.data_root("processed")
+
+    @staticmethod
+    def configure_moabb_download() -> Path:
+        """Point MOABB/MNE's download cache at <data>/raw so recordings stay inside the one root (never the
+        repo). Idempotent; returns the cache dir. Call before any MOABB dataset access.
+
+        The path is resolved to an ABSOLUTE native path and asserted — a relative value here is how raw
+        downloads once leaked into the repo as a stray `D-/` dir (a drive-letter mangle). We also persist
+        it to MNE's own config (set_config), not just the env, so a child process can't fall back."""
+        cache = Config.raw_dir().resolve()
+        assert cache.is_absolute(), f"data root must be absolute, got {cache!r} (fix paths.yaml)"
+        cache.mkdir(parents=True, exist_ok=True)
+        native = os.fspath(cache)                          # native Windows path (no forward-slash mangling)
+        os.environ["MNE_DATA"] = native                   # overwrite, don't setdefault — be authoritative
+        os.environ["MOABB_RESULTS"] = os.fspath(Config.processed_dir() / "moabb_results")
+        try:
+            mne.set_config("MNE_DATA", native, set_env=True)
+        except OSError as exc:
+            logger.debug(f"mne.set_config: {exc}")
+        try:
+            set_download_dir(native)
+        except OSError as exc:
+            logger.debug(f"moabb.set_download_dir: {exc}")
         if os.name == "nt":
-            return f"{drive}/{rest}".rstrip("/")
-        return f"/mnt/{drive[0].lower()}/{rest}".rstrip("/")
-    parts = PurePosixPath(path_str).parts                # /mnt/<x>/... on Windows -> drive
-    if os.name == "nt" and len(parts) >= _MNT_MIN_PARTS and parts[1] == "mnt" and len(parts[2]) == 1:
-        return f"{parts[2].upper()}:/" + "/".join(parts[3:])
-    return path_str
+            # ONLY native Windows needs this — a Windows absolute path has a drive colon that MOABB's
+            # buggy sanitizer strips. Under WSL/POSIX the root is '/mnt/<drive>/...' (no colon) so MOABB works
+            # unpatched; that's the zero-patch native path (see to_native_path).
+            Config._patch_moabb_drive_colon()
+        return cache
 
+    @staticmethod
+    def _patch_moabb_drive_colon() -> None:
+        """Compat shim for a MOABB *Windows* bug (no upstream fix as of 1.5.0; no config flag avoids it,
+        and no colon-free absolute Windows path exists). MOABB's `_sanitize_path` translates ':' -> '-' over
+        the WHOLE path, clobbering the drive colon ('<drive>:\\...' -> '<drive>-\\...'), so downloads go RELATIVE
+        and leak into the repo cwd (the recurring `D-/`) + re-download every time. We restore a leading drive and
+        sanitize only the rest (behavior-preserving otherwise). Idempotent. TODO: file/track upstream PR."""
+        if getattr(_dl._sanitize_path, "_mindscape_patched", False):
+            return
+        _bad = ':*?"<>|'
 
-def data_root(sub: str | None = None) -> Path:
-    """The single data root (platform-translated), or a named subdir under it (`raw` / `processed`)."""
-    env = os.environ.get("MINDSCAPE_DATA")
-    if env:
-        raw = env
-    else:
-        cfg = REPO / "paths.yaml"
-        if not cfg.exists():
-            raise FileNotFoundError(
-                f"{cfg} not found — copy paths.example.yaml -> paths.yaml and set `data:` "
-                f"(or set the MINDSCAPE_DATA env var)."
-            )
-        raw = str(OmegaConf.load(cfg).data)
-    root = Path(to_native_path(raw))
-    return root / sub if sub else root
+        def _safe(path):
+            s = str(path)
+            if len(s) >= _DRIVE_PREFIX_LEN and s[1] == ":" and s[0].isalpha():     # 'D:...' -> keep 'D:', clean rest
+                drive, rest = s[:2], s[2:]
+                return Path(drive + rest.translate({ord(c): "-" for c in _bad}))
+            return Path(s.translate({ord(c): "-" for c in _bad}))
 
-
-def raw_dir() -> Path:
-    return data_root("raw")
-
-
-def processed_dir() -> Path:
-    return data_root("processed")
-
-
-def configure_moabb_download() -> Path:
-    """Point MOABB/MNE's download cache at <data>/raw so recordings stay inside the one root (never the
-    repo). Idempotent; returns the cache dir. Call before any MOABB dataset access.
-
-    The path is resolved to an ABSOLUTE native path and asserted — a relative value here is how raw
-    downloads once leaked into the repo as a stray `D-/` dir (a drive-letter mangle). We also persist
-    it to MNE's own config (set_config), not just the env, so a child process can't fall back."""
-    cache = raw_dir().resolve()
-    assert cache.is_absolute(), f"data root must be absolute, got {cache!r} (fix paths.yaml)"
-    cache.mkdir(parents=True, exist_ok=True)
-    native = os.fspath(cache)                          # native Windows path (no forward-slash mangling)
-    os.environ["MNE_DATA"] = native                   # overwrite, don't setdefault — be authoritative
-    os.environ["MOABB_RESULTS"] = os.fspath(processed_dir() / "moabb_results")
-    try:
-        mne.set_config("MNE_DATA", native, set_env=True)
-    except OSError as exc:
-        logger.debug(f"mne.set_config: {exc}")
-    try:
-        set_download_dir(native)
-    except OSError as exc:
-        logger.debug(f"moabb.set_download_dir: {exc}")
-    if os.name == "nt":
-        # ONLY native Windows needs this — a Windows absolute path has a drive colon that MOABB's
-        # buggy sanitizer strips. Under WSL/POSIX the root is '/mnt/<drive>/...' (no colon) so MOABB works
-        # unpatched; that's the zero-patch native path (see to_native_path).
-        _patch_moabb_drive_colon()
-    return cache
-
-
-def _patch_moabb_drive_colon() -> None:
-    """Compat shim for a MOABB *Windows* bug (no upstream fix as of 1.5.0; no config flag avoids it,
-    and no colon-free absolute Windows path exists). MOABB's `_sanitize_path` translates ':' -> '-' over
-    the WHOLE path, clobbering the drive colon ('<drive>:\\...' -> '<drive>-\\...'), so downloads go RELATIVE and
-    leak into the repo cwd (the recurring `D-/`) + re-download every time. We restore a leading drive and
-    sanitize only the rest (behavior-preserving otherwise). Idempotent. TODO: file/track upstream PR."""
-    if getattr(_dl._sanitize_path, "_mindscape_patched", False):
-        return
-    _bad = ':*?"<>|'
-
-    def _safe(path):
-        s = str(path)
-        if len(s) >= _DRIVE_PREFIX_LEN and s[1] == ":" and s[0].isalpha():        # 'D:...' -> keep 'D:', clean rest
-            drive, rest = s[:2], s[2:]
-            return Path(drive + rest.translate({ord(c): "-" for c in _bad}))
-        return Path(s.translate({ord(c): "-" for c in _bad}))
-
-    _safe._mindscape_patched = True
-    _dl._sanitize_path = _safe
+        _safe._mindscape_patched = True
+        _dl._sanitize_path = _safe

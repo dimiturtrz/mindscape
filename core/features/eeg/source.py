@@ -21,7 +21,7 @@ import mne
 import numpy as np
 from pydantic import BaseModel
 
-from core.config import processed_dir
+from core.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ class Source:
         (montage, sfreq, config) and the inverse cached to `processed_dir()/source_operators/<key>-inv.fif`."""
         cfg = cfg or SourceConfig()
         labels = Source.cortical_labels(cfg)
-        cache_dir = processed_dir() / "source_operators"
+        cache_dir = Config.processed_dir() / "source_operators"
         cache_dir.mkdir(parents=True, exist_ok=True)
         inv_path = cache_dir / f"{Source._cache_key(ch_names, sfreq, cfg)}-inv.fif"
         if inv_path.exists():

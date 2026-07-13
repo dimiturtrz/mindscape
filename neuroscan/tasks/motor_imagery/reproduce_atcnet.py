@@ -46,7 +46,7 @@ def main():
     # none:   continuous EMS applied in preprocessing, trainer passes through.
     use_ems = args.standardize == "none"
     logger.info(f"preprocessing ({'continuous EMS' if use_ems else 'bandpass uV + z-score'}) {args.method} ...")
-    X, y, meta = braindecode_pre.get_data("BNCI2014_001", subjects=args.subjects,
+    X, y, meta = braindecode_pre.BraindecodePre.get_data("BNCI2014_001", subjects=args.subjects,
                                           config=BraindecodePreConfig(ems=use_ems))
     logger.info(f"X {X.shape} · sessions {sorted(meta['session'].unique().to_list())}")
 

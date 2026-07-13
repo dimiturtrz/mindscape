@@ -29,7 +29,7 @@ import torch.nn.functional as F
 from pydantic import BaseModel
 from torch import nn
 
-from core.config import REPO, data_root
+from core.config import REPO, Config
 from neuroscan.models.encoders import EncoderSpec, register
 
 _CBRAMOD_ROOT = REPO / "external" / "CBraMod"   # checked out @ 0ff6be91 (MIT); see the fetch step above
@@ -60,7 +60,7 @@ def _load_backbone() -> nn.Module:
         sys.path.insert(0, str(_CBRAMOD_ROOT))
     from models.cbramod import CBraMod  # noqa: PLC0415
 
-    ckpt = data_root("pretrained") / "CBraMod" / "pretrained_weights.pth"
+    ckpt = Config.data_root("pretrained") / "CBraMod" / "pretrained_weights.pth"
     if not ckpt.exists():
         raise FileNotFoundError(f"CBraMod weights not at {ckpt} — see the fetch step in this module's docstring")
     backbone = CBraMod()

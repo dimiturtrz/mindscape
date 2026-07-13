@@ -44,7 +44,7 @@ def main():
     exp = config.load_experiment(args.exp, args.overrides)
     dataset, method, regime = exp.dataset, exp.method, exp.regime
     cfg = FnirsCfg(**exp.recipe)
-    meta = store.load(dataset, cfg)
+    meta = store.Store.load(dataset, cfg)
     n_classes = int(meta["label_id"].max()) + 1
     chance = 1.0 / n_classes
     logger.info(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · "

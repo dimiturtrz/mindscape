@@ -53,12 +53,12 @@ def folds_for(meta, regime: str, test_sessions=()):
     out = []
     if regime == "within":
         for s in sorted(meta["subject"].unique().to_list()):
-            tr, _val, te = splits.within_subject(meta, s, test_sessions=test_sessions)
+            tr, _val, te = splits.Splits.within_subject(meta, s, test_sessions=test_sessions)
             out.append((s, tr, te))
     elif regime == "cross_subject":
-        out.extend(splits.leave_one_subject_out(meta))
+        out.extend(splits.Splits.leave_one_subject_out(meta))
     elif regime == "cross_subject_kfold":
-        out.extend(splits.grouped_kfold(meta, k=5))
+        out.extend(splits.Splits.grouped_kfold(meta, k=5))
     else:
         raise ValueError(f"unknown regime {regime!r} (want within / cross_subject / cross_subject_kfold)")
     return out
@@ -67,8 +67,8 @@ def folds_for(meta, regime: str, test_sessions=()):
 def _fit_score_fold(fold, fit_fn, score_fn):
     """One fold: gather -> fit -> score -> metrics. Returns (name, row, probs, yte, clf)."""
     name, train, test = fold
-    Xtr, ytr = store.gather(train)
-    Xte, yte = store.gather(test)
+    Xtr, ytr = store.Store.gather(train)
+    Xte, yte = store.Store.gather(test)
     clf = fit_fn(Xtr, ytr)
     probs = np.asarray(score_fn(clf, Xte), dtype=float)
     pred = probs.argmax(1)

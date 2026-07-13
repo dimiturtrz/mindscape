@@ -125,8 +125,8 @@ def main():
     if args.trials:
         cfg.n_trials = args.trials
 
-    meta = store.load(cfg.dataset, FnirsCfg())
-    X, y = store.gather(meta)
+    meta = store.Store.load(cfg.dataset, FnirsCfg())
+    X, y = store.Store.gather(meta)
     groups = meta["subject"].to_numpy()
     F, fam = DescriptorBank.extract_bank(X)
     bank = Bank(F, fam, y, groups)

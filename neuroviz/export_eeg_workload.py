@@ -57,12 +57,12 @@ def _epochs(subject: int):
     so the motor-imagery exporter's helpers (which take MNE Epochs) run unchanged on this task."""
     import mne
 
-    names = store.channels(_DATASET, _CFG)
+    names = store.Store.channels(_DATASET, _CFG)
     if not names:
         raise SystemExit(f"no channels.json for {_DATASET} — run `python -m core.data.store --name {_DATASET}`")
-    meta = store.load(_DATASET, _CFG)
+    meta = store.Store.load(_DATASET, _CFG)
     q = meta.filter(meta["subject"] == str(subject))
-    X, y = store.gather(q)                                   # [n, 28, t] float32, y in {0,1,2}
+    X, y = store.Store.gather(q)                                   # [n, 28, t] float32, y in {0,1,2}
     info = mne.create_info(list(names), _CFG.resample or 100.0, "eeg")
     ep = mne.EpochsArray(X.astype(np.float64) * 1e-6, info, tmin=_CFG.tmin, verbose="error")
     ep.set_montage(mne.channels.make_standard_montage("standard_1005"), match_case=False, on_missing="ignore")
@@ -75,12 +75,12 @@ def _predictions(subject: int):
     subject's blocks. Covariance methods read the workload band-power; chance is 1/3."""
     from neuroscan.models import get_method
 
-    meta = store.load(_DATASET, _CFG)
+    meta = store.Store.load(_DATASET, _CFG)
     fit, score = get_method("riemann")
     tr = meta.filter(meta["subject"] != str(subject))
     te = meta.filter(meta["subject"] == str(subject))
-    Xtr, ytr = store.gather(tr)
-    Xte, yte = store.gather(te)
+    Xtr, ytr = store.Store.gather(tr)
+    Xte, yte = store.Store.gather(te)
     probs = np.asarray(score(fit(Xtr, ytr), Xte))
     pred = probs.argmax(1)
     id2lab = {r["label_id"]: r["label"] for r in te.select("label_id", "label").unique().to_dicts()}

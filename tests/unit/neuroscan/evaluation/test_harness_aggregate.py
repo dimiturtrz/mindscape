@@ -32,7 +32,7 @@ def _perfect_method(n_classes):
 
 
 def test_aggregate_fold_mean_and_pooled_perfect_scorer(monkeypatch):
-    monkeypatch.setattr(harness.store, "gather", _stub_gather)
+    monkeypatch.setattr(harness.store.Store, "gather", staticmethod(_stub_gather))
     folds = [_fold("s1", [0, 1, 2, 3]), _fold("s2", [0, 0, 1, 1, 2])]   # unequal fold sizes
     res = harness.aggregate(_perfect_method(4), folds)
 
@@ -48,7 +48,7 @@ def test_aggregate_fold_mean_and_pooled_perfect_scorer(monkeypatch):
 
 
 def test_aggregate_collects_models_out_in_fold_order(monkeypatch):
-    monkeypatch.setattr(harness.store, "gather", _stub_gather)
+    monkeypatch.setattr(harness.store.Store, "gather", staticmethod(_stub_gather))
     folds = [_fold("a", [0, 1]), _fold("b", [1, 0])]
     models: list = []
     harness.aggregate(_perfect_method(2), folds, models_out=models)
