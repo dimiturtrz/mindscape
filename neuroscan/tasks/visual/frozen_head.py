@@ -46,6 +46,7 @@ _FEAT_BATCH = 256     # backbone forward batch for the one-time precompute
 _GRID = 16            # topo_cnn: scalp interpolation grid (H=W)
 _RBF_SIGMA = 0.2      # topo_cnn: RBF interp width on the unit-disk montage
 _NHEAD = 4            # pos_attn: transformer heads (d_model=200 divisible)
+_K_GCN = 8            # gcn: electrode-adjacency kNN degree (each electrode links its 8 nearest)
 
 
 @dataclass
@@ -71,6 +72,7 @@ _ARMS = [
     HeadSpec("flat_mlp", "flat", hidden=1024),     # best geometry-blind (unordered bag of tokens, ~1.2%)
     HeadSpec("pos_attn", "pos_attn", hidden=512),  # geometry: electrode-position embedding + self-attention
     HeadSpec("topo_cnn", "topo", hidden=512),      # geometry: scalp-grid RBF interpolation + 2D CNN (Bashivan)
+    HeadSpec("gcn", "gcn", hidden=512),            # geometry: electrode-adjacency graph message passing (2-layer GCN)
 ]
 
 
@@ -98,6 +100,11 @@ class Head(nn.Module):
                 nn.Conv2d(d, 64, 3, padding=1), nn.GELU(),
                 nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.GELU(), nn.AdaptiveAvgPool2d(1))
             self.mlp = FrozenHead._mlp(64, spec.hidden, spec.dropout)
+        elif spec.pool == "gcn":
+            self.register_buffer("adj", FrozenHead._adjacency(pos))                      # [C, C] normalized Â
+            self.gcn1 = nn.Linear(d, d)
+            self.gcn2 = nn.Linear(d, d)
+            self.mlp = FrozenHead._mlp(d, spec.hidden, spec.dropout)
         else:
             self.mlp = FrozenHead._mlp(n_tok * d if spec.pool == "flat" else d, spec.hidden, spec.dropout)
 
@@ -110,6 +117,10 @@ class Head(nn.Module):
             z = f.flatten(1)
         elif self.pool == "pos_attn":
             z = self.enc(f + self.pos_proj(self.pos)).mean(dim=1)
+        elif self.pool == "gcn":
+            h = F.gelu(self.gcn1(torch.einsum("ck,bkd->bcd", self.adj, f)))              # Â X W₁, propagate+transform
+            h = F.gelu(self.gcn2(torch.einsum("ck,bkd->bcd", self.adj, h)))              # second graph-conv layer
+            z = h.mean(dim=1)                                                            # readout over electrodes
         else:                                                                            # topo
             b, _, d = f.shape
             grid = torch.einsum("hc,bcd->bhd", self.wtopo, f)                            # [B, H·W, d]
@@ -154,6 +165,19 @@ class FrozenHead:
         w = np.exp(-d2 / (2 * _RBF_SIGMA ** 2))
         w = w / (w.sum(1, keepdims=True) + 1e-8)
         return torch.tensor(w, dtype=torch.float32)
+
+    @staticmethod
+    def _adjacency(pos: np.ndarray, k: int = _K_GCN) -> torch.Tensor:
+        """Symmetric-normalized adjacency Â = D^-1/2 (A+I) D^-1/2 [C, C] from a kNN graph over the electrode
+        positions — the fixed message-passing operator for the GCN head (electrode geometry as a graph, so
+        signal mixes between physically-adjacent electrodes)."""
+        d2 = ((pos[:, None, :] - pos[None, :, :]) ** 2).sum(-1)               # [C, C] pairwise sq-distance
+        knn = np.argsort(d2, axis=1)[:, 1:k + 1]                              # k nearest electrodes (exclude self)
+        a = np.zeros_like(d2)
+        np.put_along_axis(a, knn, 1.0, axis=1)
+        a = np.maximum(a, a.T) + np.eye(len(pos))                            # symmetric + self-loops
+        dinv = np.diag(1.0 / np.sqrt(a.sum(1)))
+        return torch.tensor(dinv @ a @ dinv, dtype=torch.float32)
 
     @staticmethod
     @torch.no_grad()
