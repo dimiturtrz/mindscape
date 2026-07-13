@@ -116,14 +116,12 @@ push it down (into `core`), don't invert the arrow.
 fan-in/out / bottleneck / betweenness / cycles via grimp+networkx) **and** a CI **fitness gate**
 (`python -m devtools.graph --assert`) — the *metric* arch axis import-linter's categorical contracts can't
 express. **Blocks** on a god-module (fan-in AND fan-out both > `bottleneck_degree`), an import cycle (SCC>1),
-a god-file (> `file_max`), or **test-mirror** (bd 888, cardioseg's way): a LOGIC module `<pkg>/<path>/foo.py`
-with no strict path-mirror test at `tests/unit/<path>/test_foo.py` — the test tree mirrors the source tree
-method-wise, one home per module (a same-purpose test under a different NAME does not count; rename it to the
-mirror path). One deliberate deviation from pure cardioseg (which exempts only `__init__`/`__main__`):
-coverage-**omitted** shells (runners/adapters/GPU/download/viz glue) are exempt — mindscape has ~35
-genuinely-non-unit-testable shells and forcing a stub test for each violates the no-stubs rule, so the same
-"not logic" set the coverage gate omits is exempt here too (`unmirrored()` reads `[tool.coverage] omit`).
-**Advisory** (logged, never blocks): line-floor + betweenness chokepoint. Thresholds
+a god-file (> `file_max`), or a **test-mirror** gap: a logic module `<pkg>/<path>/foo.py` with no strict
+path-mirror test at `tests/unit/<path>/test_foo.py` (one home per module — a same-purpose test under a
+different name does not count; rename it to the mirror path). Coverage-**omitted** shells (runners/adapters/
+GPU/download/viz glue) are exempt — a non-unit-testable shell has no meaningful mirror and forcing a stub
+violates no-stubs, so the same "not logic" set the coverage gate omits is exempt here too (`unmirrored()`
+reads `[tool.coverage] omit`). **Advisory** (logged, never blocks): line-floor + betweenness chokepoint. Thresholds
 live in `[tool.structure]`, chosen clean against today's graph — they **ratchet only tighter, never relax**.
 Runs in the CI `tests` job (needs the `[devtools]` extra).
 
