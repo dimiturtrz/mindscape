@@ -23,7 +23,7 @@ from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 
 from baselines.fnirs.features import FnirsLda
 from core.data import store
-from core.data.fnirs.augment import Augment, AugConfig
+from core.data.fnirs.augment import AugConfig, Augment
 from core.data.fnirs.base import FnirsCfg
 from neuroscan.evaluation import metrics
 

@@ -15,7 +15,7 @@ import logging
 import numpy as np
 from scipy.signal import fftconvolve
 
-from core.data.fnirs.synthetic import Synthetic, SynthConfig
+from core.data.fnirs.synthetic import SynthConfig, Synthetic
 from core.features.fnirs.chromophore import Chromophore
 from core.features.fusion.coupling import Coupling
 

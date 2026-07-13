@@ -22,9 +22,9 @@ import logging
 from pathlib import Path
 
 from core import config
-from core.reference import Reference
 from core.data import store
 from core.data.eeg.base import EpochCfg
+from core.reference import Reference
 from neuroscan import models
 from neuroscan.evaluation import harness, modelcard, results
 

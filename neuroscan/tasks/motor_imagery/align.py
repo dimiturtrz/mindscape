@@ -38,10 +38,10 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 from baselines.eeg import transfer
 from core import config
-from core.reference import Reference
 from core.data import splits, store
 from core.data.eeg.base import EpochCfg
 from core.features import Covariance
+from core.reference import Reference
 from neuroscan import tracking
 from neuroscan.evaluation import metrics, results
 

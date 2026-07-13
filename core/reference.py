@@ -3,6 +3,7 @@ read against the literature, never in a vacuum. Cite, don't chase (rigor rule).
 """
 from __future__ import annotations
 
+import argparse
 import logging
 
 from omegaconf import OmegaConf
@@ -42,7 +43,6 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     for lib_name in ("mne", "moabb", "braindecode"):
         logging.getLogger(lib_name).setLevel(logging.WARNING)
-    import argparse
     ap = argparse.ArgumentParser(description="print reference ceilings")
     ap.add_argument("--dataset", default="bnci2014_001")
     ap.add_argument("--regime", default="within_subject")
