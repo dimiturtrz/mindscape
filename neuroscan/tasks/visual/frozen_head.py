@@ -6,13 +6,15 @@ LINEAR probe hit chance (0.63%), but that was a LAZY head (mean-pool → linear)
 features are capped. This asks the real question: can a well-engineered head on the SAME frozen features reach
 the fine-tuned number — cheaply?
 
-Speed comes from precomputing CBraMod's frozen token grid ONCE (backbone eval, no grad) and caching it in RAM;
-every head then trains on cached features at seconds/epoch (no backbone forward per step), so many head
-architectures are swept in one run. The backbone emits `[B, C, S, d]`; at 200 Hz / 1.0 s the epoch is a single
-200-point patch (S=1), so the tokens are the 63 channel embeddings — the head's job is to pool + map them to
-CLIP space.
+Speed comes from precomputing the backbone's frozen token grid ONCE (eval, no grad) and caching it to DISK
+(keyed by backbone/split/subject-set under <data>/cache); every head then trains on cached features at
+seconds/epoch (no backbone forward per step), and a REUSED sweep loads the cache in seconds — no mne, no GPU
+backbone pass. `--backbone` selects the frozen model via `Foundation.load_backbone` (the swap seam, bd m69x):
+CBraMod emits `[B, C, S, d]` and at 200 Hz / 1.0 s the epoch is a single 200-point patch (S=1), so the tokens
+are the 63 channel embeddings — the head pools + maps them to CLIP space. A finer-patching backbone gives S>1
+(the sub-patch temporal timing CBraMod's single patch buries).
 
-    python -m neuroscan.tasks.visual.frozen_head --train 1 2 3 4 --test 5
+    python -m neuroscan.tasks.visual.frozen_head --train 1 2 3 4 --test 5 --backbone cbramod
 
 Each arm is matched (same cached features, same InfoNCE + leak-free val); compare single-trial top-1 to the
 frozen-probe floor (mean_lin ~0.6%) and the fine-tune reference (2.38%). A head that clears NICE (~1.6%) frozen
@@ -31,16 +33,15 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from core.config import Config
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.montage import EegMontage
-from neuroscan.models.foundation import Foundation
+from neuroscan.models.foundation import Foundation, LoadedBackbone
 from neuroscan.models.nice import Nice
 from neuroscan.tasks.visual import clip_targets
 
 logger = logging.getLogger(__name__)
 
-_PATCH = 200          # CBraMod points/patch — implies 200 Hz epochs
-_RESAMPLE = 200.0
 _EMBED = 512          # CLIP dim
 _FEAT_BATCH = 256     # backbone forward batch for the one-time precompute
 _GRID = 16            # topo_cnn: scalp interpolation grid (H=W)
@@ -181,16 +182,17 @@ class FrozenHead:
 
     @staticmethod
     @torch.no_grad()
-    def _features(backbone, eeg: np.ndarray, device: str) -> torch.Tensor:
-        """Frozen CBraMod token grid for every epoch, `[N, C·S, d]` float16 on CPU (the one-time cost)."""
+    def _features(module: nn.Module, patch_points: int, eeg: np.ndarray, device: str) -> torch.Tensor:
+        """Frozen token grid for every epoch, `[N, C·S, d]` float16 on CPU (the one-time cost). `patch_points`
+        comes from the backbone (CBraMod 200 -> S=1 on a 1s epoch); a finer-patching backbone gives S>1."""
         out = []
         for i in range(0, len(eeg), _FEAT_BATCH):
             x = torch.tensor(eeg[i:i + _FEAT_BATCH]).to(device)
             b, c, t = x.shape
-            s = t // _PATCH
-            x = x[:, :, :s * _PATCH]
+            s = t // patch_points
+            x = x[:, :, :s * patch_points]
             x = (x - x.mean(-1, keepdim=True)) / (x.std(-1, keepdim=True) + 1e-6)   # match foundation.forward
-            feats = backbone(x.reshape(b, c, s, _PATCH))                            # [B, C, S, d]
+            feats = module(x.reshape(b, c, s, patch_points))                       # [B, C, S, d]
             out.append(feats.reshape(b, c * s, feats.shape[-1]).half().cpu())
         return torch.cat(out)
 
@@ -212,26 +214,56 @@ class FrozenHead:
         return ~mask, mask, np.array([remap[c] for c in concept[mask]]), bank
 
     @staticmethod
-    def _build_cache(train_subjects: list[int], test_subject: int, device: str) -> Cache:
-        backbone = Foundation._load_backbone().to(device).eval()
-        for p in backbone.parameters():
+    def _cache_path(backbone: str, subjects: list[int], split: str) -> Path:
+        """One home per (backbone, split, subject-set) frozen-feature blob, out-of-repo under <data>/cache."""
+        subj = "-".join(str(s) for s in sorted(subjects))
+        return Config.data_root("cache") / "frozen_features" / f"{backbone}__{split}__{subj}.pt"
+
+    @staticmethod
+    def _loaded(backbone: str, device: str) -> LoadedBackbone:
+        """Load + freeze a backbone onto `device` (only called on a cache miss — a full sweep off the cache
+        never touches the backbone)."""
+        lb = Foundation.load_backbone(backbone)
+        module = lb.module.to(device).eval()
+        for p in module.parameters():
             p.requires_grad = False
-        tr_eeg, tr_concept, tr_files, _ = FrozenHead._load(train_subjects, "training")
-        te_eeg, te_concept, _, _ = FrozenHead._load([test_subject], "test")
-        logger.info(f"precompute: train {tr_eeg.shape} · test {te_eeg.shape}")
-        tr_feat = FrozenHead._features(backbone, tr_eeg, device)
-        test_feat = FrozenHead._features(backbone, te_eeg, device)
+        return LoadedBackbone(module, lb.patch_points, lb.d_model, lb.sample_rate, lb.name)
+
+    @staticmethod
+    def _split_features(path: Path, subjects: list[int], split: str, loaded: LoadedBackbone | None,
+                        device: str) -> tuple[torch.Tensor, np.ndarray, np.ndarray]:
+        """Frozen features + (concept, files) for one split — from the disk cache if present (skips the eeg
+        load AND the backbone forward), else compute through `loaded` and persist. Cache holds the
+        backbone-independent concept/files too, so a reused sweep needs neither mne nor the GPU."""
+        if path.exists():
+            blob = torch.load(path, weights_only=False)   # our own cache (feat tensor + numpy concept/files)
+            logger.info(f"cache hit {path.name}: {tuple(blob['feat'].shape)}")
+            return blob["feat"], blob["concept"], blob["files"]
+        eeg, concept, files, _ = FrozenHead._load(subjects, split, loaded.sample_rate)
+        feat = FrozenHead._features(loaded.module, loaded.patch_points, eeg, device)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save({"feat": feat, "concept": concept, "files": files}, path)
+        logger.info(f"cached {path.name}: {tuple(feat.shape)} (float16)")
+        return feat, concept, files
+
+    @staticmethod
+    def _build_cache(train_subjects: list[int], test_subject: int, device: str,
+                     backbone: str = "cbramod") -> Cache:
+        tr_path = FrozenHead._cache_path(backbone, train_subjects, "training")
+        te_path = FrozenHead._cache_path(backbone, [test_subject], "test")
+        loaded = None if (tr_path.exists() and te_path.exists()) else FrozenHead._loaded(backbone, device)
+        tr_feat, tr_concept, tr_files = FrozenHead._split_features(tr_path, train_subjects, "training", loaded, device)
+        test_feat, te_concept, _ = FrozenHead._split_features(te_path, [test_subject], "test", loaded, device)
         tr_tgt = torch.tensor(FrozenHead._clip_targets(tr_files, "training"))
         test_bank = torch.tensor(clip_targets.ClipTargets.concept_prototypes("test"))
         pos = EegMontage.eeg_positions(things.ThingsEeg2.channels())   # [C, 2], same channel order as the features
-        logger.info(f"features: train {tuple(tr_feat.shape)} · test {tuple(test_feat.shape)} (float16, RAM)")
         return Cache(tr_feat, tr_tgt, tr_concept, test_feat, te_concept, test_bank,
                      n_tok=tr_feat.shape[1], d=tr_feat.shape[2], pos=pos)
 
     @staticmethod
-    def _load(subjects: list[int], split: str):
+    def _load(subjects: list[int], split: str, sample_rate: float):
         eeg, concept, files, meta = things.ThingsEeg2.get_epochs(
-            subjects, things.ThingsEpochCfg(split=split, resample=_RESAMPLE), n_jobs=4)
+            subjects, things.ThingsEpochCfg(split=split, resample=sample_rate), n_jobs=4)
         return eeg, concept, files, meta
 
     @staticmethod
@@ -284,6 +316,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--train", type=int, nargs="+", default=[1, 2, 3, 4])
     ap.add_argument("--test", type=int, default=5)
+    ap.add_argument("--backbone", default="cbramod", help="frozen backbone (registry name in Foundation.load_backbone)")
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--seed", type=int, default=0)
@@ -291,10 +324,10 @@ def main():
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    cache = FrozenHead._build_cache(args.train, args.test, device)
+    cache = FrozenHead._build_cache(args.train, args.test, device, args.backbone)
     fit = FitCfg(epochs=args.epochs, lr=args.lr, seed=args.seed)
-    logger.info(f"\nhead sweep · train={args.train} test={args.test} · {args.epochs}ep lr{args.lr} · "
-                f"chance {1 / (int(cache.test_concept.max()) + 1):.3f}")
+    logger.info(f"\nhead sweep · backbone={args.backbone} train={args.train} test={args.test} · "
+                f"{args.epochs}ep lr{args.lr} · chance {1 / (int(cache.test_concept.max()) + 1):.3f}")
     results = []
     for spec in _ARMS:
         r = FrozenHead._train_arm(spec, cache, device, fit)
@@ -303,7 +336,8 @@ def main():
                     f"single {s[1]*100:.2f}%/{s[5]*100:.2f}%  concept {a[1]*100:.2f}%/{a[5]*100:.2f}%")
         results.append(r)
     if args.out:
-        Path(args.out).write_text(json.dumps({"train": args.train, "test": args.test, "arms": results}, indent=2))
+        Path(args.out).write_text(json.dumps(
+            {"backbone": args.backbone, "train": args.train, "test": args.test, "arms": results}, indent=2))
 
 
 if __name__ == "__main__":

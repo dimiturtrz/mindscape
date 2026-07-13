@@ -23,6 +23,7 @@ Backbone checked out (not vendored) under `external/CBraMod`; pretrained weights
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import torch
@@ -36,6 +37,18 @@ if TYPE_CHECKING:
     from neuroscan.models.encoder_spec import EncoderSpec
 
 _CBRAMOD_ROOT = REPO / "external" / "CBraMod"   # checked out @ 0ff6be91 (MIT); see the fetch step above
+
+
+@dataclass
+class LoadedBackbone:
+    """A frozen foundation backbone ready for feature extraction: the module (emits a `[B, C, S, d]` token
+    grid), plus the checkpoint-fixed geometry a caller needs to feed it — `patch_points`/`sample_rate` set S
+    for a 1s epoch (CBraMod: 200/200 -> S=1), `d_model` the token width. `name` keys the on-disk feature cache."""
+    module: nn.Module
+    patch_points: int
+    d_model: int
+    sample_rate: float
+    name: str
 
 
 class FoundationConfig(BaseModel):
@@ -115,6 +128,21 @@ class Foundation:
     """CBraMod backbone loading + the encoder builders — the free helpers folded in as staticmethods (public
     names kept). The builders are registered lazily by `encoders.EncoderRegistry` (one registration home, no
     import-time side effects), so importing this module registers nothing on its own."""
+
+    @staticmethod
+    def load_backbone(name: str = "cbramod") -> LoadedBackbone:
+        """Resolve a frozen backbone by name -> a `LoadedBackbone` (module + patch/rate/d_model geometry). The
+        seam the frozen-head loop swaps on: a new foundation model is one entry here, not a fork of the runner.
+        Backbones point DOWN to their loader; the runner stays backbone-agnostic (bd m69x.1)."""
+        builders = {"cbramod": Foundation._loaded_cbramod}
+        if name not in builders:
+            raise KeyError(f"unknown backbone {name!r} — registered: {sorted(builders)}")
+        return builders[name]()
+
+    @staticmethod
+    def _loaded_cbramod() -> LoadedBackbone:
+        return LoadedBackbone(Foundation._load_backbone(), patch_points=200, d_model=200,
+                              sample_rate=200.0, name="cbramod")
 
     @staticmethod
     def _load_backbone() -> nn.Module:
