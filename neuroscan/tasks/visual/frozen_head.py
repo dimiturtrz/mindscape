@@ -263,6 +263,7 @@ def main():
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--topo-sweep", action="store_true", help="sweep topo grid×sigma instead of the head zoo")
+    ap.add_argument("--only", default=None, help="run only arms whose name contains this substring (e.g. g24_s02)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -270,6 +271,8 @@ def main():
     cache = FrozenHead._build_cache(args.train, args.test, device, args.backbone)
     fit = FitCfg(epochs=args.epochs, lr=args.lr, seed=args.seed)
     arms = FrozenHead._topo_arms() if args.topo_sweep else _ARMS
+    if args.only:
+        arms = [a for a in arms if args.only in a.name]
     logger.info(f"\nhead sweep · backbone={args.backbone} train={args.train} test={args.test} · "
                 f"{args.epochs}ep lr{args.lr} · chance {1 / (int(cache.test_concept.max()) + 1):.3f}")
     results = []
