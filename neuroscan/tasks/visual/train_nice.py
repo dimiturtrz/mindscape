@@ -41,6 +41,7 @@ from neuroscan.models.nice import Nice, SubjectDiscriminator
 from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tasks.visual.sampling import BatchSpec, Sampling
+from neuroscan.tracking import Tracking
 
 logger = logging.getLogger(__name__)
 
@@ -282,8 +283,7 @@ class TrainNice:
                    if cfg.adv_lambda_ramp else cfg.adv_lambda)
             steps = TrainNice._epoch_steps(fit_data, neighbor_groups, cfg, rng, epoch_n)
             encoder.train()
-            total_loss, n_batches = 0.0, 0
-            epoch_start = time.perf_counter()
+            total_loss, n_batches, epoch_start = 0.0, 0, time.perf_counter()
             for eeg_batch, target_batch, subj_batch in steps:
                 eeg_batch = eeg_batch.to(device)
                 target_batch = torch.nn.functional.normalize(target_batch.to(device), dim=-1)
@@ -309,6 +309,8 @@ class TrainNice:
                     best_state = {k: v.detach().cpu().clone() for k, v in encoder.state_dict().items()}
                 else:
                     since_improved += 1
+                Tracking.metrics({"loss": total_loss / max(1, n_batches), "val_top1": val_top1,
+                                  "sec_per_epoch": train_s}, step=epoch)   # per-epoch curve + speed in mlflow
                 if epoch % 5 == 0 or epoch == cfg.epochs - 1:
                     eta = (time.perf_counter() - run_start) / (epoch + 1) * (cfg.epochs - epoch - 1)
                     logger.info(f"ep {epoch:3d}  loss {total_loss / max(1, n_batches):.3f}  "
@@ -341,9 +343,17 @@ class TrainNice:
         logger.info(f"train {train_eeg.shape} -> CLIP {train_targets.shape} | "
               f"test {test_eeg.shape} ({int(test_concept.max())+1} concepts)")
 
-        encoder, stats = TrainNice.train_encoder(
-            TrainData(train_eeg, train_targets, train_concept, subj_idx), cfg, device)
-        test = TrainNice.evaluate(encoder, RetrievalSet(test_eeg, test_concept, test_bank), device)
+        params = {"model": cfg.model, "regime": regime, "train": train_subjects, "test": test_subject,
+                  "epochs": cfg.epochs, "lr": cfg.lr, "resample": cfg.resample, "seed": cfg.seed}
+        tags = {"task": "perception-nice", "train": train_subjects, "test": test_subject}
+        with Tracking.run("mindscape-perception", f"{cfg.model}_{regime}_test{test_subject}_s{cfg.seed}",
+                          params=params, tags=tags):
+            encoder, stats = TrainNice.train_encoder(
+                TrainData(train_eeg, train_targets, train_concept, subj_idx), cfg, device)
+            test = TrainNice.evaluate(encoder, RetrievalSet(test_eeg, test_concept, test_bank), device)
+            s, a = test["single_trial"], test["concept_avg"]
+            Tracking.metrics({"test_single_top1": s[1], "test_single_top5": s[5],
+                              "test_concept_top1": a[1], "test_concept_top5": a[5], "best_val_top1": stats["val_top1"]})
         result = {"regime": regime, "train": train_subjects, "test": test_subject, **stats,
                   "chance_top1": 1 / (int(test_concept.max()) + 1), **test}
         Invariants.check(result)                               # fail loud on a silently-inconsistent number
