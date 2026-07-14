@@ -48,6 +48,9 @@ if TYPE_CHECKING:
 
 _CBRAMOD_ROOT = REPO / "external" / "CBraMod"   # checked out @ 0ff6be91 (MIT); see the fetch step above
 _EEGPT_MODELS = REPO / "external" / "EEGPT" / "downstream" / "Modules" / "models"   # checked out @ a0e0a8f (Apache-2.0)
+_EEGPT_PATCH = 64          # EEGPT points/patch (checkpoint-fixed); 0.25 s at its rate
+_EEGPT_RATE = 256          # EEGPT's native sample rate (checkpoint-fixed); the epoch is the 1 s THINGS stimulus
+_EEGPT_EPOCH_S = 1.0       # -> feed n_time = rate × epoch seconds; resample data to the same rate (kept in sync)
 
 
 @dataclass
@@ -88,7 +91,7 @@ class EegptBackbone(Backbone):
     summary tokens per time-patch — so the axes are (time-patch, summary), NOT electrodes: token heads
     (mean/flat/attn) apply, geometry heads do not."""
 
-    _N_TIME = 256          # 1 s @ 256 Hz -> 4 time-patches at patch 64 (stride 64); overlap -> more (grow-N)
+    _N_TIME = round(_EEGPT_RATE * _EEGPT_EPOCH_S)   # samples fed to the encoder (-> 4 patches at stride 64)
 
     def __init__(self, channel_names: list[str], patch_stride: int | None = None):
         super().__init__()
@@ -117,8 +120,8 @@ class Foundation:
         a new foundation model is one entry here, not a fork of the runner. `channel_names` feeds a montage
         adapter (EEGPT needs it to map channels to its CHANNEL_DICT; CBraMod ignores it)."""
         builders = {"cbramod": lambda: Foundation._loaded_cbramod(),
-                    "eegpt": lambda: Foundation._loaded_eegpt(channel_names, None, "eegpt"),
-                    "eegpt_ov": lambda: Foundation._loaded_eegpt(channel_names, 32, "eegpt_ov")}
+                    "eegpt": lambda: Foundation._loaded_eegpt(channel_names, 0.0, "eegpt"),
+                    "eegpt_ov": lambda: Foundation._loaded_eegpt(channel_names, 0.5, "eegpt_ov")}
         if name not in builders:
             raise KeyError(f"unknown backbone {name!r} — registered: {sorted(builders)}")
         return builders[name]()
@@ -128,14 +131,15 @@ class Foundation:
         return LoadedBackbone(CBraModBackbone(), patch_points=200, d_model=200, sample_rate=200.0, name="cbramod")
 
     @staticmethod
-    def _loaded_eegpt(channel_names: list[str] | None, patch_stride: int | None, name: str) -> LoadedBackbone:
-        """`eegpt` = non-overlapping patches (stride 64 -> N=4 on 1s); `eegpt_ov` = 50%-overlap (stride 32 ->
-        N=7), the grow-N arm (50% is the conventional overlap; more is aggressively OOD vs the non-overlap
-        pretraining). `name` keys the feature cache so the two never collide."""
+    def _loaded_eegpt(channel_names: list[str] | None, overlap: float, name: str) -> LoadedBackbone:
+        """`overlap` = fraction of a patch shared with the next (0.0 = non-overlapping, stride = patch -> N=4 on
+        1s; 0.5 = the conventional 50% overlap -> N=7). Stride is DERIVED from the patch size, so it tracks the
+        checkpoint's patch if that ever changes. `name` keys the feature cache so the variants never collide."""
         if channel_names is None:
             raise ValueError("eegpt needs channel_names for its montage adapter (map to EEGPT's CHANNEL_DICT)")
-        return LoadedBackbone(EegptBackbone(channel_names, patch_stride), patch_points=64, d_model=512,
-                              sample_rate=256.0, name=name)
+        stride = None if overlap == 0.0 else round(_EEGPT_PATCH * (1.0 - overlap))
+        return LoadedBackbone(EegptBackbone(channel_names, stride), patch_points=_EEGPT_PATCH, d_model=512,
+                              sample_rate=float(_EEGPT_RATE), name=name)
 
     @staticmethod
     def _load_eegpt_encoder(n_time: int, patch_stride: int | None = None):
@@ -149,8 +153,8 @@ class Foundation:
         ckpt = Config.data_root("pretrained") / "EEGPT" / "eegpt_mcae_58chs_4s_large4E.ckpt"
         if not ckpt.exists():
             raise FileNotFoundError(f"EEGPT weights not at {ckpt} — see the fetch step in this module's docstring")
-        encoder = EEGTransformer(img_size=(58, n_time), patch_size=64, patch_stride=patch_stride, embed_dim=512,
-                                 embed_num=4, depth=8, num_heads=8, mlp_ratio=4.0,
+        encoder = EEGTransformer(img_size=(58, n_time), patch_size=_EEGPT_PATCH, patch_stride=patch_stride,
+                                 embed_dim=512, embed_num=4, depth=8, num_heads=8, mlp_ratio=4.0,
                                  norm_layer=partial(nn.LayerNorm, eps=1e-6))
         state = torch.load(ckpt, map_location="cpu", weights_only=False)
         state = state.get("state_dict", state)
