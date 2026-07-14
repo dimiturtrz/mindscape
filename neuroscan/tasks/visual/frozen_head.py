@@ -103,25 +103,15 @@ class FrozenHead:
                 for g in _TOPO_GRIDS for s in _TOPO_SIGMAS]
 
     @staticmethod
-    def _grid(feat: torch.Tensor, n_channels: int) -> torch.Tensor:
-        """Cached tokens `[B, C·S, d]` -> `[B, C, S, d]` (the composite Head input). S = tokens / C."""
-        b, n_tok, d = feat.shape
-        return feat.reshape(b, n_channels, n_tok // n_channels, d)
-
-    @staticmethod
     @torch.no_grad()
-    def _features(module: nn.Module, patch_points: int, eeg: np.ndarray, device: str) -> torch.Tensor:
-        """Frozen token grid for every epoch, `[N, C·S, d]` float16 on CPU (the one-time cost). `patch_points`
-        comes from the backbone (CBraMod 200 -> S=1 on a 1s epoch); a finer-patching backbone gives S>1."""
+    def _features(module: nn.Module, eeg: np.ndarray, device: str) -> torch.Tensor:
+        """Frozen token grid for every epoch, `[N, C, S, d]` float16 on CPU (the one-time cost). The composite
+        Backbone owns its own patching + normalization, so a raw `[B, C, T]` epoch goes straight in — CBraMod
+        gives S=1, a finer-patching backbone (EEGPT) gives S>1."""
         out = []
         for i in range(0, len(eeg), _FEAT_BATCH):
             x = torch.tensor(eeg[i:i + _FEAT_BATCH]).to(device)
-            b, c, t = x.shape
-            s = t // patch_points
-            x = x[:, :, :s * patch_points]
-            x = (x - x.mean(-1, keepdim=True)) / (x.std(-1, keepdim=True) + 1e-6)   # match foundation.forward
-            feats = module(x.reshape(b, c, s, patch_points))                       # [B, C, S, d]
-            out.append(feats.reshape(b, c * s, feats.shape[-1]).half().cpu())
+            out.append(module(x).half().cpu())                                     # [B, C, S, d]
         return torch.cat(out)
 
     @staticmethod
@@ -150,8 +140,8 @@ class FrozenHead:
     @staticmethod
     def _loaded(backbone: str, device: str) -> LoadedBackbone:
         """Load + freeze a backbone onto `device` (only called on a cache miss — a full sweep off the cache
-        never touches the backbone)."""
-        lb = Foundation.load_backbone(backbone)
+        never touches the backbone). Passes the montage channel names for the backbone's adapter (EEGPT)."""
+        lb = Foundation.load_backbone(backbone, channel_names=things.ThingsEeg2.channels())
         module = lb.module.to(device).eval()
         for p in module.parameters():
             p.requires_grad = False
@@ -168,7 +158,7 @@ class FrozenHead:
             logger.info(f"cache hit {path.name}: {tuple(blob['feat'].shape)}")
             return blob["feat"], blob["concept"], blob["files"]
         eeg, concept, files, _ = FrozenHead._load(subjects, split, loaded.sample_rate)
-        feat = FrozenHead._features(loaded.module, loaded.patch_points, eeg, device)
+        feat = FrozenHead._features(loaded.module, eeg, device)
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save({"feat": feat, "concept": concept, "files": files}, path)
         logger.info(f"cached {path.name}: {tuple(feat.shape)} (float16)")
@@ -186,7 +176,7 @@ class FrozenHead:
         test_bank = torch.tensor(clip_targets.ClipTargets.concept_prototypes("test"))
         pos = EegMontage.eeg_positions(things.ThingsEeg2.channels())   # [C, 2], same channel order as the features
         return Cache(tr_feat, tr_tgt, tr_concept, test_feat, te_concept, test_bank,
-                     d=tr_feat.shape[2], pos=pos)
+                     d=tr_feat.shape[-1], pos=pos)
 
     @staticmethod
     def _load(subjects: list[int], split: str, sample_rate: float):
@@ -196,11 +186,11 @@ class FrozenHead:
 
     @staticmethod
     @torch.no_grad()
-    def _retrieval(head, eval_set: _EvalSet, device: str, n_channels: int) -> dict:
+    def _retrieval(head, eval_set: _EvalSet, device: str) -> dict:
         head.eval()
         feat, concept, bank = eval_set.feat, eval_set.concept, eval_set.bank
-        emb = torch.cat([F.normalize(head(FrozenHead._grid(feat[i:i + 4096].float().to(device), n_channels)),
-                                     dim=-1).cpu() for i in range(0, len(feat), 4096)])   # composite head, then L2
+        emb = torch.cat([F.normalize(head(feat[i:i + 4096].float().to(device)), dim=-1).cpu()
+                         for i in range(0, len(feat), 4096)])   # [B,C,S,d] straight into the composite head, then L2
         labels = torch.tensor(concept)
         single = Nice.retrieval_topk(emb, bank, labels)
         n = int(concept.max()) + 1
@@ -214,8 +204,8 @@ class FrozenHead:
             cache.tr_concept, cache.tr_tgt.numpy(), cfg.seed, 0.1)
         fit_idx = np.where(fit_mask)[0]
         val_feat, val_bank_t = cache.tr_feat[val_mask], torch.tensor(val_bank)
-        n_channels = len(cache.pos)
-        head = Heads.build(spec, cache.d, cache.pos, n_tok=cache.tr_feat.shape[1]).to(device)
+        n_tok = cache.tr_feat.shape[1] * cache.tr_feat.shape[2]   # C·S tokens (for the flat head's MLP in-dim)
+        head = Heads.build(spec, cache.d, cache.pos, n_tok=n_tok).to(device)
         logit_scale = nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
         opt = torch.optim.AdamW([*head.parameters(), logit_scale], lr=cfg.lr, weight_decay=1e-4)
         rng = np.random.default_rng(cfg.seed)
@@ -227,7 +217,7 @@ class FrozenHead:
             total_loss, n_batches = 0.0, 0
             for i in range(0, len(perm) - 512, 512):
                 idx = perm[i:i + 512]
-                g = FrozenHead._grid(cache.tr_feat[idx].float().to(device), n_channels)
+                g = cache.tr_feat[idx].float().to(device)         # [B, C, S, d] straight into the head
                 tgt = F.normalize(cache.tr_tgt[idx].to(device), dim=-1)
                 opt.zero_grad()
                 loss = Nice.clip_infonce(F.normalize(head(g), dim=-1), tgt, logit_scale.exp().clamp(max=100))
@@ -236,7 +226,7 @@ class FrozenHead:
                 total_loss += loss.item()
                 n_batches += 1
             val_set = _EvalSet(val_feat, val_lab, val_bank_t)
-            val_top1 = FrozenHead._retrieval(head, val_set, device, n_channels)["single_trial"][1]
+            val_top1 = FrozenHead._retrieval(head, val_set, device)["single_trial"][1]
             if val_top1 > best_val:
                 best_val, best_ep = val_top1, ep
                 best_state = {k: v.detach().cpu().clone() for k, v in head.state_dict().items()}
@@ -248,8 +238,7 @@ class FrozenHead:
                 logger.info(f"    {spec.name} ep {ep:2d}/{cfg.epochs}  loss {total_loss / max(1, n_batches):.3f}  "
                             f"val-top1 {val_top1*100:.2f}%  {elapsed:.0f}s  ~{eta:.0f}s left")
         head.load_state_dict(best_state)
-        test = FrozenHead._retrieval(head, _EvalSet(cache.test_feat, cache.test_concept, cache.test_bank),
-                                     device, n_channels)
+        test = FrozenHead._retrieval(head, _EvalSet(cache.test_feat, cache.test_concept, cache.test_bank), device)
         return {"arm": spec.name, "best_val_epoch": best_ep, "val_top1": best_val, **test}
 
 
@@ -275,6 +264,13 @@ def main():
     arms = FrozenHead._topo_arms() if args.topo_sweep else _ARMS
     if args.only:
         arms = [a for a in arms if args.only in a.name]
+    if cache.tr_feat.shape[1] != len(cache.pos):    # grid axis isn't electrodes (e.g. EEGPT time-patches)
+        geo = {"pos_attn", "topo", "gcn"}
+        skipped = [a.name for a in arms if a.pool in geo]
+        arms = [a for a in arms if a.pool not in geo]
+        if skipped:
+            logger.info(f"skipping geometry heads (grid C={cache.tr_feat.shape[1]} != {len(cache.pos)} "
+                        f"electrodes): {skipped}")
     logger.info(f"\nhead sweep · backbone={args.backbone} train={args.train} test={args.test} · "
                 f"{args.epochs}ep lr{args.lr} · chance {1 / (int(cache.test_concept.max()) + 1):.3f}")
     results = []

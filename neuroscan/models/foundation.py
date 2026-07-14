@@ -19,11 +19,22 @@ Backbone checked out (not vendored) under `external/CBraMod`; pretrained weights
     git -C external/CBraMod checkout 0ff6be918985689e7df679bc731ffb70e6c6224f   # MIT
     # then download to <data_root>/pretrained/CBraMod/pretrained_weights.pth :
     #   https://huggingface.co/weighting666/CBraMod/resolve/main/pretrained_weights.pth
+
+**EEGPT** (Wang et al., NeurIPS 2024 — an autoregressive/summary-token transformer, patch 64 pts at **256 Hz**
+= 0.25 s/patch, so a 1 s epoch is S=4 time-patches, escaping CBraMod's S=1) is the second frozen backbone
+(bd m69x.3). Its encoder FUSES channels into `embed_num=4` summary tokens per time-patch, so it emits
+`[B, N_time, embed_num, d=512]` — NOT a per-electrode grid: the geometry heads don't apply to it. Reproduce:
+
+    git clone https://github.com/BINE022/EEGPT external/EEGPT
+    git -C external/EEGPT checkout a0e0a8f                                     # Apache-2.0
+    # pretrained backbone (figshare, CC BY 4.0) -> <data_root>/pretrained/EEGPT/eegpt_mcae_58chs_4s_large4E.ckpt
+    #   article: https://figshare.com/articles/code/EEGPT_checkpoints/25866970  (the 'EEGPT/checkpoint/' file)
 """
 from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING
 
 import torch
@@ -36,6 +47,7 @@ if TYPE_CHECKING:
     from neuroscan.models.encoder_spec import EncoderSpec
 
 _CBRAMOD_ROOT = REPO / "external" / "CBraMod"   # checked out @ 0ff6be91 (MIT); see the fetch step above
+_EEGPT_MODELS = REPO / "external" / "EEGPT" / "downstream" / "Modules" / "models"   # checked out @ a0e0a8f (Apache-2.0)
 
 
 @dataclass
@@ -56,10 +68,9 @@ class CBraModBackbone(Backbone):
 
     def __init__(self):
         super().__init__()
-        lb = Foundation.load_backbone("cbramod")
-        self.module = lb.module
-        self.patch_points = lb.patch_points
-        self.d_model = lb.d_model
+        self.module = Foundation._load_backbone()                 # raw CBraMod (consumes pre-patched input)
+        self.patch_points = 200
+        self.d_model = 200
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, t = x.shape
@@ -70,25 +81,77 @@ class CBraModBackbone(Backbone):
         return self.module(x.reshape(b, c, s, p))                 # [B, C, S, d_model]
 
 
+class EegptBackbone(Backbone):
+    """EEGPT as a `composite.Backbone`: `[B, C, T]` (256 Hz) -> `[B, N_time, embed_num, d=512]`. Subsets our
+    montage to the 58 channels EEGPT knows (its `CHANNEL_DICT`; the 5 missing edge channels are dropped),
+    per-channel z-scores, and runs the frozen EEGTransformer. The encoder fuses channels into `embed_num`
+    summary tokens per time-patch — so the axes are (time-patch, summary), NOT electrodes: token heads
+    (mean/flat/attn) apply, geometry heads do not."""
+
+    _N_TIME = 256          # 1 s @ 256 Hz -> 4 time-patches at patch 64
+
+    def __init__(self, channel_names: list[str]):
+        super().__init__()
+        module, chan_dict = Foundation._load_eegpt_encoder(self._N_TIME)
+        self.module = module
+        self.d_model = 512
+        keep = [i for i, ch in enumerate(channel_names) if ch.upper().strip(".") in chan_dict]
+        self.register_buffer("keep", torch.tensor(keep, dtype=torch.long))
+        self.register_buffer("chan_ids", module.prepare_chan_ids([channel_names[i] for i in keep]))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x[:, self.keep, :]                                    # -> the 58 EEGPT channels
+        x = (x - x.mean(-1, keepdim=True)) / (x.std(-1, keepdim=True) + 1e-6)   # per-channel z-score (assumed norm)
+        return self.module(x, chan_ids=self.chan_ids)            # [B, N_time, embed_num, d]
+
+
 class Foundation:
     """CBraMod backbone loading + the encoder builders — the free helpers folded in as staticmethods (public
     names kept). The builders are registered lazily by `encoders.EncoderRegistry` (one registration home, no
     import-time side effects), so importing this module registers nothing on its own."""
 
     @staticmethod
-    def load_backbone(name: str = "cbramod") -> LoadedBackbone:
-        """Resolve a frozen backbone by name -> a `LoadedBackbone` (module + patch/rate/d_model geometry). The
-        seam the frozen-head loop swaps on: a new foundation model is one entry here, not a fork of the runner.
-        Backbones point DOWN to their loader; the runner stays backbone-agnostic (bd m69x.1)."""
-        builders = {"cbramod": Foundation._loaded_cbramod}
+    def load_backbone(name: str = "cbramod", channel_names: list[str] | None = None) -> LoadedBackbone:
+        """Resolve a frozen backbone by name -> a `LoadedBackbone` whose `module` is a `composite.Backbone`
+        ([B,C,T] -> [B,C,S,d], owning its own patching + normalization). The seam the frozen-head loop swaps on:
+        a new foundation model is one entry here, not a fork of the runner. `channel_names` feeds a montage
+        adapter (EEGPT needs it to map channels to its CHANNEL_DICT; CBraMod ignores it)."""
+        builders = {"cbramod": lambda: Foundation._loaded_cbramod(),
+                    "eegpt": lambda: Foundation._loaded_eegpt(channel_names)}
         if name not in builders:
             raise KeyError(f"unknown backbone {name!r} — registered: {sorted(builders)}")
         return builders[name]()
 
     @staticmethod
     def _loaded_cbramod() -> LoadedBackbone:
-        return LoadedBackbone(Foundation._load_backbone(), patch_points=200, d_model=200,
-                              sample_rate=200.0, name="cbramod")
+        return LoadedBackbone(CBraModBackbone(), patch_points=200, d_model=200, sample_rate=200.0, name="cbramod")
+
+    @staticmethod
+    def _loaded_eegpt(channel_names: list[str] | None) -> LoadedBackbone:
+        if channel_names is None:
+            raise ValueError("eegpt needs channel_names for its montage adapter (map to EEGPT's CHANNEL_DICT)")
+        return LoadedBackbone(EegptBackbone(channel_names), patch_points=64, d_model=512,
+                              sample_rate=256.0, name="eegpt")
+
+    @staticmethod
+    def _load_eegpt_encoder(n_time: int):
+        """Build the EEGPT EEGTransformer encoder (its downstream config: patch 64, dim 512, embed_num 4,
+        depth 8) sized to our epoch length and load the FROZEN pretrained `target_encoder` weights from the
+        checkpoint. Returns (encoder, CHANNEL_DICT). Reaches into the external checkout (see the fetch step)."""
+        if str(_EEGPT_MODELS) not in sys.path:
+            sys.path.insert(0, str(_EEGPT_MODELS))
+        from EEGPT_mcae import CHANNEL_DICT, EEGTransformer  # noqa: PLC0415
+
+        ckpt = Config.data_root("pretrained") / "EEGPT" / "eegpt_mcae_58chs_4s_large4E.ckpt"
+        if not ckpt.exists():
+            raise FileNotFoundError(f"EEGPT weights not at {ckpt} — see the fetch step in this module's docstring")
+        encoder = EEGTransformer(img_size=(58, n_time), patch_size=64, embed_dim=512, embed_num=4,
+                                 depth=8, num_heads=8, mlp_ratio=4.0, norm_layer=partial(nn.LayerNorm, eps=1e-6))
+        state = torch.load(ckpt, map_location="cpu", weights_only=False)
+        state = state.get("state_dict", state)
+        enc = {k[len("target_encoder."):]: v for k, v in state.items() if k.startswith("target_encoder.")}
+        encoder.load_state_dict(enc, strict=True)
+        return encoder, CHANNEL_DICT
 
     @staticmethod
     def _load_backbone() -> nn.Module:
