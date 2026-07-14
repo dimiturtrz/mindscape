@@ -8,6 +8,10 @@ Crash-course scope: enough to be **conversant and honest** about every claim the
 the signal, the methods, the eval — not a full degree. The [field-map](field-map.md) is the yardstick for
 "how much is enough."
 
+This is the **ramp** — general understanding of the field. Sense-making of *our own results* (what a specific
+run's numbers mean) lives in [`../interpretations/`](../interpretations/), split by task; external/literature
+synthesis lives in [`../research/`](../research/). learning = the ramp · research = theirs · interpretations = ours.
+
 ## The circuit (how each topic is learned)
 1. **Research** — ground the topic (knowledge + web) → `../research/` (cited raw material).
 2. **Theory** — the study writeup here → `NN_<topic>.md`, lessons tied to our code + numbers.

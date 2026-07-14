@@ -34,11 +34,14 @@ from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.covariance import Covariance
+from neuroscan.evaluation.invariants import Invariants
+from neuroscan.evaluation.metrics import Metrics
 from neuroscan.models.encoders import EncoderRegistry, EncoderSpec
 from neuroscan.models.nice import Nice, SubjectDiscriminator
 from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tasks.visual.sampling import BatchSpec, Sampling
+from neuroscan.tracking import Tracking
 
 logger = logging.getLogger(__name__)
 
@@ -157,12 +160,17 @@ class TrainNice:
                                   for i in range(0, len(data.eeg), batch)])  # [N,512] normalized (back to fp32)
         candidate_bank = torch.tensor(data.candidates)
         labels = torch.tensor(data.concept)
-        single = Nice.retrieval_topk(embedded, candidate_bank, labels)
+        hits = Nice.retrieval_hits(embedded, candidate_bank, labels)             # per-trial, for the bootstrap CI
+        single = {k: float(h.mean()) for k, h in hits.items()}
+        single_ci = {k: Metrics.boot_ci(np.mean, h) for k, h in hits.items()}   # honest CI from ONE run (bd 5s3l)
         n_concepts = int(data.concept.max()) + 1
         averaged = torch.stack([torch.nn.functional.normalize(embedded[labels == c].mean(0), dim=-1)
                                 for c in range(n_concepts)])
         concept_avg = Nice.retrieval_topk(averaged, candidate_bank, torch.arange(n_concepts))
-        return {"single_trial": single, "concept_avg": concept_avg}
+        continuous = Nice.retrieval_continuous(embedded, candidate_bank, labels)   # angular-error extras (bd 2y7k)
+        return {"single_trial": single, "single_trial_ci": single_ci, "concept_avg": concept_avg,
+                "continuous": continuous,
+                "single_trial_hits": {k: h.tolist() for k, h in hits.items()}}   # persisted for paired delta (s1t2)
 
     @staticmethod
     def _val_split(concept: np.ndarray, targets: np.ndarray, seed: int, fraction: float):
@@ -271,13 +279,13 @@ class TrainNice:
 
         fit_data = _FitArrays(train_eeg, train_targets, train_concept, fit_indices, subject)
         best_val, best_state, best_epoch, since_improved = -1.0, None, -1, 0
+        run_start = time.perf_counter()                        # total-run ETA so a long fit reveals its cost live
         for epoch in range(cfg.epochs):
             lam = (TrainNice._dann_lambda(epoch / max(1, cfg.epochs - 1), cfg.adv_lambda)
                    if cfg.adv_lambda_ramp else cfg.adv_lambda)
             steps = TrainNice._epoch_steps(fit_data, neighbor_groups, cfg, rng, epoch_n)
             encoder.train()
-            total_loss, n_batches = 0.0, 0
-            epoch_start = time.perf_counter()
+            total_loss, n_batches, epoch_start = 0.0, 0, time.perf_counter()
             for eeg_batch, target_batch, subj_batch in steps:
                 eeg_batch = eeg_batch.to(device)
                 target_batch = torch.nn.functional.normalize(target_batch.to(device), dim=-1)
@@ -296,17 +304,21 @@ class TrainNice:
 
             train_s = time.perf_counter() - epoch_start
             if epoch % cfg.val_every == 0 or epoch == cfg.epochs - 1:      # stride the big val eval (bd)
-                val_top1 = TrainNice.evaluate(
-                    encoder, RetrievalSet(val_eeg, val_labels, val_bank), device)["single_trial"][1]
+                val_eval = TrainNice.evaluate(encoder, RetrievalSet(val_eeg, val_labels, val_bank), device)
+                val_top1 = val_eval["single_trial"][1]
                 if val_top1 > best_val:
                     best_val, best_epoch, since_improved = val_top1, epoch, 0
                     best_state = {k: v.detach().cpu().clone() for k, v in encoder.state_dict().items()}
                 else:
                     since_improved += 1
+                Tracking.metrics({"loss": total_loss / max(1, n_batches), "val_top1": val_top1,
+                                  "val_cos_to_true": val_eval["continuous"]["cos_to_true_mean"],
+                                  "sec_per_epoch": train_s}, step=epoch)   # per-epoch curve + speed in mlflow
                 if epoch % 5 == 0 or epoch == cfg.epochs - 1:
                     logger.info(f"ep {epoch:3d}  loss {total_loss / max(1, n_batches):.3f}  "
-                          f"val-top1 {val_top1*100:.2f}%"
-                          f"  {train_s:.1f}s ({n_batches / train_s:.0f} batch/s)")
+                          f"val-top1 {val_top1*100:.2f}%  cos {val_eval['continuous']['cos_to_true_mean']:.3f}"
+                          f"  {train_s:.1f}s ({n_batches / train_s:.0f} batch/s)  "
+                          f"~{(time.perf_counter() - run_start) / (epoch + 1) * (cfg.epochs - epoch - 1):.0f}s left")
                 if since_improved >= cfg.patience:
                     logger.info(f"early stop at ep {epoch} (best val = ep {best_epoch})")
                     break
@@ -334,11 +346,23 @@ class TrainNice:
         logger.info(f"train {train_eeg.shape} -> CLIP {train_targets.shape} | "
               f"test {test_eeg.shape} ({int(test_concept.max())+1} concepts)")
 
-        encoder, stats = TrainNice.train_encoder(
-            TrainData(train_eeg, train_targets, train_concept, subj_idx), cfg, device)
-        test = TrainNice.evaluate(encoder, RetrievalSet(test_eeg, test_concept, test_bank), device)
-        return {"regime": regime, "train": train_subjects, "test": test_subject, **stats,
-                "chance_top1": 1 / (int(test_concept.max()) + 1), **test}
+        params = {"model": cfg.model, "regime": regime, "train": train_subjects, "test": test_subject,
+                  "epochs": cfg.epochs, "lr": cfg.lr, "resample": cfg.resample, "seed": cfg.seed}
+        tags = {"task": "perception-nice", "train": train_subjects, "test": test_subject}
+        with Tracking.run("mindscape-perception", f"{cfg.model}_{regime}_test{test_subject}_s{cfg.seed}",
+                          params=params, tags=tags):
+            encoder, stats = TrainNice.train_encoder(
+                TrainData(train_eeg, train_targets, train_concept, subj_idx), cfg, device)
+            test = TrainNice.evaluate(encoder, RetrievalSet(test_eeg, test_concept, test_bank), device)
+            single, concept = test["single_trial"], test["concept_avg"]
+            Tracking.metrics({"test_single_top1": single[1], "test_single_top5": single[5],
+                              "test_concept_top1": concept[1], "test_concept_top5": concept[5],
+                              "best_val_top1": stats["val_top1"],
+                              **{f"test_{k}": v for k, v in test["continuous"].items()}})   # angular error (bd 2y7k)
+        result = {"regime": regime, "train": train_subjects, "test": test_subject, **stats,
+                  "chance_top1": 1 / (int(test_concept.max()) + 1), **test}
+        Invariants.check(result)                               # fail loud on a silently-inconsistent number
+        return result
 
 
 def main():
@@ -364,7 +388,8 @@ def main():
                  if k in TrainConfig.model_fields and v is not None}
     cfg = TrainConfig(**{**base, **overrides})
     result = TrainNice.train(args.train, args.test, cfg)
-    logger.info(json.dumps(result, indent=2))
+    logged = {k: v for k, v in result.items() if k != "single_trial_hits"}   # per-trial vector -> --out only
+    logger.info(json.dumps(logged, indent=2))
     if args.out:
         with Path(args.out).open("w") as f:
             json.dump(result, f, indent=2)
