@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 import scipy.io as sio
-from scipy.signal import resample as _rs
+from scipy.signal import resample as _resample
 
 from core.config import Config
 from core.data.fnirs.base import CANONICAL_NBACK, FnirsCfg, FnirsEpochs
@@ -36,9 +36,9 @@ class Shin2017NirsAdapter:
         """Subjects actually present on disk (this cognitive set ships 26; robust to partial downloads)."""
         root = Config.raw_dir() / "shin2017"
         return [
-            int(d.name[2:5])
-            for d in sorted(root.glob("VP*-NIRS"))
-            if (d / f"cnt_{self.task}.mat").exists()
+            int(subj_dir.name[2:5])
+            for subj_dir in sorted(root.glob("VP*-NIRS"))
+            if (subj_dir / f"cnt_{self.task}.mat").exists()
         ]
 
     def _subject_dir(self, sub: int):
@@ -46,9 +46,11 @@ class Shin2017NirsAdapter:
 
     def _load_continuous(self, sub: int):
         """Return (cont [72, T] HbO|HbR, fs, onsets[samples], canonical_labels[n]) for one subject."""
-        d = self._subject_dir(sub)
-        cnt = sio.loadmat(d / f"cnt_{self.task}.mat", struct_as_record=False, squeeze_me=True)[f"cnt_{self.task}"]
-        mrk = sio.loadmat(d / f"mrk_{self.task}.mat", struct_as_record=False, squeeze_me=True)[f"mrk_{self.task}"]
+        subj_dir = self._subject_dir(sub)
+        cnt = sio.loadmat(subj_dir / f"cnt_{self.task}.mat",
+                          struct_as_record=False, squeeze_me=True)[f"cnt_{self.task}"]
+        mrk = sio.loadmat(subj_dir / f"mrk_{self.task}.mat",
+                          struct_as_record=False, squeeze_me=True)[f"mrk_{self.task}"]
         oxy, deoxy = cnt.oxy, cnt.deoxy
         fs = float(oxy.fs)
         cont = np.concatenate([np.asarray(oxy.x).T, np.asarray(deoxy.x).T], axis=0)   # [72, T]
@@ -74,7 +76,7 @@ class Shin2017NirsAdapter:
             if cfg.clean is not None:                                                  # physiological-noise stage
                 X = Clean.make_cleaner(cfg.clean).transform(X).astype(np.float32)      # stateless -> leakage-free
             if cfg.resample and cfg.resample != fs:
-                X = _rs(X, round(X.shape[2] * cfg.resample / fs), axis=2).astype(np.float32)
+                X = _resample(X, round(X.shape[2] * cfg.resample / fs), axis=2).astype(np.float32)
             n = len(ye)
             Xs.append(X)
             ys.append(ye)

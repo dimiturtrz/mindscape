@@ -16,7 +16,7 @@ import copy
 import logging
 from dataclasses import dataclass
 
-import braindecode.models as M
+import braindecode.models as bd_models
 import numpy as np
 import torch
 from pydantic import BaseModel
@@ -111,7 +111,7 @@ class BraindecodeClf:
         self.seed = config.seed
         self.std = _standardizer(config.standardize)
         torch.manual_seed(config.seed)                   # vary net init across seeds (seed-averaging)
-        net_cls = getattr(M, arch.cls)
+        net_cls = getattr(bd_models, arch.cls)   # FIXME(mindscape-i4q5): string->class zoo lookup -> validated registry
         # net consumes crop_len samples when cropping, else the full trial
         self.net = net_cls(n_chans=arch.n_chans, n_outputs=arch.n_classes, n_times=arch.n_times).to(self.device)
 

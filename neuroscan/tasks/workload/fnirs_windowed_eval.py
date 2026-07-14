@@ -33,12 +33,13 @@ _DATASET = "shin2017_nback"
 # control (mean/max/lse were all a wash below collapse). One assignment (no import-time side effect).
 _ARMS: list[tuple[str, object]] = [
     ("collapse (baseline)", None),
-    *((f"windowed concat · {_tag}",
-       lambda w=_win, h=_hop: WindowedFnirs(WindowedConfig(win_s=w, hop_s=h, fs=_FS, aggregate="concat")))
-      for _win, _hop, _tag in [(11.0, 11.0, "vcoarse 2w"), (7.0, 7.0, "coarse 3w"),
-                               (6.0, 3.0, "med 6/3"), (4.0, 1.0, "fine 4/1")]),
+    *((f"windowed concat · {_label}",
+       lambda win_s=_win_s, hop_s=_hop_s:
+           WindowedFnirs(WindowedConfig(win_s=win_s, hop_s=hop_s, fs=_FS, aggregate="concat")))
+      for _win_s, _hop_s, _label in [(11.0, 11.0, "vcoarse 2w"), (7.0, 7.0, "coarse 3w"),
+                                     (6.0, 3.0, "med 6/3"), (4.0, 1.0, "fine 4/1")]),
     *((f"windowed {_agg} · med 6/3",
-       lambda a=_agg: WindowedFnirs(WindowedConfig(win_s=6.0, hop_s=3.0, fs=_FS, aggregate=a)))
+       lambda agg=_agg: WindowedFnirs(WindowedConfig(win_s=6.0, hop_s=3.0, fs=_FS, aggregate=agg)))
       for _agg in ("mean", "max", "lse")),
 ]
 
