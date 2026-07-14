@@ -3,6 +3,7 @@
 A fake backbone (no CBraMod checkout needed) exercises the composite contract: forward shape/norm, freeze
 policy, the cache hook, param groups, and every head in the zoo mapping a [B, C, S, d] grid to CLIP space."""
 import numpy as np
+import pytest
 import torch
 
 from neuroscan.models.composite import Backbone, Head, Heads, HeadSpec, Model
@@ -29,7 +30,7 @@ def _pos():
 
 
 def _model(pool="mean", freeze=True):
-    head = Heads.build(HeadSpec(pool, pool), _D, _pos(), _EMBED)
+    head = Heads.build(HeadSpec(pool, pool), _D, _pos(), n_tok=_C * _S, embed_dim=_EMBED)
     return Model(_FakeBackbone(), head, freeze_backbone=freeze)
 
 
@@ -70,14 +71,17 @@ def test_encode_tokens_exposes_backbone_grid():
 def test_every_head_maps_grid_to_clip():
     grid = torch.randn(4, _C, _S, _D)
     for pool in ("mean", "attn", "flat", "pos_attn", "topo", "gcn"):
-        head = Heads.build(HeadSpec(pool, pool), _D, _pos(), _EMBED)
+        head = Heads.build(HeadSpec(pool, pool), _D, _pos(), n_tok=_C * _S, embed_dim=_EMBED)
         out = head(grid)
         assert out.shape == (4, _EMBED), pool
 
 
-def test_flat_head_lazy_inits_mlp_on_first_forward():
-    head = Heads.build(HeadSpec("flat", "flat"), _D, _pos(), _EMBED)
+def test_flat_head_sizes_mlp_at_construction():
+    """flat's MLP in-dim is n_tok·d — it must exist BEFORE the optimizer is built (a lazy init would leave its
+    params out of the optimizer and it would never train). Requires n_tok; errors without it."""
+    head = Heads.build(HeadSpec("flat", "flat"), _D, _pos(), n_tok=_C * _S, embed_dim=_EMBED)
     assert isinstance(head, Head)
-    assert head.mlp is None                              # unknown in-dim until it sees C·S·d
-    head(torch.randn(4, _C, _S, _D))
-    assert head.mlp is not None
+    trainable = [p for p in head.parameters() if p.requires_grad]
+    assert trainable and any(p.shape[-1] == _C * _S * _D for p in trainable)   # first linear sees all tokens
+    with pytest.raises(ValueError, match="flat pool needs n_tok"):
+        Heads.build(HeadSpec("flat", "flat"), _D, _pos(), embed_dim=_EMBED)

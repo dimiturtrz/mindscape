@@ -112,7 +112,7 @@ class Foundation:
     def _cbramod_model(spec: EncoderSpec, pool: str, freeze: bool) -> Model:  # noqa: FBT001
         """`Model(CBraModBackbone, TokenHead)` — the frozen probe / fine-tune / attn-pool as one composite."""
         bb = CBraModBackbone()
-        head = TokenHead(HeadSpec("cbramod", pool), bb.d_model, spec.embed_dim)
+        head = TokenHead(HeadSpec("cbramod", pool), bb.d_model, None, spec.embed_dim)  # mean/attn -> no n_tok
         return Model(bb, head, freeze_backbone=freeze)
 
     @staticmethod

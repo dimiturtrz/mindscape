@@ -108,13 +108,15 @@ class Heads:
     """Builders + fixed geometry operators for the head zoo (montage-derived, computed once)."""
 
     @staticmethod
-    def build(spec: HeadSpec, d: int, pos: np.ndarray, embed_dim: int = _EMBED) -> Head:
+    def build(spec: HeadSpec, d: int, pos: np.ndarray, n_tok: int | None = None,
+              embed_dim: int = _EMBED) -> Head:
         """A `Head` for this arm, sized to the token width `d` and (for geometry arms) the electrode positions
-        `pos [C, 2]` on the unit-disk scalp."""
+        `pos [C, 2]` on the unit-disk scalp. `n_tok` (= C·S) is required only by the flat pool (its MLP in-dim
+        is n_tok·d); mean/attn/geometry ignore it."""
         geometry = {"pos_attn": PosAttnHead, "topo": TopoHead, "gcn": GcnHead}
         if spec.pool in geometry:
             return geometry[spec.pool](spec, d, pos, embed_dim)
-        return TokenHead(spec, d, embed_dim)
+        return TokenHead(spec, d, n_tok, embed_dim)
 
     @staticmethod
     def mlp(in_dim: int, hidden: int, dropout: float, embed_dim: int) -> nn.Module:
@@ -155,17 +157,21 @@ class Heads:
 
 
 class TokenHead(Head):
-    """Geometry-blind head: pool the C·S tokens (mean / learned attention / unordered flatten) then MLP."""
+    """Geometry-blind head: pool the C·S tokens (mean / learned attention / unordered flatten) then MLP. The
+    flat pool needs `n_tok` (= C·S) up front to size its MLP in-dim (n_tok·d) at construction — so every param
+    exists before the optimizer is built."""
 
-    def __init__(self, spec: HeadSpec, d: int, embed_dim: int):
+    def __init__(self, spec: HeadSpec, d: int, n_tok: int | None, embed_dim: int):
         super().__init__()
         self.pool = spec.pool
         self.attn = nn.Linear(d, 1) if spec.pool == "attn" else None
-        in_dim = d                                       # mean/attn collapse tokens -> d; flat keeps them
-        self.flat = spec.pool == "flat"
-        self.mlp_lazy_dim = d                            # flat's in_dim depends on n_tok (set on first forward)
-        self.spec, self.embed_dim = spec, embed_dim
-        self.mlp = None if self.flat else Heads.mlp(in_dim, spec.hidden, spec.dropout, embed_dim)
+        if spec.pool == "flat":
+            if n_tok is None:
+                raise ValueError("flat pool needs n_tok (= C·S) to size its MLP")
+            in_dim = n_tok * d
+        else:
+            in_dim = d                                   # mean/attn collapse the tokens to d
+        self.mlp = Heads.mlp(in_dim, spec.hidden, spec.dropout, embed_dim)
 
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
         f = tokens.flatten(1, 2)                          # [B, C·S, d]
@@ -175,8 +181,6 @@ class TokenHead(Head):
             z = (self.attn(f).softmax(dim=1) * f).sum(dim=1)
         else:                                            # flat: unordered bag of all tokens
             z = f.flatten(1)
-            if self.mlp is None:
-                self.mlp = Heads.mlp(z.shape[1], self.spec.hidden, self.spec.dropout, self.embed_dim).to(z.device)
         return self.mlp(z)
 
 

@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,33 +37,17 @@ from torch import nn
 from core.config import Config
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.montage import EegMontage
+from neuroscan.models.composite import Heads, HeadSpec
 from neuroscan.models.foundation import Foundation, LoadedBackbone
 from neuroscan.models.nice import Nice
 from neuroscan.tasks.visual import clip_targets
+from neuroscan.tracking import Tracking
 
 logger = logging.getLogger(__name__)
 
-_EMBED = 512          # CLIP dim
 _FEAT_BATCH = 256     # backbone forward batch for the one-time precompute
-_GRID = 16            # topo_cnn: scalp interpolation grid (H=W)
-_RBF_SIGMA = 0.2      # topo_cnn: RBF interp width on the unit-disk montage
-_NHEAD = 4            # pos_attn: transformer heads (d_model=200 divisible)
-_K_GCN = 8            # gcn: electrode-adjacency kNN degree (each electrode links its 8 nearest)
 _TOPO_GRIDS = (12, 16, 24)         # topo mini-sweep (bd m69x.2): scalp-image resolution
 _TOPO_SIGMAS = (0.1, 0.2, 0.35)    # topo mini-sweep: RBF interpolation width on the unit-disk montage
-
-
-@dataclass
-class HeadSpec:
-    """One head arm: how to pool the C·S token grid + the MLP depth. `pool`: mean | attn | flat.
-    `hidden=0` = a bare linear map (the probe floor). `grid`/`rbf_sigma` tune the topo scalp-image resolution
-    + RBF interpolation width (only used by pool='topo'; swept in the topo mini-sweep, bd m69x.2)."""
-    name: str
-    pool: str
-    hidden: int = 512
-    dropout: float = 0.5
-    grid: int = _GRID
-    rbf_sigma: float = _RBF_SIGMA
 
 
 @dataclass
@@ -82,57 +67,12 @@ _ARMS = [
 ]
 
 
-class Head(nn.Module):
-    """Frozen-feature head: fold the `[B, n_tok, d]` token grid to a vector, then MLP → CLIP dim (L2-normed).
-
-    Geometry-blind pools — `mean` / `attn` (bottleneck) and `flat` (unordered bag) — ignore where each
-    electrode sits. Geometry pools use the scalp positions `pos [C,2]`: `pos_attn` adds a learned positional
-    embedding then self-attends; `topo` interpolates the electrode features onto a 2D scalp image and convolves
-    (both require the C electrode tokens, i.e. S=1)."""
-
-    def __init__(self, spec: HeadSpec, n_tok: int, d: int, pos: np.ndarray):
-        super().__init__()
-        self.pool = spec.pool
-        self.attn = nn.Linear(d, 1) if spec.pool == "attn" else None
-        if spec.pool == "pos_attn":
-            self.register_buffer("pos", torch.tensor(pos, dtype=torch.float32))          # [C, 2]
-            self.pos_proj = nn.Linear(2, d)
-            self.enc = nn.TransformerEncoderLayer(d, _NHEAD, dim_feedforward=spec.hidden or d,
-                                                  dropout=spec.dropout, batch_first=True, activation="gelu")
-            self.mlp = FrozenHead._mlp(d, spec.hidden, spec.dropout)
-        elif spec.pool == "topo":
-            self.grid = spec.grid
-            self.register_buffer("wtopo", FrozenHead._topo_weights(pos, spec.grid, spec.rbf_sigma))  # [H·W, C]
-            self.conv = nn.Sequential(
-                nn.Conv2d(d, 64, 3, padding=1), nn.GELU(),
-                nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.GELU(), nn.AdaptiveAvgPool2d(1))
-            self.mlp = FrozenHead._mlp(64, spec.hidden, spec.dropout)
-        elif spec.pool == "gcn":
-            self.register_buffer("adj", FrozenHead._adjacency(pos))                      # [C, C] normalized Â
-            self.gcn1 = nn.Linear(d, d)
-            self.gcn2 = nn.Linear(d, d)
-            self.mlp = FrozenHead._mlp(d, spec.hidden, spec.dropout)
-        else:
-            self.mlp = FrozenHead._mlp(n_tok * d if spec.pool == "flat" else d, spec.hidden, spec.dropout)
-
-    def forward(self, f: torch.Tensor) -> torch.Tensor:
-        if self.pool == "mean":
-            z = f.mean(dim=1)
-        elif self.pool == "attn":
-            z = (self.attn(f).softmax(dim=1) * f).sum(dim=1)
-        elif self.pool == "flat":
-            z = f.flatten(1)
-        elif self.pool == "pos_attn":
-            z = self.enc(f + self.pos_proj(self.pos)).mean(dim=1)
-        elif self.pool == "gcn":
-            h = F.gelu(self.gcn1(torch.einsum("ck,bkd->bcd", self.adj, f)))              # Â X W₁, propagate+transform
-            h = F.gelu(self.gcn2(torch.einsum("ck,bkd->bcd", self.adj, h)))              # second graph-conv layer
-            z = h.mean(dim=1)                                                            # readout over electrodes
-        else:                                                                            # topo
-            b, _, d = f.shape
-            interp = torch.einsum("hc,bcd->bhd", self.wtopo, f)                          # [B, H·W, d]
-            z = self.conv(interp.transpose(1, 2).reshape(b, d, self.grid, self.grid)).flatten(1)
-        return F.normalize(self.mlp(z), dim=-1)
+@dataclass
+class _EvalSet:
+    """One retrieval eval: the cached features to embed, their concept labels, and the candidate CLIP bank."""
+    feat: torch.Tensor
+    concept: np.ndarray
+    bank: torch.Tensor
 
 
 @dataclass
@@ -144,7 +84,6 @@ class Cache:
     test_feat: torch.Tensor
     test_concept: np.ndarray
     test_bank: torch.Tensor
-    n_tok: int
     d: int
     pos: np.ndarray          # [C, 2] electrode positions on the unit-disk scalp (for the geometry heads)
 
@@ -162,36 +101,10 @@ class FrozenHead:
                 for g in _TOPO_GRIDS for s in _TOPO_SIGMAS]
 
     @staticmethod
-    def _mlp(in_dim: int, hidden: int, dropout: float) -> nn.Module:
-        """Shared head tail: bare linear (hidden=0) or one GELU-MLP block → CLIP dim."""
-        if hidden == 0:
-            return nn.Linear(in_dim, _EMBED)
-        return nn.Sequential(nn.Linear(in_dim, hidden), nn.GELU(), nn.Dropout(dropout), nn.Linear(hidden, _EMBED))
-
-    @staticmethod
-    def _topo_weights(pos: np.ndarray, grid: int, sigma: float) -> torch.Tensor:
-        """Fixed RBF interpolation operator `[H·W, C]` mapping the C electrode features onto a `grid×grid` scalp
-        image (Bashivan 2016), RBF width `sigma`. Computed once from the montage; applied per batch as one einsum."""
-        axis = np.linspace(-1.0, 1.0, grid)
-        gx, gy = np.meshgrid(axis, axis)
-        cells = np.stack([gx.ravel(), gy.ravel()], axis=1)                   # [H·W, 2]
-        d2 = ((cells[:, None, :] - pos[None, :, :]) ** 2).sum(-1)            # [H·W, C]
-        w = np.exp(-d2 / (2 * sigma ** 2))
-        w = w / (w.sum(1, keepdims=True) + 1e-8)
-        return torch.tensor(w, dtype=torch.float32)
-
-    @staticmethod
-    def _adjacency(pos: np.ndarray, k: int = _K_GCN) -> torch.Tensor:
-        """Symmetric-normalized adjacency Â = D^-1/2 (A+I) D^-1/2 [C, C] from a kNN graph over the electrode
-        positions — the fixed message-passing operator for the GCN head (electrode geometry as a graph, so
-        signal mixes between physically-adjacent electrodes)."""
-        d2 = ((pos[:, None, :] - pos[None, :, :]) ** 2).sum(-1)               # [C, C] pairwise sq-distance
-        knn = np.argsort(d2, axis=1)[:, 1:k + 1]                              # k nearest electrodes (exclude self)
-        a = np.zeros_like(d2)
-        np.put_along_axis(a, knn, 1.0, axis=1)
-        a = np.maximum(a, a.T) + np.eye(len(pos))                            # symmetric + self-loops
-        dinv = np.diag(1.0 / np.sqrt(a.sum(1)))
-        return torch.tensor(dinv @ a @ dinv, dtype=torch.float32)
+    def _grid(feat: torch.Tensor, n_channels: int) -> torch.Tensor:
+        """Cached tokens `[B, C·S, d]` -> `[B, C, S, d]` (the composite Head input). S = tokens / C."""
+        b, n_tok, d = feat.shape
+        return feat.reshape(b, n_channels, n_tok // n_channels, d)
 
     @staticmethod
     @torch.no_grad()
@@ -271,7 +184,7 @@ class FrozenHead:
         test_bank = torch.tensor(clip_targets.ClipTargets.concept_prototypes("test"))
         pos = EegMontage.eeg_positions(things.ThingsEeg2.channels())   # [C, 2], same channel order as the features
         return Cache(tr_feat, tr_tgt, tr_concept, test_feat, te_concept, test_bank,
-                     n_tok=tr_feat.shape[1], d=tr_feat.shape[2], pos=pos)
+                     d=tr_feat.shape[2], pos=pos)
 
     @staticmethod
     def _load(subjects: list[int], split: str, sample_rate: float):
@@ -281,9 +194,11 @@ class FrozenHead:
 
     @staticmethod
     @torch.no_grad()
-    def _retrieval(head, feat: torch.Tensor, concept: np.ndarray, bank: torch.Tensor, device: str) -> dict:
+    def _retrieval(head, eval_set: _EvalSet, device: str, n_channels: int) -> dict:
         head.eval()
-        emb = torch.cat([head(feat[i:i + 4096].float().to(device)).cpu() for i in range(0, len(feat), 4096)])
+        feat, concept, bank = eval_set.feat, eval_set.concept, eval_set.bank
+        emb = torch.cat([F.normalize(head(FrozenHead._grid(feat[i:i + 4096].float().to(device), n_channels)),
+                                     dim=-1).cpu() for i in range(0, len(feat), 4096)])   # composite head, then L2
         labels = torch.tensor(concept)
         single = Nice.retrieval_topk(emb, bank, labels)
         n = int(concept.max()) + 1
@@ -297,28 +212,42 @@ class FrozenHead:
             cache.tr_concept, cache.tr_tgt.numpy(), cfg.seed, 0.1)
         fit_idx = np.where(fit_mask)[0]
         val_feat, val_bank_t = cache.tr_feat[val_mask], torch.tensor(val_bank)
-        head = Head(spec, cache.n_tok, cache.d, cache.pos).to(device)
+        n_channels = len(cache.pos)
+        head = Heads.build(spec, cache.d, cache.pos, n_tok=cache.tr_feat.shape[1]).to(device)
         logit_scale = nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
         opt = torch.optim.AdamW([*head.parameters(), logit_scale], lr=cfg.lr, weight_decay=1e-4)
         rng = np.random.default_rng(cfg.seed)
         best_val, best_state, best_ep = -1.0, None, -1
+        arm_start = time.perf_counter()
         for ep in range(cfg.epochs):
             head.train()
             perm = rng.permutation(fit_idx)
+            total_loss, n_batches = 0.0, 0
             for i in range(0, len(perm) - 512, 512):
                 idx = perm[i:i + 512]
-                f = cache.tr_feat[idx].float().to(device)
+                g = FrozenHead._grid(cache.tr_feat[idx].float().to(device), n_channels)
                 tgt = F.normalize(cache.tr_tgt[idx].to(device), dim=-1)
                 opt.zero_grad()
-                loss = Nice.clip_infonce(head(f), tgt, logit_scale.exp().clamp(max=100))
+                loss = Nice.clip_infonce(F.normalize(head(g), dim=-1), tgt, logit_scale.exp().clamp(max=100))
                 loss.backward()
                 opt.step()
-            val_top1 = FrozenHead._retrieval(head, val_feat, val_lab, val_bank_t, device)["single_trial"][1]
+                total_loss += loss.item()
+                n_batches += 1
+            val_set = _EvalSet(val_feat, val_lab, val_bank_t)
+            val_top1 = FrozenHead._retrieval(head, val_set, device, n_channels)["single_trial"][1]
             if val_top1 > best_val:
                 best_val, best_ep = val_top1, ep
                 best_state = {k: v.detach().cpu().clone() for k, v in head.state_dict().items()}
+            elapsed = time.perf_counter() - arm_start
+            eta = elapsed / (ep + 1) * (cfg.epochs - ep - 1)
+            Tracking.metrics({"loss": total_loss / max(1, n_batches), "val_top1": val_top1,
+                              "sec_per_epoch": elapsed / (ep + 1)}, step=ep)   # per-epoch curve + speed in mlflow
+            if ep % 15 == 0 or ep == cfg.epochs - 1:
+                logger.info(f"    {spec.name} ep {ep:2d}/{cfg.epochs}  loss {total_loss / max(1, n_batches):.3f}  "
+                            f"val-top1 {val_top1*100:.2f}%  {elapsed:.0f}s  ~{eta:.0f}s left")
         head.load_state_dict(best_state)
-        test = FrozenHead._retrieval(head, cache.test_feat, cache.test_concept, cache.test_bank, device)
+        test = FrozenHead._retrieval(head, _EvalSet(cache.test_feat, cache.test_concept, cache.test_bank),
+                                     device, n_channels)
         return {"arm": spec.name, "best_val_epoch": best_ep, "val_top1": best_val, **test}
 
 
@@ -345,8 +274,15 @@ def main():
                 f"{args.epochs}ep lr{args.lr} · chance {1 / (int(cache.test_concept.max()) + 1):.3f}")
     results = []
     for spec in arms:
-        r = FrozenHead._train_arm(spec, cache, device, fit)
-        s, a = r["single_trial"], r["concept_avg"]
+        params = {"backbone": args.backbone, "arm": spec.name, "pool": spec.pool, "grid": spec.grid,
+                  "rbf_sigma": spec.rbf_sigma, "epochs": args.epochs, "lr": args.lr, "seed": args.seed}
+        tags = {"task": "perception-frozen-head", "train": args.train, "test": args.test}
+        with Tracking.run("mindscape-perception", f"frozen_{args.backbone}_{spec.name}_test{args.test}_s{args.seed}",
+                          params=params, tags=tags):
+            r = FrozenHead._train_arm(spec, cache, device, fit)
+            s, a = r["single_trial"], r["concept_avg"]
+            Tracking.metrics({"test_single_top1": s[1], "test_single_top5": s[5],
+                              "test_concept_top1": a[1], "test_concept_top5": a[5], "best_val_top1": r["val_top1"]})
         logger.info(f"  {spec.name:9s} (val {r['val_top1']*100:.2f}% ep{r['best_val_epoch']:2d})  "
                     f"single {s[1]*100:.2f}%/{s[5]*100:.2f}%  concept {a[1]*100:.2f}%/{a[5]*100:.2f}%")
         results.append(r)
