@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from jaxtyping import Float
 from pydantic import BaseModel
 from torch import Tensor
 
@@ -26,4 +27,4 @@ class ImageEncoder(Protocol):
     new backbone must satisfy to drop into `train_nice` (NICE already does) — the return type of
     `build_encoder`, so the trainer programs against the contract, not a concrete class."""
 
-    def forward(self, x: Tensor) -> Tensor: ...
+    def forward(self, x: Float[Tensor, "n ch t"]) -> Float[Tensor, "n d"]: ...

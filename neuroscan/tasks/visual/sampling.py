@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from jaxtyping import Float, Int
 
 
 @dataclass
@@ -31,7 +32,8 @@ class Sampling:
     staticmethods (public names kept). Pure index math + a precomputed CLIP matrix, no EEG model needed."""
 
     @staticmethod
-    def stratified_batches(concept_ids: np.ndarray, batch_size: int, rng: np.random.Generator) -> list[np.ndarray]:
+    def stratified_batches(concept_ids: Int[np.ndarray, "n"], batch_size: int,
+                           rng: np.random.Generator) -> list[np.ndarray]:
         """Index batches balanced across concepts: shuffle within each concept, then round-robin draw so every
         batch sees many distinct concepts ~equally (balances the InfoNCE negatives vs uniform sampling)."""
         by_concept: dict[int, list[int]] = {}
@@ -48,7 +50,8 @@ class Sampling:
         return rng.choice(pool, size=k, replace=len(pool) < k).tolist()
 
     @staticmethod
-    def balanced_batches(concept_ids: np.ndarray, spec: BatchSpec, rng: np.random.Generator) -> list[np.ndarray]:
+    def balanced_batches(concept_ids: Int[np.ndarray, "n"], spec: BatchSpec,
+                         rng: np.random.Generator) -> list[np.ndarray]:
         """STRICT balanced batches (bd 2j2): each batch = `spec.concepts_per_batch` concepts ×
         `spec.samples_per_concept` trials each, so every concept in the batch is represented EQUALLY (unlike
         `stratified_batches`' round-robin, which decays as scarce concepts empty out). Scarce concepts are drawn
@@ -68,7 +71,7 @@ class Sampling:
         return batches
 
     @staticmethod
-    def clip_neighbor_groups(concept_cosine: np.ndarray, k: int) -> dict[int, list[int]]:
+    def clip_neighbor_groups(concept_cosine: Float[np.ndarray, "k k"], k: int) -> dict[int, list[int]]:
         """For each concept (row of the concept-concept CLIP cosine matrix), its `k` nearest OTHER concepts —
         the model-free hard negatives (semantically confusable in the shared CLIP target space). Self is excluded."""
         cosine = np.array(concept_cosine, dtype=float)
@@ -76,7 +79,7 @@ class Sampling:
         return {concept: np.argsort(cosine[concept])[::-1][:k].tolist() for concept in range(cosine.shape[0])}
 
     @staticmethod
-    def clip_hard_batches(concept_ids: np.ndarray, neighbor_groups: dict[int, list[int]], spec: BatchSpec,
+    def clip_hard_batches(concept_ids: Int[np.ndarray, "n"], neighbor_groups: dict[int, list[int]], spec: BatchSpec,
                           rng: np.random.Generator) -> list[np.ndarray]:
         """Balanced batches whose concepts are a SEED + its CLIP-nearest neighbours (bd 4ru) — semantically HARD
         negatives from epoch 0, model-free (the neighbours come from the CLIP target space, no encoder pass). Each

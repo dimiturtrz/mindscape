@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from jaxtyping import Float
 from scipy.spatial import Delaunay
 
 from core.features.fusion.series import _BANDS, Series, SeriesConfig
@@ -71,7 +72,8 @@ class BrainCamera:
         return m.reshape(n, grid, grid, t)
 
     @staticmethod
-    def coverage_map(pos_e: np.ndarray, pos_f: np.ndarray, grid: int) -> np.ndarray:
+    def coverage_map(pos_e: Float[np.ndarray, "ch_e 2"], pos_f: Float[np.ndarray, "ch_f 2"],
+                     grid: int) -> Float[np.ndarray, "grid grid"]:
         """Locality-coverage confidence `[grid, grid]` — EEG↔fNIRS coupling is LOCAL, so a pixel's joint signal is
         only trustworthy where a co-located pair exists (near BOTH an EEG and an fNIRS sensor). Gaussian falloff to
         the nearest sensor of each modality; product dims where either modality has no nearby sensor."""

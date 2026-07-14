@@ -6,6 +6,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 import numpy as np
+from jaxtyping import Float
 
 
 class Amplitude:
@@ -20,7 +21,7 @@ class Amplitude:
         return tc, float((tc.astype(np.float64) ** 2).sum())
 
     @staticmethod
-    def amplitude_features(X: np.ndarray) -> np.ndarray:
+    def amplitude_features(X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n three_ch"]:
         """Per-channel temporal mean + slope + peak -> `[n, 3*ch]` — the canonical fNIRS feature triple (the
         hemodynamic response's amplitude/shape). peak = the extreme deviation (max |value|, signed): HbO rises
         positive, HbR dips negative."""

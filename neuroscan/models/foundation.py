@@ -38,6 +38,7 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 import torch
+from jaxtyping import Float
 from torch import nn
 
 from core.config import REPO, Config
@@ -75,7 +76,7 @@ class CBraModBackbone(Backbone):
         self.patch_points = 200
         self.d_model = 200
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Float[torch.Tensor, "n ch t"]) -> Float[torch.Tensor, "n ch s d"]:
         b, c, t = x.shape
         p = self.patch_points
         s = t // p
@@ -102,7 +103,7 @@ class EegptBackbone(Backbone):
         self.register_buffer("keep", torch.tensor(keep, dtype=torch.long))
         self.register_buffer("chan_ids", module.prepare_chan_ids([channel_names[i] for i in keep]))
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Float[torch.Tensor, "n ch t"]) -> Float[torch.Tensor, "n n_time embed_num d"]:
         x = x[:, self.keep, :]                                    # -> the 58 EEGPT channels
         x = (x - x.mean(-1, keepdim=True)) / (x.std(-1, keepdim=True) + 1e-6)   # per-channel z-score (assumed norm)
         return self.module(x, chan_ids=self.chan_ids)            # [B, N_time, embed_num, d]

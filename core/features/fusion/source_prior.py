@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import mne
 import numpy as np
+from jaxtyping import Float
 
 from core.features.eeg.source import Source, SourceConfig
 
@@ -25,8 +26,8 @@ class SourcePrior:
     activation prior (free helpers folded in as staticmethods, public names kept)."""
 
     @staticmethod
-    def weighted_min_norm_inverse(leadfield: np.ndarray, source_prior: np.ndarray,
-                                  snr: float = 3.0) -> np.ndarray:
+    def weighted_min_norm_inverse(leadfield: Float[np.ndarray, "ch s"], source_prior: Float[np.ndarray, "s"],
+                                  snr: float = 3.0) -> Float[np.ndarray, "s ch"]:
         """fMRI/fNIRS-informed weighted minimum-norm inverse `K = R Gᵀ (G R Gᵀ + λ² I)⁻¹` (Liu 1998).
 
         `leadfield` `G [n_ch, n_src]` (fixed-orientation gain), `source_prior` `w [n_src]` ≥ 0 = the per-source prior
@@ -73,8 +74,10 @@ class SourcePrior:
         return fwd["sol"]["data"], SourcePrior._parcel_aggregator(fwd["src"], src.cortical_labels())
 
     @staticmethod
-    def parcels_from_leadfield(epochs: np.ndarray, leadfield: np.ndarray, aggregator: np.ndarray,
-                               source_prior: np.ndarray | None = None, snr: float = 3.0) -> np.ndarray:
+    def parcels_from_leadfield(epochs: Float[np.ndarray, "n ch t"], leadfield: Float[np.ndarray, "ch s"],
+                               aggregator: Float[np.ndarray, "p s"],
+                               source_prior: Float[np.ndarray, "s"] | None = None,
+                               snr: float = 3.0) -> Float[np.ndarray, "n p t"]:
         """Priored-inverse parcel series `[n, n_labels, t]` from a precomputed `leadfield`/`aggregator`
         (`prior_leadfield`) — the inner op the 4so decode loops per subject, varying only `source_prior`."""
         w = np.ones(leadfield.shape[1]) if source_prior is None else np.asarray(source_prior, dtype=np.float64)

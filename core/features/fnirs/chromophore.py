@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import numpy as np
+from jaxtyping import Float
 
 
 class Chromophore:
@@ -9,7 +10,7 @@ class Chromophore:
     staticmethod, public name kept)."""
 
     @staticmethod
-    def cbsi_neural(hbo: np.ndarray, hbr: np.ndarray) -> np.ndarray:
+    def cbsi_neural(hbo: Float[np.ndarray, "n ch t"], hbr: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch t"]:
         """CBSI neural map (Cui 2010) — activation makes HbO/HbR anti-correlated, motion/systemic makes them
         common-mode; `HbO − α·HbR` (α = std(HbO)/std(HbR)) keeps the neural part, cancels the systemic. Uses BOTH
         chromophores — the whole point of two wavelengths. `hbo`/`hbr` are `[n, ch, t]` -> `[n, ch, t]`."""

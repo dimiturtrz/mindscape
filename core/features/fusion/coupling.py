@@ -6,6 +6,7 @@ a causal hemodynamic kernel. We FIT that kernel instead of hardcoding a 5 s shif
 from __future__ import annotations
 
 import numpy as np
+from jaxtyping import Float
 from scipy.signal import fftconvolve
 
 _HRF_WIDTH = (2.0, 5.0)      # physiological hemodynamic dispersion (s): HRF FWHM ~5 s -> std ~2-5 s. A width
@@ -28,7 +29,8 @@ class Coupling:
         return g / s if s > 0 else g
 
     @staticmethod
-    def estimate_coupling(drive: np.ndarray, resp: np.ndarray, fs: float, *, lag_max: float = 12.0,
+    def estimate_coupling(drive: Float[np.ndarray, "n t"], resp: Float[np.ndarray, "n t"], fs: float, *,
+                          lag_max: float = 12.0,
                           klen: float = 30.0):
         """Derive the EEG→blood coupling from the data instead of hardcoding a 5 s shift. `drive` = EEG band-power
         envelope, `resp` = fNIRS CBSI, both `[n, T]` global (channel-mean) on ONE **zero-lag** grid at rate `fs`.

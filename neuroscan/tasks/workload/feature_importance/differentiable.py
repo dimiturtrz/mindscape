@@ -30,8 +30,10 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
+from jaxtyping import Float
 from omegaconf import OmegaConf
 from sklearn.model_selection import GroupShuffleSplit
+from torch import Tensor
 
 from core.config import REPO
 from core.data import store
@@ -61,14 +63,14 @@ class WeightedLinear(torch.nn.Module):
         self.head = torch.nn.Linear(d, n_classes)
         self.register_buffer("group_idx", group_idx)
 
-    def weights(self) -> torch.Tensor:
+    def weights(self) -> Float[Tensor, "f"]:
         return torch.softmax(self.logits, dim=0)
 
-    def entropy(self) -> torch.Tensor:
+    def entropy(self) -> Float[Tensor, ""]:
         w = self.weights()
         return -(w * (w + 1e-12).log()).sum()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Float[Tensor, "n f"]) -> Float[Tensor, "n c"]:
         return self.head(x * self.weights()[self.group_idx])
 
 

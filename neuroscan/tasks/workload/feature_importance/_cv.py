@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import numpy as np
+from jaxtyping import Float, Int
 from sklearn.model_selection import StratifiedGroupKFold
 
 
@@ -18,7 +19,7 @@ class Cv:
     as a staticmethod, public name kept)."""
 
     @staticmethod
-    def grouped_folds(F: np.ndarray, y: np.ndarray, groups: np.ndarray,
+    def grouped_folds(F: Float[np.ndarray, "n f"], y: Int[np.ndarray, "n"], groups: Int[np.ndarray, "n"],
                       seeds, k: int) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         """Yield `(train_idx, test_idx)` for each fold of each seeded StratifiedGroupKFold pass. Subject-grouped;
         repeated over `seeds` to average out the split noise in the CV estimate."""

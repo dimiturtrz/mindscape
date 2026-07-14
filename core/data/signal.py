@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from jaxtyping import Float
 from scipy.signal import butter, filtfilt
 
 # canonical n-back workload classes (load level) — shared by the fNIRS and EEG n-back adapters
@@ -30,7 +31,8 @@ class Signal:
     neutral data layer both EEG and fNIRS adapters ride on."""
 
     @staticmethod
-    def bandpass(X: np.ndarray, l_freq: float, h_freq: float, fs: float, order: int = 4) -> np.ndarray:
+    def bandpass(X: Float[np.ndarray, "ch t"], l_freq: float, h_freq: float, fs: float, order: int = 4
+                 ) -> Float[np.ndarray, "ch t"]:
         """Zero-phase Butterworth bandpass on continuous [ch, T] (filtfilt — no phase shift)."""
         nyq = fs / 2.0
         b, a = butter(order, [l_freq / nyq, min(h_freq, nyq * 0.99) / nyq], btype="band")

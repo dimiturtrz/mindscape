@@ -9,6 +9,7 @@ import itertools
 from dataclasses import dataclass
 
 import numpy as np
+from jaxtyping import Bool, Float, Int
 from sklearn.metrics import cohen_kappa_score
 
 
@@ -79,16 +80,16 @@ class Metrics:
         return Metrics._interval(delta, samples, cfg.alpha)
 
     @staticmethod
-    def accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    def accuracy(y_true: Int[np.ndarray, "n"], y_pred: Int[np.ndarray, "n"]) -> float:
         return float((np.asarray(y_true) == np.asarray(y_pred)).mean())
 
     @staticmethod
-    def kappa(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    def kappa(y_true: Int[np.ndarray, "n"], y_pred: Int[np.ndarray, "n"]) -> float:
         """Cohen's kappa — chance-corrected agreement; the standard BCI motor-imagery metric."""
         return float(cohen_kappa_score(y_true, y_pred))
 
     @staticmethod
-    def ece(conf: np.ndarray, correct: np.ndarray, n_bins: int = 15) -> tuple[float, list]:
+    def ece(conf: Float[np.ndarray, "n"], correct: Bool[np.ndarray, "n"], n_bins: int = 15) -> tuple[float, list]:
         """Expected Calibration Error + per-bin (conf, acc, weight) for a reliability diagram.
         `conf` = max-softmax confidence per sample; `correct` = 1.0/0.0 whether the argmax was right."""
         conf, correct = np.asarray(conf, float), np.asarray(correct, float)
@@ -104,14 +105,15 @@ class Metrics:
         return float(e), bins
 
     @staticmethod
-    def ece_from_probs(probs: np.ndarray, y_true: np.ndarray, n_bins: int = 15) -> float:
+    def ece_from_probs(probs: Float[np.ndarray, "n c"], y_true: Int[np.ndarray, "n"], n_bins: int = 15) -> float:
         """ECE straight from a [n, C] probability matrix + true labels."""
         probs = np.asarray(probs, float)
         pred, conf = probs.argmax(1), probs.max(1)
         return Metrics.ece(conf, (pred == np.asarray(y_true)).astype(float), n_bins)[0]
 
     @staticmethod
-    def confusion(y_true: np.ndarray, y_pred: np.ndarray, n_classes: int) -> np.ndarray:
+    def confusion(y_true: Int[np.ndarray, "n"], y_pred: Int[np.ndarray, "n"],
+                  n_classes: int) -> Int[np.ndarray, "c c"]:
         """[n_classes, n_classes] integer confusion matrix (rows = true, cols = pred)."""
         t, p = np.asarray(y_true, dtype=np.int64), np.asarray(y_pred, dtype=np.int64)
         flat = np.bincount(t * n_classes + p, minlength=n_classes * n_classes)   # 2D histogram, vectorized

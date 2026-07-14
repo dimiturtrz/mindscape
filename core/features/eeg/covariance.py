@@ -5,6 +5,7 @@ these produce it (`time_delay_embed` before the covariance) and move whole cloud
 from __future__ import annotations
 
 import numpy as np
+from jaxtyping import Float, Int
 from pyriemann.utils.base import invsqrtm, powm
 from pyriemann.utils.distance import distance_riemann
 from pyriemann.utils.mean import mean_riemann
@@ -15,7 +16,7 @@ class Covariance:
     folded in as staticmethods, public names kept)."""
 
     @staticmethod
-    def time_delay_embed(X: np.ndarray, order: int, lag: int) -> np.ndarray:
+    def time_delay_embed(X: Float[np.ndarray, "n ch t"], order: int, lag: int) -> Float[np.ndarray, "n cho tl"]:
         """Augmented Covariance Method embedding: stack `order` lagged copies of each trial so the covariance
         becomes `[ch*order, ch*order]` and encodes temporal dynamics, not just spatial structure.
         `X [n, ch, t] -> [n, ch*order, t-(order-1)*lag]` — folds *time* into the SPD matrix without the
@@ -27,7 +28,7 @@ class Covariance:
         return np.concatenate([X[:, :, k * lag:k * lag + L] for k in range(order)], axis=1)
 
     @staticmethod
-    def recenter_covariances(C: np.ndarray) -> np.ndarray:
+    def recenter_covariances(C: Float[np.ndarray, "n ch ch"]) -> Float[np.ndarray, "n ch ch"]:
         """Congruence-transport one domain's covariances to the identity: `C -> M^{-1/2} C M^{-1/2}`, where M is
         the domain's Riemannian (Fréchet) mean. Removes the per-domain LOCATION shift on the SPD manifold
         (Zanini et al. 2018) while preserving the relative class geometry — the manifold version of whitening,
@@ -37,8 +38,8 @@ class Covariance:
         return np.einsum("ij,njk,kl->nil", W, C, W)
 
     @staticmethod
-    def recenter_signals(X: np.ndarray, groups: np.ndarray, *, max_ref: int = 512,
-                         shrinkage: float = 0.0) -> np.ndarray:
+    def recenter_signals(X: Float[np.ndarray, "n ch t"], groups: Int[np.ndarray, "n"], *, max_ref: int = 512,
+                         shrinkage: float = 0.0) -> Float[np.ndarray, "n ch t"]:
         """Whiten raw multichannel *signals* per domain by that domain's mean covariance: `X -> M^{-1/2} X`, with
         `M` the Riemannian mean of the domain's per-trial channel covariances. The time-series analog of
         `recenter_covariances` — it removes the per-subject spatial displacement from the SIGNALS an encoder
@@ -69,7 +70,7 @@ class Covariance:
         return out.astype(np.float32)
 
     @staticmethod
-    def scale_to_identity(C: np.ndarray, target_disp: float = 1.0) -> np.ndarray:
+    def scale_to_identity(C: Float[np.ndarray, "n ch ch"], target_disp: float = 1.0) -> Float[np.ndarray, "n ch ch"]:
         """Normalize dispersion (RPA step 2): after re-centering to the identity, stretch each covariance so the
         mean squared Riemannian distance to I equals `target_disp` — matches the domains' *spread*, not just
         their location. `C -> C**p` with `p = sqrt(target_disp / current_dispersion)`."""

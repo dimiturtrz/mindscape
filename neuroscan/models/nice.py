@@ -17,6 +17,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 import torch.nn.functional as F
+from jaxtyping import Float, Int
 from pydantic import BaseModel
 from torch import nn
 
@@ -57,7 +58,7 @@ class NiceEncoder(nn.Module):
             nn.Linear(config.embed_dim, config.embed_dim),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Float[torch.Tensor, "n ch t"]) -> Float[torch.Tensor, "n d"]:
         x = x.unsqueeze(1)                                 # [B,1,C,T]
         x = self.temporal(x)
         x = torch.clamp(self.bn(self.spatial(x)), -10, 10)  # [B,F,1,T]
@@ -69,8 +70,9 @@ class NiceEncoder(nn.Module):
 
 class Nice:
     @staticmethod
-    def clip_infonce(eeg: torch.Tensor, img: torch.Tensor, logit_scale: torch.Tensor,
-                     hard_beta: float = 0.0, soft_tau: float = 0.0) -> torch.Tensor:
+    def clip_infonce(eeg: Float[torch.Tensor, "n d"], img: Float[torch.Tensor, "n d"],
+                     logit_scale: Float[torch.Tensor, ""],
+                     hard_beta: float = 0.0, soft_tau: float = 0.0) -> Float[torch.Tensor, ""]:
         """Symmetric InfoNCE (CLIP loss) between L2-normalized EEG and image embeddings in a batch.
 
         Positives = matched (eeg_i, img_i); negatives = every other image in the batch. Symmetric over both
@@ -98,7 +100,8 @@ class Nice:
 
     @staticmethod
     @torch.no_grad()
-    def retrieval_hits(eeg: torch.Tensor, candidates: torch.Tensor, labels: torch.Tensor,
+    def retrieval_hits(eeg: Float[torch.Tensor, "n d"], candidates: Float[torch.Tensor, "k d"],
+                       labels: Int[torch.Tensor, "n"],
                        ks: tuple[int, ...] = (1, 5)) -> dict[int, np.ndarray]:
         """PER-TRIAL hit@k: for each EEG embedding, 1.0 if the true `labels` index is within the top-k
         cosine-ranked `candidates`, else 0.0. The un-averaged vector `retrieval_topk` means over — kept so a
@@ -109,7 +112,8 @@ class Nice:
 
     @staticmethod
     @torch.no_grad()
-    def retrieval_topk(eeg: torch.Tensor, candidates: torch.Tensor, labels: torch.Tensor,
+    def retrieval_topk(eeg: Float[torch.Tensor, "n d"], candidates: Float[torch.Tensor, "k d"],
+                       labels: Int[torch.Tensor, "n"],
                        ks: tuple[int, ...] = (1, 5)) -> dict[int, float]:
         """Zero-shot retrieval accuracy: for each EEG embedding, rank the `candidates` (one CLIP embedding per
         class) by cosine; hit@k if the true `labels` index is in the top-k. Chance = k / n_candidates."""
@@ -117,7 +121,8 @@ class Nice:
 
     @staticmethod
     @torch.no_grad()
-    def retrieval_continuous(eeg: torch.Tensor, candidates: torch.Tensor, labels: torch.Tensor) -> dict[str, float]:
+    def retrieval_continuous(eeg: Float[torch.Tensor, "n d"], candidates: Float[torch.Tensor, "k d"],
+                             labels: Int[torch.Tensor, "n"]) -> dict[str, float]:
         """Continuous eval extras alongside hit@k (bd 2y7k) — the angular error the hard top-k accuracy discards
         (a rank-2 miss 5° off and a rank-180 miss 120° off score identically under top-1). Both operands are
         L2-normalized here so the dot IS cosine regardless of caller scale. Returns:
@@ -156,12 +161,12 @@ class _GradReverse(torch.autograd.Function):
     subject while pushing the ENCODER to make that impossible (subject-invariant embedding)."""
 
     @staticmethod
-    def forward(ctx, x: torch.Tensor, lambd: float) -> torch.Tensor:
+    def forward(ctx, x: Float[torch.Tensor, "n d"], lambd: float) -> Float[torch.Tensor, "n d"]:
         ctx.lambd = lambd
         return x.view_as(x)
 
     @staticmethod
-    def backward(ctx, grad: torch.Tensor):
+    def backward(ctx, grad: Float[torch.Tensor, "n d"]):
         return -ctx.lambd * grad, None
 
 
@@ -174,5 +179,5 @@ class SubjectDiscriminator(nn.Module):
         super().__init__()
         self.net = nn.Sequential(nn.Linear(embed_dim, hidden), nn.ReLU(), nn.Linear(hidden, n_subjects))
 
-    def forward(self, z: torch.Tensor, lambd: float) -> torch.Tensor:
+    def forward(self, z: Float[torch.Tensor, "n d"], lambd: float) -> Float[torch.Tensor, "n subj"]:
         return self.net(_GradReverse.apply(z, lambd))

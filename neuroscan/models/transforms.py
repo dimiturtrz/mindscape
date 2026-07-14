@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import numpy as np
 from braindecode.preprocessing import exponential_moving_standardize
+from jaxtyping import Float
 
 
 class ZScore:
@@ -55,7 +56,7 @@ class Transforms:
         return STANDARDIZERS.get(kind, ZScore)()
 
     @staticmethod
-    def crops(X: np.ndarray, crop_len: int, n_crops: int):
+    def crops(X: Float[np.ndarray, "n ch t"], crop_len: int, n_crops: int):
         """Cut each trial [.,ch,T] into `n_crops` evenly-spaced windows of length `crop_len`.
         Returns (Xc [N*n_crops, ch, crop_len], trial_index [N*n_crops])."""
         T = X.shape[2]

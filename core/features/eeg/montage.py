@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import mne
 import numpy as np
+from jaxtyping import Float
 
 
 class EegMontage:
     """EEG scalp geometry — 2D electrode positions on the unit head disk (helpers folded in as staticmethods)."""
 
     @staticmethod
-    def eeg_positions(ch_names: list[str]) -> np.ndarray:
+    def eeg_positions(ch_names: list[str]) -> Float[np.ndarray, "ch 2"]:
         """2D scalp positions for EEG channels via the MNE standard 10-05 montage, normalized to the unit disk.
         Returns `[n_ch, 2]` in the same head-disk convention as `fnirs_positions`."""
         m = mne.channels.make_standard_montage("standard_1005").get_positions()["ch_pos"]

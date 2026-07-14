@@ -18,6 +18,7 @@ should be claimed only on a task shown to have residual nuisance-driven cross-su
 from __future__ import annotations
 
 import numpy as np
+from jaxtyping import Float
 from pydantic import BaseModel
 
 from core.data.fnirs.synthetic import SynthConfig, Synthetic
@@ -35,7 +36,8 @@ class Augment:
     in as a staticmethod (public name kept)."""
 
     @staticmethod
-    def domain_randomize(hbo: np.ndarray, hbr: np.ndarray, fs: float, cfg: AugConfig | None = None,
+    def domain_randomize(hbo: Float[np.ndarray, "n ch t"], hbr: Float[np.ndarray, "n ch t"], fs: float,
+                         cfg: AugConfig | None = None,
                          seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
         """Randomize the nuisance axes of paired (HbO, HbR) `[n, ch, t]` for cross-subject robustness (bd jdh).
 

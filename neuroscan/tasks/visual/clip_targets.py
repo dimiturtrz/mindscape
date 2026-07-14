@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 import open_clip
 import torch
+from jaxtyping import Float
 from PIL import Image
 
 from core.config import Config
@@ -118,7 +119,7 @@ class ClipTargets:
         return dict(zip(basenames, cached["emb"], strict=True))
 
     @staticmethod
-    def concept_prototypes(split: str) -> np.ndarray:
+    def concept_prototypes(split: str) -> Float[np.ndarray, "k d"]:
         """Mean CLIP embedding per concept (re-normalized) -> [n_concepts, 512]; the retrieval candidate bank."""
         embeddings, concept = ClipTargets.load(split)
         n_concepts = int(concept.max()) + 1

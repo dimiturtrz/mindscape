@@ -16,6 +16,7 @@ operator-validation use they were wanted for, minus photon transport / spatial m
 from __future__ import annotations
 
 import numpy as np
+from jaxtyping import Float
 from pydantic import BaseModel
 from scipy.signal import fftconvolve
 from scipy.stats import gamma
@@ -40,7 +41,7 @@ class Synthetic:
     kept), so the independent double-gamma forward model has one home."""
 
     @staticmethod
-    def double_gamma_hrf(fs: float, cfg: SynthConfig | None = None) -> np.ndarray:
+    def double_gamma_hrf(fs: float, cfg: SynthConfig | None = None) -> Float[np.ndarray, "t"]:
         """SPM canonical double-gamma HRF sampled at `fs`, peak-normalized. Positive lobe minus a weighted
         undershoot — the independent forward shape (cf. our single-gamma *estimator* in fusion.coupling)."""
         cfg = cfg or SynthConfig()
@@ -61,7 +62,7 @@ class Synthetic:
         return cfg.systemic_amp * out / 3.0
 
     @staticmethod
-    def synthesize_paired(neural_drive: np.ndarray, fs: float, cfg: SynthConfig | None = None,
+    def synthesize_paired(neural_drive: Float[np.ndarray, "n t"], fs: float, cfg: SynthConfig | None = None,
                           seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
         """Forward-generate paired (HbO, HbR) `[n, T]` from a neural drive `[n, T]`.
 
