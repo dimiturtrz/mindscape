@@ -90,9 +90,23 @@ def test_retrieval_continuous_perfect_chance_and_scale_invariant():
     labels = torch.arange(200)
     perfect = Nice.retrieval_continuous(cand.clone(), cand, labels)          # each queries its own candidate
     assert perfect["cos_to_true_mean"] > 0.99 and perfect["margin_mean"] > 0.5 and perfect["mean_rank"] == 1.0
+    assert perfect["cos_to_true_z"] > 5.0                                    # far above the random-concept baseline
     scaled = Nice.retrieval_continuous(cand.clone() * 7.0, cand, labels)     # magnitude must not change cosine
     assert abs(scaled["cos_to_true_mean"] - perfect["cos_to_true_mean"]) < 1e-5
     rand = torch.nn.functional.normalize(torch.randn(200, 512), dim=-1)
     chance = Nice.retrieval_continuous(rand, cand, labels)                   # unrelated queries
     assert abs(chance["cos_to_true_mean"]) < 0.1 and abs(chance["margin_mean"]) < 0.1
     assert 50.0 < chance["mean_rank"] < 150.0                                # middling rank, not near 1 or 200
+    assert abs(chance["cos_to_true_z"]) < 3.0                                # near the random baseline (~0 sigma)
+
+
+def test_retrieval_continuous_z_reflects_concept_clustering():
+    """cos_to_true_z is measured against the candidate bank's OWN off-diagonal cosines, so a clustered concept
+    space (high random_cos_mean) raises the bar: the same raw cos_to_true reads as fewer sigma above random."""
+    base = torch.nn.functional.normalize(torch.randn(1, 512), dim=-1)
+    clustered = torch.nn.functional.normalize(base + 0.05 * torch.randn(20, 512), dim=-1)  # all near one direction
+    labels = torch.arange(20)
+    ref = Nice.retrieval_continuous(clustered.clone(), clustered, labels)
+    assert ref["random_cos_mean"] > 0.3                                      # tight cluster -> high random cos (~0 if spread)
+    assert ref["cos_to_true_mean"] > 0.99                                    # perfect queries still ~1
+    assert ref["cos_to_true_z"] > 0.0                                        # still above its own baseline

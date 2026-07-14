@@ -126,7 +126,12 @@ class Nice:
             #1"; >0 = correctly biased toward the true concept even on a top-1 miss.
           - mean_rank: 1-based rank of the true concept (1 = top-1 hit), degrades gracefully unlike top-k.
         These mirror what the InfoNCE loss optimizes (pull to true, push from negatives), so they double as an
-        eval-side consistency check on the loss."""
+        eval-side consistency check on the loss.
+
+        CLIP concept vectors are not evenly spread (animals cluster near animals), so an absolute cos-to-true is
+        not self-interpretable. The candidate bank's own off-diagonal cosines are the reference — the cosine
+        between two DIFFERENT concept vectors, i.e. what "random" cos looks like in this space — so `cos_to_true`
+        is also reported as `cos_to_true_z`: standard deviations above that random-concept-pair baseline."""
         eeg = F.normalize(eeg, dim=-1)
         candidates = F.normalize(candidates, dim=-1)
         sims = eeg @ candidates.t()                                       # [N, n_cand] cosine
@@ -135,7 +140,12 @@ class Nice:
         mean_other = (sims.sum(dim=1) - cos_true) / max(1, n_cand - 1)   # mean cos to the other candidates
         margin = cos_true - mean_other
         rank = 1 + (sims > cos_true[:, None]).sum(dim=1)                 # candidates strictly closer than true
+        pair_cos = candidates @ candidates.t()                           # concept-pair cosines (the reference)
+        off_diag = pair_cos[~torch.eye(n_cand, dtype=torch.bool, device=pair_cos.device)]   # two random concepts
+        random_mean, random_std = off_diag.mean(), off_diag.std()
         return {"cos_to_true_mean": float(cos_true.mean()), "cos_to_true_std": float(cos_true.std()),
+                "cos_to_true_z": float((cos_true.mean() - random_mean) / (random_std + 1e-8)),
+                "random_cos_mean": float(random_mean), "random_cos_std": float(random_std),
                 "margin_mean": float(margin.mean()), "margin_std": float(margin.std()),
                 "mean_rank": float(rank.float().mean())}
 
