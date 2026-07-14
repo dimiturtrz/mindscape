@@ -62,7 +62,9 @@ _ARMS = [
     HeadSpec("mean_lin", "mean", hidden=0),        # frozen linear-probe floor (~0.6%, chance)
     HeadSpec("flat_mlp", "flat", hidden=1024),     # best geometry-blind (unordered bag of tokens, ~1.2%)
     HeadSpec("pos_attn", "pos_attn", hidden=512),  # geometry: electrode-position embedding + self-attention
-    HeadSpec("topo_cnn", "topo", hidden=512),      # geometry: scalp-grid RBF interpolation + 2D CNN (Bashivan)
+    HeadSpec("topo_cnn", "topo", hidden=512, grid=24, rbf_sigma=0.2),  # scalp-grid RBF + 2D CNN (Bashivan);
+    # grid24/sigma0.2 = 1.78±0.03 (3-seed) beats the grid16 default 1.68 by +0.10 (bd m69x.2) — the frozen ceiling
+
     HeadSpec("gcn", "gcn", hidden=512),            # geometry: electrode-adjacency graph message passing (2-layer GCN)
 ]
 
