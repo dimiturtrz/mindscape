@@ -1,13 +1,16 @@
-"""Code-size / complexity analytics (bd 70b) — track that methods stay thin and complexity stays in the
-engine (evaluation / core) as the codebase grows, not scattered into fat leaf functions.
+"""Code-size / complexity analytics — a one-shot EXPLORER (like `devtools.graph`'s report mode), not a
+gate. Tracks that methods stay thin and complexity stays in the engine as the codebase grows, rather than
+scattering into fat leaf functions.
 
 Per-file and per-area: code lines (non-blank, non-comment), def count, and a branch-node complexity proxy —
 `if/for/while/try/except/with/and/or/ternary/comprehension`, the McCabe-style decision points, summed via
-`ast` (no radon dependency). Plus the src-vs-test line ratio and the top-N largest files. A one-shot EXPLORER
-like `devtools.graph`, not a CI gate: `python -m devtools.analytics` (add `--flag-over 250` to list files above
-a code-line budget). Complexity-per-def is the number to watch — a rising max means logic is leaking into
-leaves that should delegate to the engine.
+`ast` (no radon dependency). Plus the src-vs-test line ratio and the top-N largest files. Complexity-per-def
+is the number to watch — a rising max means logic is leaking into leaves that should delegate.
+
+    python -m devtools.analytics --areas core neuroscan devtools     # scan your packages
+    python -m devtools.analytics --areas core --flag-over 250        # list files over a code-line budget
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,9 +21,20 @@ from pathlib import Path
 
 log = logging.getLogger("devtools.analytics")
 
-_AREAS = ["core", "neuroscan", "baselines", "devtools"]
-_BRANCH_NODES = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.ExceptHandler, ast.With,
-                 ast.AsyncWith, ast.IfExp, ast.comprehension, ast.BoolOp)
+_AREAS = ["src"]  # generic default — pass --areas <your packages> (+ devtools)
+_BRANCH_NODES = (
+    ast.If,
+    ast.For,
+    ast.AsyncFor,
+    ast.While,
+    ast.Try,
+    ast.ExceptHandler,
+    ast.With,
+    ast.AsyncWith,
+    ast.IfExp,
+    ast.comprehension,
+    ast.BoolOp,
+)
 
 
 @dataclass
@@ -28,7 +42,7 @@ class FileStat:
     path: Path
     code_lines: int
     defs: int
-    branches: int                      # decision points (cyclomatic proxy)
+    branches: int  # decision points (cyclomatic proxy)
 
 
 @dataclass
@@ -79,8 +93,11 @@ def analyze(repo: Path, areas: list[str]) -> list[AreaStat]:
 
 
 def _test_lines(repo: Path) -> int:
-    return sum(_code_lines(p.read_text(encoding="utf-8"))
-               for p in (repo / "tests").rglob("*.py") if "__pycache__" not in p.parts)
+    return sum(
+        _code_lines(p.read_text(encoding="utf-8"))
+        for p in (repo / "tests").rglob("*.py")
+        if "__pycache__" not in p.parts
+    )
 
 
 def report(stats: list[AreaStat], repo: Path, *, top_n: int = 10, flag_over: int | None = None) -> None:
@@ -92,7 +109,8 @@ def report(stats: list[AreaStat], repo: Path, *, top_n: int = 10, flag_over: int
         src_lines += a.code_lines
 
     tests = _test_lines(repo)
-    log.info(f"\nsrc {src_lines} : test {tests}  (ratio {tests / src_lines:.2f} test lines per src line)")
+    ratio = tests / src_lines if src_lines else 0.0
+    log.info(f"\nsrc {src_lines} : test {tests}  (ratio {ratio:.2f} test lines per src line)")
 
     files = sorted((f for a in stats for f in a.files), key=lambda f: f.code_lines, reverse=True)
     log.info(f"\ntop {top_n} largest (code lines):")
@@ -108,12 +126,12 @@ def report(stats: list[AreaStat], repo: Path, *, top_n: int = 10, flag_over: int
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--areas", nargs="+", default=_AREAS)
+    ap = argparse.ArgumentParser(description="per-area code size + complexity-per-def explorer")
+    ap.add_argument("--areas", nargs="+", default=_AREAS, help="dirs to scan (default: src)")
     ap.add_argument("--top-n", type=int, default=10)
     ap.add_argument("--flag-over", type=int, default=None, help="list files above this code-line budget")
     args = ap.parse_args()
-    repo = Path(__file__).resolve().parent.parent
+    repo = Path(__file__).resolve().parent.parent  # devtools/analytics.py -> repo root
     report(analyze(repo, args.areas), repo, top_n=args.top_n, flag_over=args.flag_over)
 
 

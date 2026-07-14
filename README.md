@@ -304,7 +304,8 @@ Agent-driven build, human-owned judgment — coding agents scaffold the plumbing
 the measurement correctness, and the evaluation are mine. The architecture (two-layer engine + science,
 split-as-criteria, dataset-adapter registry, calibration-under-shift) is carried from a mature prior ML
 project of mine; see [`docs/STRUCTURE.md`](docs/STRUCTURE.md). The neuroscience and decoding specifics I
-learn as I go.
+learn as I go. The tooling and quality gates are provisioned by an in-house copier template
+(sdlc-scaffold); refresh with `uvx copier update`.
 
 ## References
 - **BCI Competition IV-2a** — Tangermann et al., *Review of the BCI Competition IV*, Front. Neurosci. 2012.

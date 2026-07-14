@@ -1,7 +1,7 @@
 """The coverage-`omit` set as a shared devtools primitive — the 'not logic' shells (runners / adapters /
-GPU / download / viz glue) the arch-fitness gates treat specially. Both the test-mirror rule (graph.py:
-a shell needs no mirror test) and the namespace-state explorer (state_candidates.py: a shell's shared
-params are a runner's data, not object identity) reuse it, so every gate agrees on what a shell is."""
+GPU / download / viz glue) the arch-fitness gates treat specially. The test-mirror rule (graph.py: a
+shell needs no mirror test) reads it so the gate agrees with the coverage gate on what a shell is."""
+
 from __future__ import annotations
 
 import re
@@ -14,8 +14,9 @@ def coverage_omit(pyproject: str = "pyproject.toml") -> list[str]:
     p = Path(pyproject)
     if not p.exists():
         return []
-    return tomllib.loads(p.read_text(encoding="utf-8")).get("tool", {}).get("coverage", {}).get("run", {}).get(
-        "omit", [])
+    return (
+        tomllib.loads(p.read_text(encoding="utf-8")).get("tool", {}).get("coverage", {}).get("run", {}).get("omit", [])
+    )
 
 
 def matches_omit(path: str, patterns: list[str]) -> bool:

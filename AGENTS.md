@@ -83,6 +83,15 @@ bd close <id>         # Complete work
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
 
+## Scaffolding
+
+Guardrails provisioned by **sdlc-scaffold** via copier — `.copier-answers.yml` pins the version. The gate
+config, `devtools/`, and the nox/CI/pre-commit runners are **template-owned**: don't hand-edit them to pass
+a gate — fix upstream in the scaffold and `uvx copier update`, or edit only within `# >>> LOCAL-SLOT`
+regions. `copier update` pulls scaffold improvements as reviewable steps. (mindscape carries a few
+documented not-slotted local mods — the ML dep tree, the uv cu130 index, extra vulture `ignore_names` — and
+keeps its own README/CLAUDE/AGENTS content.)
+
 ## Conventions & Patterns
 
 ### Code quality — ruff ratchet (bd mindscape-y63)

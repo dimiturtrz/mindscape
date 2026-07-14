@@ -1,15 +1,16 @@
-"""Namespace-class detector: the in-a-class migration folded free funcs as `@staticmethod`, so a class
-whose methods all thread the SAME param(s) is a namespace bag with LATENT instance state — that shared
-param belongs in `__init__`, not every signature. This ranks those promotion candidates so the cleanup is
-evidence-driven, not eyeballed.
+"""Namespace-class detector: a class whose methods (folded from free funcs as `@staticmethod`) all thread
+the SAME param(s) is a namespace bag with LATENT instance state — that shared param belongs in `__init__`,
+not every signature. This ranks those promotion candidates so the cleanup is evidence-driven, not
+eyeballed.
 
 Signal: for each class with >=2 staticmethods and no `__init__`, count how many methods share each param
 name; a param carried by >=half the methods (and >=2) is latent state. Score = sum of those shared
 counts, so a class where many methods thread many common params ranks highest. Dispatcher command classes
 (`add_args`+`run`) and already-stateful classes (have `__init__`) are skipped.
 
-    python -m devtools.state_candidates core neuroscan
+    python -m devtools.state_candidates src mypackage
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,9 +29,12 @@ _MIN_METHODS = 2
 
 def _staticmethods(cls: ast.ClassDef) -> list[ast.FunctionDef]:
     """The @staticmethod-decorated defs of a class (the migrated free funcs)."""
-    return [n for n in cls.body
-            if isinstance(n, ast.FunctionDef)
-            and any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in n.decorator_list)]
+    return [
+        n
+        for n in cls.body
+        if isinstance(n, ast.FunctionDef)
+        and any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in n.decorator_list)
+    ]
 
 
 def _params(fn: ast.FunctionDef) -> set[str]:
@@ -52,16 +56,18 @@ def _is_pydantic_config(cls: ast.ClassDef) -> bool:
 
 
 def _is_autograd_function(cls: ast.ClassDef) -> bool:
-    """A torch.autograd.Function — forward/backward take `ctx` by the autograd API, never __init__ state.
-    Its shared `ctx` is a framework contract, not a promotable field. Skip (like the pydantic config)."""
-    return any((isinstance(b, ast.Name) and b.id == "Function")
-               or (isinstance(b, ast.Attribute) and b.attr == "Function") for b in cls.bases)
+    """A torch.autograd.Function (base `Function` / `autograd.Function`): forward/backward thread `ctx`
+    by the framework API — a contract, not promotable instance state. Skip like a pydantic config."""
+    return any(
+        (isinstance(b, ast.Name) and b.id == "Function") or (isinstance(b, ast.Attribute) and b.attr == "Function")
+        for b in cls.bases
+    )
 
 
 def shared_state(cls: ast.ClassDef) -> dict[str, int]:
     """Param names carried by >=2 and >=half of a class's staticmethods = its latent instance state.
-    Empty if the class has an __init__ (already stateful), is a pydantic config, is a CLI command, or
-    has too few methods."""
+    Empty if the class has an __init__ (already stateful), is a pydantic config, an autograd.Function, a
+    CLI command, or has too few methods."""
     if _is_pydantic_config(cls) or _is_autograd_function(cls):
         return {}
     if any(isinstance(n, ast.FunctionDef) and n.name == "__init__" for n in cls.body):
@@ -89,12 +95,14 @@ def analyze(path: Path) -> list[tuple[int, str, int, dict[str, int]]]:
 
 
 def scan(packages: list[str]) -> list[tuple[int, str, str, int, dict[str, int]]]:
-    """Ranked (score, class, file, n_methods, shared) across every .py under the packages, high score first."""
+    """Ranked (score, class, file, n_methods, shared) across every .py under the packages, high score
+    first. Coverage-omitted shells (`[tool.coverage] omit`, via omit.py — the same 'not logic' set the
+    test-mirror gate exempts) are skipped: a runner/adapter's shared params are its data, not identity."""
     omit = coverage_omit()
     rows = []
     for pkg in packages:
         for path in sorted(Path(pkg).rglob("*.py")):
-            if matches_omit(path.as_posix(), omit):        # runner/adapter/GPU/glue shell — data params, not state
+            if matches_omit(str(path), omit):
                 continue
             rows.extend((sc, name, str(path), n, sh) for sc, name, n, sh in analyze(path))
     return sorted(rows, reverse=True)
@@ -110,10 +118,10 @@ def report(rows: list[tuple[int, str, str, int, dict[str, int]]]) -> str:
 
 
 def main():
-    ap = argparse.ArgumentParser(prog="python -m devtools.state_candidates",
-                                 description="rank namespace-classes by latent shared instance state")
-    ap.add_argument("packages", nargs="*", default=["core", "neuroscan"],
-                    help="package dirs to scan (default: core neuroscan)")
+    ap = argparse.ArgumentParser(
+        prog="python -m devtools.state_candidates", description="rank namespace-classes by latent shared instance state"
+    )
+    ap.add_argument("packages", nargs="*", default=["src"], help="package dirs to scan (default: src)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     rows = scan(args.packages)

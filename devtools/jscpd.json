@@ -1,9 +1,9 @@
 {
-  "//": "Duplication detector (bd apl) — the DRY axis token/dead-code linters can't see. threshold = max % dup before a nonzero exit. PATHS are passed on the CLI (jscpd resolves a config `path` relative to the config file, which breaks when the config lives under devtools/) — run: `npx jscpd@4 core neuroscan --config devtools/jscpd.json`. ENFORCED (blocks) in CI: dup is 0.7% < 1% after the runner boilerplate was DRY-extracted (Cli.setup_logging, Riemann.cross_subject_decode). Ratchet the threshold DOWN as dup settles, never up.",
+  "//": "Duplication detector — the DRY axis coupling tools can't see. A fresh project is 0% dup = REGRESSION GUARD. threshold = max % dup before nonzero exit. PATHS are passed on the CLI (jscpd resolves a config `path` relative to the config file, which breaks when the config lives under devtools/) — run: `jscpd <src dirs...> --config devtools/jscpd.json`. Advisory in CI until the Node step proves stable, then graduate to blocking.",
   "threshold": 1,
   "minTokens": 50,
   "gitignore": true,
-  "ignore": ["**/node_modules/**", "**/dist/**", "**/__pycache__/**", "runs/**", "mlruns/**", "external/**", "neuroviz/web/**"],
+  "ignore": ["**/node_modules/**", "**/dist/**", "**/__pycache__/**", "**/.staging/**"],
   "reporters": ["console"],
   "absolute": false
 }

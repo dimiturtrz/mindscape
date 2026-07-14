@@ -27,7 +27,7 @@ def test_aggregate_shape_and_separable_signal(monkeypatch):
         X += (y[:, None, None] * 2.0).astype(np.float32)
         return X, y
 
-    monkeypatch.setattr("core.data.store.gather", fake_gather)
+    monkeypatch.setattr("core.data.store.Store.gather", fake_gather)
 
     def fit(X, y):
         from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -60,7 +60,7 @@ def test_run_persists_a_model_per_fold(monkeypatch, tmp_path):
         X = rng.normal(size=(n, 4, 8)).astype(np.float32) + (y[:, None, None] * 2.0).astype(np.float32)
         return X, y
 
-    monkeypatch.setattr("core.data.store.gather", fake_gather)
+    monkeypatch.setattr("core.data.store.Store.gather", fake_gather)
 
     def fit(X, y):
         from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
