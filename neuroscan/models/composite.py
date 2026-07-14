@@ -241,10 +241,10 @@ class GcnHead(Head):
 
 class TemporalConvHead(Head):
     """The TEMPORAL analog of the geometry heads: when the grid's first axis is time (a finer-patching backbone
-    like EEGPT emits `[B, N_time, embed_num, d]`), process the N ordered time-patches with a 1D conv instead of
-    collapsing them. Pools the `embed_num` summary tokens per time-step, then convolves ALONG time (kernel 3,
-    size-agnostic in N) and reads out — LATE aggregation that preserves the temporal order a global mean or flat
-    bag throws away. Distinct from the geometry heads (which fold the ELECTRODE axis); this folds the TIME axis."""
+    like EEGPT emits `[B, N_time, embed_num, d]`), process the ordered token sequence with a 1D conv instead of
+    collapsing it. Flattens (time, summary) into one ordered `N·embed_num` sequence — keeping the summary
+    tokens — then convolves along it (kernel 3, size-agnostic) and reads out — LATE aggregation that preserves
+    the temporal order a global mean or flat bag throws away. Folds the TIME axis (vs geometry's ELECTRODE axis)."""
 
     def __init__(self, spec: HeadSpec, d: int, embed_dim: int):
         super().__init__()
@@ -254,6 +254,6 @@ class TemporalConvHead(Head):
         self.mlp = Heads.mlp(64, spec.hidden, spec.dropout, embed_dim)
 
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
-        x = tokens.mean(dim=2)                            # [B, N_time, d] — pool the summary tokens per step
-        z = self.conv(x.transpose(1, 2)).flatten(1)       # conv along time -> [B, 64]
+        x = tokens.flatten(1, 2)                          # [B, N·embed_num, d] — keep the summary tokens as
+        z = self.conv(x.transpose(1, 2)).flatten(1)       # ordered positions; conv over the token sequence -> [B, 64]
         return self.mlp(z)

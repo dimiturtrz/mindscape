@@ -88,11 +88,11 @@ class EegptBackbone(Backbone):
     summary tokens per time-patch — so the axes are (time-patch, summary), NOT electrodes: token heads
     (mean/flat/attn) apply, geometry heads do not."""
 
-    _N_TIME = 256          # 1 s @ 256 Hz -> 4 time-patches at patch 64
+    _N_TIME = 256          # 1 s @ 256 Hz -> 4 time-patches at patch 64 (stride 64); overlap -> more (grow-N)
 
-    def __init__(self, channel_names: list[str]):
+    def __init__(self, channel_names: list[str], patch_stride: int | None = None):
         super().__init__()
-        module, chan_dict = Foundation._load_eegpt_encoder(self._N_TIME)
+        module, chan_dict = Foundation._load_eegpt_encoder(self._N_TIME, patch_stride)
         self.module = module
         self.d_model = 512
         keep = [i for i, ch in enumerate(channel_names) if ch.upper().strip(".") in chan_dict]
@@ -117,7 +117,8 @@ class Foundation:
         a new foundation model is one entry here, not a fork of the runner. `channel_names` feeds a montage
         adapter (EEGPT needs it to map channels to its CHANNEL_DICT; CBraMod ignores it)."""
         builders = {"cbramod": lambda: Foundation._loaded_cbramod(),
-                    "eegpt": lambda: Foundation._loaded_eegpt(channel_names)}
+                    "eegpt": lambda: Foundation._loaded_eegpt(channel_names, None, "eegpt"),
+                    "eegpt_ov": lambda: Foundation._loaded_eegpt(channel_names, 16, "eegpt_ov")}
         if name not in builders:
             raise KeyError(f"unknown backbone {name!r} — registered: {sorted(builders)}")
         return builders[name]()
@@ -127,14 +128,16 @@ class Foundation:
         return LoadedBackbone(CBraModBackbone(), patch_points=200, d_model=200, sample_rate=200.0, name="cbramod")
 
     @staticmethod
-    def _loaded_eegpt(channel_names: list[str] | None) -> LoadedBackbone:
+    def _loaded_eegpt(channel_names: list[str] | None, patch_stride: int | None, name: str) -> LoadedBackbone:
+        """`eegpt` = non-overlapping patches (stride 64 -> N=4 on 1s); `eegpt_ov` = overlapping (stride 16 ->
+        N=13), the grow-N arm. `name` keys the feature cache so the two never collide."""
         if channel_names is None:
             raise ValueError("eegpt needs channel_names for its montage adapter (map to EEGPT's CHANNEL_DICT)")
-        return LoadedBackbone(EegptBackbone(channel_names), patch_points=64, d_model=512,
-                              sample_rate=256.0, name="eegpt")
+        return LoadedBackbone(EegptBackbone(channel_names, patch_stride), patch_points=64, d_model=512,
+                              sample_rate=256.0, name=name)
 
     @staticmethod
-    def _load_eegpt_encoder(n_time: int):
+    def _load_eegpt_encoder(n_time: int, patch_stride: int | None = None):
         """Build the EEGPT EEGTransformer encoder (its downstream config: patch 64, dim 512, embed_num 4,
         depth 8) sized to our epoch length and load the FROZEN pretrained `target_encoder` weights from the
         checkpoint. Returns (encoder, CHANNEL_DICT). Reaches into the external checkout (see the fetch step)."""
@@ -145,8 +148,9 @@ class Foundation:
         ckpt = Config.data_root("pretrained") / "EEGPT" / "eegpt_mcae_58chs_4s_large4E.ckpt"
         if not ckpt.exists():
             raise FileNotFoundError(f"EEGPT weights not at {ckpt} — see the fetch step in this module's docstring")
-        encoder = EEGTransformer(img_size=(58, n_time), patch_size=64, embed_dim=512, embed_num=4,
-                                 depth=8, num_heads=8, mlp_ratio=4.0, norm_layer=partial(nn.LayerNorm, eps=1e-6))
+        encoder = EEGTransformer(img_size=(58, n_time), patch_size=64, patch_stride=patch_stride, embed_dim=512,
+                                 embed_num=4, depth=8, num_heads=8, mlp_ratio=4.0,
+                                 norm_layer=partial(nn.LayerNorm, eps=1e-6))
         state = torch.load(ckpt, map_location="cpu", weights_only=False)
         state = state.get("state_dict", state)
         enc = {k[len("target_encoder."):]: v for k, v in state.items() if k.startswith("target_encoder.")}
