@@ -102,8 +102,7 @@ Top-k accuracy is one bit per trial (did #1 hit); it hides *how* the misses miss
 adds the geometry as **extras** (never replacing accuracy): cos-to-true, a discrimination **margin**
 (cos-to-true − mean cos-to-the-other-199), **mean-rank** of the true concept, and a **z** against the concept
 bank's own random-pair cosine — CLIP concepts cluster (two *different* THINGS concepts already sit at cos
-0.334 ± 0.09), so absolute cosine isn't self-interpretable. Backfilled across the frozen CBraMod head zoo
-(120 ep, [writeup](../../../learning/2026-07-14_perception_continuous_metrics.md)):
+0.334 ± 0.09), so absolute cosine isn't self-interpretable. Backfilled across the frozen CBraMod head zoo (120 ep):
 
 | frozen head | single-top1 | cos-to-true (≈ angle) | margin | mean-rank |
 |---|---|---|---|---|
@@ -113,13 +112,11 @@ bank's own random-pair cosine — CLIP concepts cluster (two *different* THINGS 
 | pos_attn | 1.59% | 0.012 (~89°) | 0.017 | 74 |
 | topo_cnn | 1.75% | 0.058 (~87°) | 0.015 | 70 |
 
-**Every arm points ~90° from the true concept — even the best.** The encoder never lands *near* the right
-concept absolutely; retrieval lives entirely in a **tiny positive margin** (topo's 1.75% = 3.5× chance from a
-0.015 margin). Raw cos-to-true is geometry-confounded — EEG embeddings sit *outside* the tight CLIP concept
-cluster, so every arm reads ~orthogonal — while **margin and mean-rank** are what track accuracy, exactly what
-InfoNCE optimizes (relative closeness, not absolute alignment). The single-trial cross-subject "signal" is a
-faint relative tilt, not a semantic hit. *(single-trial embeddings; the trial-averaged cut may align better —
-untested.)*
+**Every arm points ~90° from the true concept — even the best.** Retrieval lives entirely in a **tiny positive
+margin** (topo's 1.75% = 3.5× chance from a 0.015 margin); raw cos-to-true is geometry-confounded (EEG
+embeddings sit outside the tight CLIP concept cluster), while **margin and mean-rank** track accuracy — what
+InfoNCE actually optimizes. Full reasoning + caveats:
+[interpretation](../../../interpretations/visual/2026-07-14_perception_continuous_metrics.md).
 
 ## Cross-dataset zero-shot — the hardest test, a measured null
 

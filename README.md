@@ -221,7 +221,7 @@ concept-aware InfoNCE — all null). The over-reporting audit
 ([`retrieval_audit.py`](neuroscan/tasks/visual/retrieval_audit.py)) still holds: the field's usual headline is
 the *within-subject concept-averaged* cell (**14.8%**), ~7× the deployment-real cross-subject single-trial
 (**2.2%**) — two leaks, seeing the test *person* + averaging test *repeats*. A continuous-metric readout
-([writeup](learning/2026-07-14_perception_continuous_metrics.md)) sharpens what "single-trial" means: every
+([interpretation](interpretations/visual/2026-07-14_perception_continuous_metrics.md)) sharpens what "single-trial" means: every
 frozen head points **~90° from the true concept** even at its best — retrieval lives in a *tiny margin*, not a
 semantic hit (margin and mean-rank track accuracy; absolute cosine is geometry-confounded). Same
 subject-generalization story as motor imagery, now in perception. The zero-shot disjointness
