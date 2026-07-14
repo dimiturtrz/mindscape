@@ -199,7 +199,8 @@ class FrozenHead:
         single = Nice.retrieval_topk(emb, bank, labels)
         n = int(concept.max()) + 1
         averaged = torch.stack([F.normalize(emb[labels == c].mean(0), dim=-1) for c in range(n)])
-        return {"single_trial": single, "concept_avg": Nice.retrieval_topk(averaged, bank, torch.arange(n))}
+        return {"single_trial": single, "concept_avg": Nice.retrieval_topk(averaged, bank, torch.arange(n)),
+                "continuous": Nice.retrieval_continuous(emb, bank, labels)}   # angular-error extras (bd 2y7k)
 
     @staticmethod
     def _train_arm(spec: HeadSpec, cache: Cache, device: str, cfg: FitCfg) -> dict:
@@ -285,11 +286,15 @@ def main():
         with Tracking.run("mindscape-perception", f"frozen_{args.backbone}_{spec.name}_test{args.test}_s{args.seed}",
                           params=params, tags=tags):
             r = FrozenHead._train_arm(spec, cache, device, fit)
-            s, a = r["single_trial"], r["concept_avg"]
-            Tracking.metrics({"test_single_top1": s[1], "test_single_top5": s[5],
-                              "test_concept_top1": a[1], "test_concept_top5": a[5], "best_val_top1": r["val_top1"]})
+            single, concept, cont = r["single_trial"], r["concept_avg"], r["continuous"]
+            Tracking.metrics({"test_single_top1": single[1], "test_single_top5": single[5],
+                              "test_concept_top1": concept[1], "test_concept_top5": concept[5],
+                              "best_val_top1": r["val_top1"],
+                              **{f"test_{k}": v for k, v in cont.items()}})   # angular error (bd 2y7k)
         logger.info(f"  {spec.name:9s} (val {r['val_top1']*100:.2f}% ep{r['best_val_epoch']:2d})  "
-                    f"single {s[1]*100:.2f}%/{s[5]*100:.2f}%  concept {a[1]*100:.2f}%/{a[5]*100:.2f}%")
+                    f"single {single[1]*100:.2f}%/{single[5]*100:.2f}%  "
+                    f"concept {concept[1]*100:.2f}%/{concept[5]*100:.2f}%  "
+                    f"cos {cont['cos_to_true_mean']:.3f} margin {cont['margin_mean']:.3f}")
         results.append(r)
     if args.out:
         Path(args.out).write_text(json.dumps(

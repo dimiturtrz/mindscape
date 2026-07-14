@@ -167,7 +167,9 @@ class TrainNice:
         averaged = torch.stack([torch.nn.functional.normalize(embedded[labels == c].mean(0), dim=-1)
                                 for c in range(n_concepts)])
         concept_avg = Nice.retrieval_topk(averaged, candidate_bank, torch.arange(n_concepts))
+        continuous = Nice.retrieval_continuous(embedded, candidate_bank, labels)   # angular-error extras (bd 2y7k)
         return {"single_trial": single, "single_trial_ci": single_ci, "concept_avg": concept_avg,
+                "continuous": continuous,
                 "single_trial_hits": {k: h.tolist() for k, h in hits.items()}}   # persisted for paired delta (s1t2)
 
     @staticmethod
@@ -302,20 +304,21 @@ class TrainNice:
 
             train_s = time.perf_counter() - epoch_start
             if epoch % cfg.val_every == 0 or epoch == cfg.epochs - 1:      # stride the big val eval (bd)
-                val_top1 = TrainNice.evaluate(
-                    encoder, RetrievalSet(val_eeg, val_labels, val_bank), device)["single_trial"][1]
+                val_eval = TrainNice.evaluate(encoder, RetrievalSet(val_eeg, val_labels, val_bank), device)
+                val_top1 = val_eval["single_trial"][1]
                 if val_top1 > best_val:
                     best_val, best_epoch, since_improved = val_top1, epoch, 0
                     best_state = {k: v.detach().cpu().clone() for k, v in encoder.state_dict().items()}
                 else:
                     since_improved += 1
                 Tracking.metrics({"loss": total_loss / max(1, n_batches), "val_top1": val_top1,
+                                  "val_cos_to_true": val_eval["continuous"]["cos_to_true_mean"],
                                   "sec_per_epoch": train_s}, step=epoch)   # per-epoch curve + speed in mlflow
                 if epoch % 5 == 0 or epoch == cfg.epochs - 1:
-                    eta = (time.perf_counter() - run_start) / (epoch + 1) * (cfg.epochs - epoch - 1)
                     logger.info(f"ep {epoch:3d}  loss {total_loss / max(1, n_batches):.3f}  "
-                          f"val-top1 {val_top1*100:.2f}%"
-                          f"  {train_s:.1f}s ({n_batches / train_s:.0f} batch/s)  ~{eta:.0f}s left")
+                          f"val-top1 {val_top1*100:.2f}%  cos {val_eval['continuous']['cos_to_true_mean']:.3f}"
+                          f"  {train_s:.1f}s ({n_batches / train_s:.0f} batch/s)  "
+                          f"~{(time.perf_counter() - run_start) / (epoch + 1) * (cfg.epochs - epoch - 1):.0f}s left")
                 if since_improved >= cfg.patience:
                     logger.info(f"early stop at ep {epoch} (best val = ep {best_epoch})")
                     break
@@ -351,9 +354,11 @@ class TrainNice:
             encoder, stats = TrainNice.train_encoder(
                 TrainData(train_eeg, train_targets, train_concept, subj_idx), cfg, device)
             test = TrainNice.evaluate(encoder, RetrievalSet(test_eeg, test_concept, test_bank), device)
-            s, a = test["single_trial"], test["concept_avg"]
-            Tracking.metrics({"test_single_top1": s[1], "test_single_top5": s[5],
-                              "test_concept_top1": a[1], "test_concept_top5": a[5], "best_val_top1": stats["val_top1"]})
+            single, concept = test["single_trial"], test["concept_avg"]
+            Tracking.metrics({"test_single_top1": single[1], "test_single_top5": single[5],
+                              "test_concept_top1": concept[1], "test_concept_top5": concept[5],
+                              "best_val_top1": stats["val_top1"],
+                              **{f"test_{k}": v for k, v in test["continuous"].items()}})   # angular error (bd 2y7k)
         result = {"regime": regime, "train": train_subjects, "test": test_subject, **stats,
                   "chance_top1": 1 / (int(test_concept.max()) + 1), **test}
         Invariants.check(result)                               # fail loud on a silently-inconsistent number

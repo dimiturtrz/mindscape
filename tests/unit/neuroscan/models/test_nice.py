@@ -80,3 +80,19 @@ def test_retrieval_hits_is_per_trial_and_means_to_topk():
     assert hits[1][:10].all()                                    # planted queries all hit@1
     top = Nice.retrieval_topk(eeg, cand, labels)
     assert hits[1].mean() == top[1] and hits[5].mean() == top[5]
+
+
+def test_retrieval_continuous_perfect_chance_and_scale_invariant():
+    """The angular-error extras (bd 2y7k): perfect prediction -> cos_to_true≈1, positive margin, mean_rank 1;
+    random prediction -> cos_to_true≈0, margin≈0, mean_rank near the middle of the 200 candidates. The helper
+    L2-normalizes internally, so an unnormalized query gives the SAME cosine (scale-invariant)."""
+    cand = torch.nn.functional.normalize(torch.randn(200, 512), dim=-1)
+    labels = torch.arange(200)
+    perfect = Nice.retrieval_continuous(cand.clone(), cand, labels)          # each queries its own candidate
+    assert perfect["cos_to_true_mean"] > 0.99 and perfect["margin_mean"] > 0.5 and perfect["mean_rank"] == 1.0
+    scaled = Nice.retrieval_continuous(cand.clone() * 7.0, cand, labels)     # magnitude must not change cosine
+    assert abs(scaled["cos_to_true_mean"] - perfect["cos_to_true_mean"]) < 1e-5
+    rand = torch.nn.functional.normalize(torch.randn(200, 512), dim=-1)
+    chance = Nice.retrieval_continuous(rand, cand, labels)                   # unrelated queries
+    assert abs(chance["cos_to_true_mean"]) < 0.1 and abs(chance["margin_mean"]) < 0.1
+    assert 50.0 < chance["mean_rank"] < 150.0                                # middling rank, not near 1 or 200

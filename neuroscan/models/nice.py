@@ -115,6 +115,30 @@ class Nice:
         class) by cosine; hit@k if the true `labels` index is in the top-k. Chance = k / n_candidates."""
         return {k: float(hits.mean()) for k, hits in Nice.retrieval_hits(eeg, candidates, labels, ks).items()}
 
+    @staticmethod
+    @torch.no_grad()
+    def retrieval_continuous(eeg: torch.Tensor, candidates: torch.Tensor, labels: torch.Tensor) -> dict[str, float]:
+        """Continuous eval extras alongside hit@k (bd 2y7k) — the angular error the hard top-k accuracy discards
+        (a rank-2 miss 5° off and a rank-180 miss 120° off score identically under top-1). Both operands are
+        L2-normalized here so the dot IS cosine regardless of caller scale. Returns:
+          - cos_to_true (mean/std): cosine of each prediction to its TRUE concept vector — the angular error dist.
+          - margin (mean/std): cos_to_true − mean(cos to the other candidates) — the continuous analog of "ranked
+            #1"; >0 = correctly biased toward the true concept even on a top-1 miss.
+          - mean_rank: 1-based rank of the true concept (1 = top-1 hit), degrades gracefully unlike top-k.
+        These mirror what the InfoNCE loss optimizes (pull to true, push from negatives), so they double as an
+        eval-side consistency check on the loss."""
+        eeg = F.normalize(eeg, dim=-1)
+        candidates = F.normalize(candidates, dim=-1)
+        sims = eeg @ candidates.t()                                       # [N, n_cand] cosine
+        n_cand = sims.shape[1]
+        cos_true = sims[torch.arange(len(labels)), labels]               # [N] cos to the true concept
+        mean_other = (sims.sum(dim=1) - cos_true) / max(1, n_cand - 1)   # mean cos to the other candidates
+        margin = cos_true - mean_other
+        rank = 1 + (sims > cos_true[:, None]).sum(dim=1)                 # candidates strictly closer than true
+        return {"cos_to_true_mean": float(cos_true.mean()), "cos_to_true_std": float(cos_true.std()),
+                "margin_mean": float(margin.mean()), "margin_std": float(margin.std()),
+                "mean_rank": float(rank.float().mean())}
+
 
 class _GradReverse(torch.autograd.Function):
     """Identity forward, sign-flipped (× λ) gradient backward — the DANN gradient-reversal layer. Placed
