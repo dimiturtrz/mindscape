@@ -31,9 +31,10 @@ class Signal:
     neutral data layer both EEG and fNIRS adapters ride on."""
 
     @staticmethod
-    def bandpass(X: Float[np.ndarray, "ch t"], l_freq: float, h_freq: float, fs: float, order: int = 4
-                 ) -> Float[np.ndarray, "ch t"]:
-        """Zero-phase Butterworth bandpass on continuous [ch, T] (filtfilt — no phase shift)."""
+    def bandpass(X: Float[np.ndarray, "*batch t"], l_freq: float, h_freq: float, fs: float, order: int = 4
+                 ) -> Float[np.ndarray, "*batch t"]:
+        """Zero-phase Butterworth bandpass, filtering the LAST (time) axis (filtfilt — no phase shift). Rank-
+        agnostic: `*batch` leading axes pass through, so continuous [ch, T] and epoched [n, ch, T] both work."""
         nyq = fs / 2.0
         b, a = butter(order, [l_freq / nyq, min(h_freq, nyq * 0.99) / nyq], btype="band")
         return filtfilt(b, a, X, axis=-1)
