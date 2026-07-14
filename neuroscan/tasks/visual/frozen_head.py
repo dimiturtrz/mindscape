@@ -58,6 +58,9 @@ class FitCfg:
     seed: int = 0
 
 
+_GEOMETRY_POOLS = {"pos_attn", "topo", "gcn"}   # fold the ELECTRODE axis — need grid C == #electrodes
+_TEMPORAL_POOLS = {"temporal"}                  # fold the TIME axis — need a time-first grid (S>1 backbone)
+
 _ARMS = [
     HeadSpec("mean_lin", "mean", hidden=0),        # frozen linear-probe floor (~0.6%, chance)
     HeadSpec("flat_mlp", "flat", hidden=1024),     # best geometry-blind (unordered bag of tokens, ~1.2%)
@@ -66,6 +69,7 @@ _ARMS = [
     # grid24/sigma0.2 = 1.78±0.03 (3-seed) beats the grid16 default 1.68 by +0.10 (bd m69x.2) — the frozen ceiling
 
     HeadSpec("gcn", "gcn", hidden=512),            # geometry: electrode-adjacency graph message passing (2-layer GCN)
+    HeadSpec("temporal_cnn", "temporal", hidden=512),  # temporal: 1D conv along time patches (S>1 backbones only)
 ]
 
 
@@ -264,13 +268,13 @@ def main():
     arms = FrozenHead._topo_arms() if args.topo_sweep else _ARMS
     if args.only:
         arms = [a for a in arms if args.only in a.name]
-    if cache.tr_feat.shape[1] != len(cache.pos):    # grid axis isn't electrodes (e.g. EEGPT time-patches)
-        geo = {"pos_attn", "topo", "gcn"}
-        skipped = [a.name for a in arms if a.pool in geo]
-        arms = [a for a in arms if a.pool not in geo]
-        if skipped:
-            logger.info(f"skipping geometry heads (grid C={cache.tr_feat.shape[1]} != {len(cache.pos)} "
-                        f"electrodes): {skipped}")
+    spatial_grid = cache.tr_feat.shape[1] == len(cache.pos)   # grid axis IS electrodes (CBraMod) vs time (EEGPT)
+    drop = _TEMPORAL_POOLS if spatial_grid else _GEOMETRY_POOLS
+    skipped = [a.name for a in arms if a.pool in drop]
+    arms = [a for a in arms if a.pool not in drop]
+    if skipped:
+        axis = "electrodes" if spatial_grid else f"time-patches (C={cache.tr_feat.shape[1]})"
+        logger.info(f"grid axis = {axis}; skipping inapplicable heads: {skipped}")
     logger.info(f"\nhead sweep · backbone={args.backbone} train={args.train} test={args.test} · "
                 f"{args.epochs}ep lr{args.lr} · chance {1 / (int(cache.test_concept.max()) + 1):.3f}")
     results = []

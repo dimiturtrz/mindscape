@@ -112,10 +112,12 @@ class Heads:
               embed_dim: int = _EMBED) -> Head:
         """A `Head` for this arm, sized to the token width `d` and (for geometry arms) the electrode positions
         `pos [C, 2]` on the unit-disk scalp. `n_tok` (= C·S) is required only by the flat pool (its MLP in-dim
-        is n_tok·d); mean/attn/geometry ignore it."""
+        is n_tok·d); mean/attn/geometry/temporal ignore it."""
         geometry = {"pos_attn": PosAttnHead, "topo": TopoHead, "gcn": GcnHead}
         if spec.pool in geometry:
             return geometry[spec.pool](spec, d, pos, embed_dim)
+        if spec.pool == "temporal":
+            return TemporalConvHead(spec, d, embed_dim)
         return TokenHead(spec, d, n_tok, embed_dim)
 
     @staticmethod
@@ -235,3 +237,23 @@ class GcnHead(Head):
         h = F.gelu(self.gcn1(torch.einsum("ck,bkd->bcd", self.adj, f)))              # Â X W₁
         h = F.gelu(self.gcn2(torch.einsum("ck,bkd->bcd", self.adj, h)))              # second graph-conv layer
         return self.mlp(h.mean(dim=1))                                               # readout over electrodes
+
+
+class TemporalConvHead(Head):
+    """The TEMPORAL analog of the geometry heads: when the grid's first axis is time (a finer-patching backbone
+    like EEGPT emits `[B, N_time, embed_num, d]`), process the N ordered time-patches with a 1D conv instead of
+    collapsing them. Pools the `embed_num` summary tokens per time-step, then convolves ALONG time (kernel 3,
+    size-agnostic in N) and reads out — LATE aggregation that preserves the temporal order a global mean or flat
+    bag throws away. Distinct from the geometry heads (which fold the ELECTRODE axis); this folds the TIME axis."""
+
+    def __init__(self, spec: HeadSpec, d: int, embed_dim: int):
+        super().__init__()
+        self.conv = nn.Sequential(
+            nn.Conv1d(d, 64, 3, padding=1), nn.GELU(),
+            nn.Conv1d(64, 64, 3, padding=1), nn.GELU(), nn.AdaptiveAvgPool1d(1))
+        self.mlp = Heads.mlp(64, spec.hidden, spec.dropout, embed_dim)
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        x = tokens.mean(dim=2)                            # [B, N_time, d] — pool the summary tokens per step
+        z = self.conv(x.transpose(1, 2)).flatten(1)       # conv along time -> [B, 64]
+        return self.mlp(z)

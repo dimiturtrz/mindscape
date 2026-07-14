@@ -70,10 +70,20 @@ def test_encode_tokens_exposes_backbone_grid():
 
 def test_every_head_maps_grid_to_clip():
     grid = torch.randn(4, _C, _S, _D)
-    for pool in ("mean", "attn", "flat", "pos_attn", "topo", "gcn"):
+    for pool in ("mean", "attn", "flat", "pos_attn", "topo", "gcn", "temporal"):
         head = Heads.build(HeadSpec(pool, pool), _D, _pos(), n_tok=_C * _S, embed_dim=_EMBED)
         out = head(grid)
         assert out.shape == (4, _EMBED), pool
+
+
+def test_temporal_head_uses_time_order():
+    """The temporal head convolves ALONG the first (time) axis — reversing time changes its output, unlike a
+    global-mean/flat head. Guards that it actually processes the sequence the S-token backbones expose."""
+    head = Heads.build(HeadSpec("temporal", "temporal"), _D, _pos(), embed_dim=_EMBED).eval()
+    grid = torch.randn(2, _C, _S, _D)
+    with torch.no_grad():
+        forward, reversed_ = head(grid), head(grid.flip(1))
+    assert not torch.allclose(forward, reversed_, atol=1e-4)   # order-sensitive (temporal, not a bag)
 
 
 def test_flat_head_sizes_mlp_at_construction():
