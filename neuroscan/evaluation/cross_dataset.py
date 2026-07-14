@@ -14,11 +14,12 @@ make it leakage-free, and both are pure set/label logic (no EEG, no GPU) so they
 from __future__ import annotations
 
 import numpy as np
+from jaxtyping import Bool, Float, Shaped
 
 
 class CrossDataset:
     @staticmethod
-    def holdout_mask(concept_names: np.ndarray, holdout: set[str]) -> np.ndarray:
+    def holdout_mask(concept_names: Shaped[np.ndarray, "n"], holdout: set[str]) -> Bool[np.ndarray, "n"]:
         """Boolean mask of trials to KEEP for training: every trial whose concept is NOT in the eval `holdout`
         set. Keeps the cross-dataset encoder from ever seeing the concepts it will be retrieved on."""
         names = np.asarray(concept_names)
@@ -34,7 +35,8 @@ class CrossDataset:
         return [name for name in names_a if name in in_b]
 
     @staticmethod
-    def align_channels(eeg: np.ndarray, src_names: list[str], target_names: list[str]) -> np.ndarray:
+    def align_channels(eeg: Float[np.ndarray, "n ch t"], src_names: list[str],
+                       target_names: list[str]) -> Float[np.ndarray, "n ch_out t"]:
         """Reindex `eeg` [n, C, t] so its channel axis matches `target_names` BY NAME (drop channels not in the
         target; error if the target names a channel absent from the source). Makes two datasets' differently-
         ordered montages line up before an encoder trained on one is applied to the other."""

@@ -18,6 +18,7 @@ should be claimed only on a task shown to have residual nuisance-driven cross-su
 from __future__ import annotations
 
 import numpy as np
+from jaxtyping import Float
 from pydantic import BaseModel
 
 from core.data.fnirs.synthetic import SynthConfig, Synthetic
@@ -35,9 +36,12 @@ class Augment:
     in as a staticmethod (public name kept)."""
 
     @staticmethod
-    def domain_randomize(hbo: np.ndarray, hbr: np.ndarray, fs: float, cfg: AugConfig | None = None,
+    def domain_randomize(hbo: Float[np.ndarray, "*batch ch t"], hbr: Float[np.ndarray, "*batch ch t"], fs: float,
+                         cfg: AugConfig | None = None,
                          seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
-        """Randomize the nuisance axes of paired (HbO, HbR) `[n, ch, t]` for cross-subject robustness (bd jdh).
+        """Randomize the nuisance axes of paired (HbO, HbR) for cross-subject robustness (bd jdh). Accepts a
+        single epoch `[ch, t]` or any batched form `[*batch, ch, t]` — leading axes are flattened, randomized
+        per epoch, and restored, so the caller isn't forced to pre-batch.
 
         Per epoch: log-normal per-channel gain (coupling variability), an added common-mode systemic burst, and a
         circular temporal shift (hemodynamic-timing jitter) — strengths from `cfg` (AugConfig). Common-mode terms
@@ -48,7 +52,9 @@ class Augment:
         rng = np.random.default_rng(seed)
         o = np.asarray(hbo, dtype=np.float64)
         r = np.asarray(hbr, dtype=np.float64)
-        n, ch, t = o.shape
+        *batch, ch, t = o.shape                                   # accept [ch,t] or any [*batch,ch,t]
+        o, r = o.reshape(-1, ch, t), r.reshape(-1, ch, t)
+        n = o.shape[0]
 
         gain = rng.lognormal(0.0, gain_sigma, (n, ch, 1))
         sys_cfg = SynthConfig(systemic_amp=systemic_amp)
@@ -60,4 +66,5 @@ class Augment:
         for i in range(n):
             out_o[i] = np.roll(o[i] * gain[i] + systemic[i], shifts[i], axis=-1)
             out_r[i] = np.roll(r[i] * gain[i] + systemic[i], shifts[i], axis=-1)
-        return out_o.astype(np.float32), out_r.astype(np.float32)
+        return (out_o.reshape(*batch, ch, t).astype(np.float32),
+                out_r.reshape(*batch, ch, t).astype(np.float32))

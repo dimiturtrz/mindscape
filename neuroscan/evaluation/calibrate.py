@@ -19,6 +19,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from jaxtyping import Float, Int
 
 from core.data import splits, store
 from core.data.eeg.base import EpochCfg
@@ -43,7 +44,7 @@ class TemperatureScaler:
     def __init__(self, T: float = 1.0):
         self.T = T
 
-    def fit(self, logits: np.ndarray, labels: np.ndarray) -> "TemperatureScaler":
+    def fit(self, logits: Float[np.ndarray, "n c"], labels: Int[np.ndarray, "n"]) -> "TemperatureScaler":
         z = torch.tensor(logits, dtype=torch.float32)
         y = torch.tensor(labels, dtype=torch.long)
         log_t = torch.zeros(1, requires_grad=True)
@@ -60,14 +61,14 @@ class TemperatureScaler:
         self.T = float(log_t.exp().detach())
         return self
 
-    def probs(self, logits: np.ndarray, T: float | None = None) -> np.ndarray:
+    def probs(self, logits: Float[np.ndarray, "n c"], T: float | None = None) -> Float[np.ndarray, "n c"]:
         """Numerically-stable softmax(logits / T); T defaults to the fitted self.T."""
         z = logits / (self.T if T is None else T)
         z = z - z.max(1, keepdims=True)
         p = np.exp(z)
         return p / p.sum(1, keepdims=True)
 
-    def ece(self, logits: np.ndarray, labels: np.ndarray, T: float | None = None) -> float:
+    def ece(self, logits: Float[np.ndarray, "n c"], labels: Int[np.ndarray, "n"], T: float | None = None) -> float:
         p = self.probs(logits, T)
         conf, pred = p.max(1), p.argmax(1)
         return metrics.Metrics.ece(conf, (pred == labels).astype(float))[0]

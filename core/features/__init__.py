@@ -9,6 +9,7 @@ Import the feature classes from the package (`from core.features import BandPowe
 API lives under the subpackage (`from core.features import fusion`).
 """
 import numpy as np
+from jaxtyping import Float, Int
 
 from core.features.eeg.bandpower import CANONICAL_BANDS, BandPower
 from core.features.eeg.covariance import Covariance
@@ -21,7 +22,7 @@ class SubjectNorm:
     as a staticmethod, public name kept)."""
 
     @staticmethod
-    def zscore_per_subject(F: np.ndarray, groups: np.ndarray) -> np.ndarray:
+    def zscore_per_subject(F: Float[np.ndarray, "n d"], groups: Int[np.ndarray, "n"]) -> Float[np.ndarray, "n d"]:
         """Standardize each feature within each subject by ITS OWN mean/std — unsupervised, so it applies to a
         held-out test subject too (it standardizes by its own stats). Removes the subject-specific offset/scale
         that sinks cross-subject band-power. `F[n, d]` features, `groups[n]` subject id per row -> z-scored `F`."""

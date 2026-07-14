@@ -27,7 +27,8 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch import nn
+from jaxtyping import Float
+from torch import Tensor, nn
 
 _EMBED = 512          # CLIP dim (the retrieval target width)
 _NHEAD = 4            # pos_attn: transformer heads
@@ -42,14 +43,14 @@ class Backbone(nn.Module):
 
     d_model: int
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [B, C, T] -> [B, C, S, d]
+    def forward(self, x: Float[Tensor, "n ch t"]) -> Float[Tensor, "n ch s d"]:  # [B, C, T] -> [B, C, S, d]
         raise NotImplementedError
 
 
 class Head(nn.Module):
     """[B, C, S, d] token grid -> [B, embed_dim] embedding (pre-normalization; `Model` L2-normalizes)."""
 
-    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+    def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         raise NotImplementedError
 
 
@@ -75,7 +76,7 @@ class Model(nn.Module):
             self.backbone.eval()
         return self
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Float[Tensor, "n ch t"]) -> Float[Tensor, "n d_embed"]:
         return F.normalize(self.head(self.backbone(x)), dim=-1)
 
     def param_groups(self, base_lr: float, backbone_lr_scale: float = 1.0) -> list[dict]:
@@ -104,7 +105,7 @@ class Heads:
     """Builders + fixed geometry operators for the head zoo (montage-derived, computed once)."""
 
     @staticmethod
-    def build(spec: HeadSpec, d: int, pos: np.ndarray, n_tok: int | None = None,
+    def build(spec: HeadSpec, d: int, pos: Float[np.ndarray, "ch 2"], n_tok: int | None = None,
               embed_dim: int = _EMBED) -> Head:
         """A `Head` for this arm, sized to the token width `d` and (for geometry arms) the electrode positions
         `pos [C, 2]` on the unit-disk scalp. `n_tok` (= C·S) is required only by the flat pool (its MLP in-dim
@@ -124,13 +125,13 @@ class Heads:
         return nn.Sequential(nn.Linear(in_dim, hidden), nn.GELU(), nn.Dropout(dropout), nn.Linear(hidden, embed_dim))
 
     @staticmethod
-    def spatial(tokens: torch.Tensor) -> torch.Tensor:
+    def spatial(tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n ch d"]:
         """Collapse the S temporal tokens -> [B, C, d] for the channel-geometry heads (spatial by design; at
         S=1 this is a squeeze, so the frozen-head-search numbers reproduce exactly)."""
         return tokens.mean(dim=2)
 
     @staticmethod
-    def topo_weights(pos: np.ndarray, grid: int, sigma: float) -> torch.Tensor:
+    def topo_weights(pos: Float[np.ndarray, "ch 2"], grid: int, sigma: float) -> Float[Tensor, "hw ch"]:
         """Fixed RBF interpolation operator `[H·W, C]` mapping C electrode features onto a `grid×grid` scalp
         image (Bashivan 2016), RBF width `sigma`. Computed once from the montage; applied per batch as one einsum."""
         axis = np.linspace(-1.0, 1.0, grid)
@@ -142,7 +143,7 @@ class Heads:
         return torch.tensor(w, dtype=torch.float32)
 
     @staticmethod
-    def adjacency(pos: np.ndarray, k: int = _K_GCN) -> torch.Tensor:
+    def adjacency(pos: Float[np.ndarray, "ch 2"], k: int = _K_GCN) -> Float[Tensor, "ch ch"]:
         """Symmetric-normalized adjacency Â = D^-1/2 (A+I) D^-1/2 [C, C] from a kNN graph over the electrode
         positions — the fixed message-passing operator for the GCN head."""
         d2 = ((pos[:, None, :] - pos[None, :, :]) ** 2).sum(-1)               # [C, C] pairwise sq-distance
@@ -171,7 +172,7 @@ class TokenHead(Head):
             in_dim = d                                   # mean/attn collapse the tokens to d
         self.mlp = Heads.mlp(in_dim, spec.hidden, spec.dropout, embed_dim)
 
-    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+    def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         f = tokens.flatten(1, 2)                          # [B, C·S, d]
         if self.pool == "mean":
             z = f.mean(dim=1)
@@ -193,7 +194,7 @@ class PosAttnHead(Head):
                                               dropout=spec.dropout, batch_first=True, activation="gelu")
         self.mlp = Heads.mlp(d, spec.hidden, spec.dropout, embed_dim)
 
-    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+    def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         f = Heads.spatial(tokens)                         # [B, C, d]
         return self.mlp(self.enc(f + self.pos_proj(self.pos)).mean(dim=1))
 
@@ -210,7 +211,7 @@ class TopoHead(Head):
             nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.GELU(), nn.AdaptiveAvgPool2d(1))
         self.mlp = Heads.mlp(64, spec.hidden, spec.dropout, embed_dim)
 
-    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+    def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         f = Heads.spatial(tokens)                         # [B, C, d]
         b, _, d = f.shape
         interp = torch.einsum("hc,bcd->bhd", self.wtopo, f)                          # [B, H·W, d]
@@ -228,7 +229,7 @@ class GcnHead(Head):
         self.gcn2 = nn.Linear(d, d)
         self.mlp = Heads.mlp(d, spec.hidden, spec.dropout, embed_dim)
 
-    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+    def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         f = Heads.spatial(tokens)                         # [B, C, d]
         h = F.gelu(self.gcn1(torch.einsum("ck,bkd->bcd", self.adj, f)))              # Â X W₁
         h = F.gelu(self.gcn2(torch.einsum("ck,bkd->bcd", self.adj, h)))              # second graph-conv layer
@@ -249,7 +250,7 @@ class TemporalConvHead(Head):
             nn.Conv1d(64, 64, 3, padding=1), nn.GELU(), nn.AdaptiveAvgPool1d(1))
         self.mlp = Heads.mlp(64, spec.hidden, spec.dropout, embed_dim)
 
-    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+    def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         x = tokens.flatten(1, 2)                          # [B, N·embed_num, d] — keep the summary tokens as
         z = self.conv(x.transpose(1, 2)).flatten(1)       # ordered positions; conv over the token sequence -> [B, 64]
         return self.mlp(z)

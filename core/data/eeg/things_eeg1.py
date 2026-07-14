@@ -22,6 +22,7 @@ import logging
 import mne
 import numpy as np
 import polars as pl
+from jaxtyping import Float
 from pydantic import BaseModel
 from scipy.signal import resample as _resample
 
@@ -91,7 +92,7 @@ class ThingsEeg1:
         return mask
 
     @staticmethod
-    def epochs_from_events(eeg: np.ndarray, fs: float, events: pl.DataFrame, cfg: ThingsEeg1EpochCfg
+    def epochs_from_events(eeg: Float[np.ndarray, "ch t"], fs: float, events: pl.DataFrame, cfg: ThingsEeg1EpochCfg
                            ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Pure epoching: continuous `eeg` [ch, T] + a BIDS `events` frame -> (epochs [n, ch, t], concept_name[n],
         img_file[n]). Onset is BIDS seconds -> sample @ fs. Windows overrunning the recording are dropped. Per-

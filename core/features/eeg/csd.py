@@ -3,13 +3,15 @@ from __future__ import annotations
 
 import mne
 import numpy as np
+from jaxtyping import Float
 
 
 class CSD:
     """EEG surface-Laplacian / Current Source Density — a spatial deblur (helper folded in as a staticmethod)."""
 
     @staticmethod
-    def csd_transform(Xe: np.ndarray, ch_names, fs: float, *, montage: str = "standard_1005") -> np.ndarray:
+    def csd_transform(Xe: Float[np.ndarray, "n ch t"], ch_names, fs: float, *,
+                      montage: str = "standard_1005") -> Float[np.ndarray, "n ch t"]:
         """Current Source Density / surface Laplacian (spherical spline, Perrin 1989 — via MNE). A reference-free
         spatial HIGH-PASS that undoes most of the volume-conduction / skull blur, sharpening each EEG channel toward
         the cortex beneath it. Stays in scalp space (no head model, no inverse) — the cheap PARTIAL fix for EEG's

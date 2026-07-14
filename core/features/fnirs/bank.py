@@ -16,6 +16,7 @@ Two pieces:
 from __future__ import annotations
 
 import numpy as np
+from jaxtyping import Float
 from scipy.stats import kurtosis, skew
 
 from core.features.fnirs.amplitude import Amplitude
@@ -90,7 +91,7 @@ class DescriptorBank:
         return list(FNIRS_FEATURE_FNS)
 
     @staticmethod
-    def extract_bank(X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def extract_bank(X: Float[np.ndarray, "n ch t"]) -> tuple[np.ndarray, np.ndarray]:
         """Extract every family and concatenate: `X[n,ch,t]` -> `(F[n, ch*K], fam[ch*K])`. `fam[j]` is the
         family name of column j, so a per-family weight maps to its channels via `fam == name`. f64 for a
         stable scaler downstream (the study standardises then weights)."""

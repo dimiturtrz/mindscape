@@ -4,6 +4,7 @@ reads and covariance normalizes away."""
 from __future__ import annotations
 
 import numpy as np
+from jaxtyping import Float
 from scipy.signal import welch
 
 # workload-relevant EEG rhythms (theta ↑ / alpha ↓ with load); MI mu/beta live in this range too
@@ -14,7 +15,8 @@ class BandPower:
     """EEG band-power — the oscillatory feature (free helpers folded in as staticmethods, public names kept)."""
 
     @staticmethod
-    def band_powers(X: np.ndarray, fs: float, bands=CANONICAL_BANDS, *, relative: bool = False) -> np.ndarray:
+    def band_powers(X: Float[np.ndarray, "n ch t"], fs: float, bands=CANONICAL_BANDS, *,
+                    relative: bool = False) -> Float[np.ndarray, "n f"]:
         """Per-channel log band-power in each band -> `[n, ch*len(bands)]`. One Welch PSD over the time axis
         (vectorized across n and ch), then integrate each band.
 

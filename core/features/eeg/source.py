@@ -19,6 +19,7 @@ import os
 
 import mne
 import numpy as np
+from jaxtyping import Float
 from pydantic import BaseModel
 
 from core.config import Config
@@ -88,7 +89,7 @@ class Source:
                                                           subjects_dir=subjects_dir, verbose=False)
                 if "unknown" not in lbl.name]
 
-    def source_positions(self) -> np.ndarray:
+    def source_positions(self) -> Float[np.ndarray, "s 3"]:
         """3D positions `[n_src, 3]` of the fixed-orientation source-space vertices, in the forward's source
         order (concatenated over hemispheres) — the frame a spatial prior (e.g. fNIRS 'where', 4so) lives in."""
         fwd, _ = self.build_forward()
@@ -114,7 +115,8 @@ class Source:
         mne.minimum_norm.write_inverse_operator(str(inv_path), inverse, verbose=False)
         return inverse, labels
 
-    def to_parcels(self, epochs: np.ndarray) -> np.ndarray:  # pragma: no cover — MNE fwd/inverse
+    def to_parcels(self, epochs: Float[np.ndarray, "n ch t"]  # pragma: no cover — MNE fwd/inverse
+                   ) -> Float[np.ndarray, "n p t"]:
         """Project sensor epochs `[n, ch, t]` to a source-space parcel series `[n, n_labels, t]` via the template
         dSPM inverse + label-time-course extraction. Anatomically-named, montage-independent — the substrate for
         source-space EEG↔fNIRS fusion (bd 728)."""

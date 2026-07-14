@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 import torch
+from jaxtyping import Float
 from onnxruntime.quantization import QuantType, quantize_dynamic
 
 
@@ -49,7 +50,7 @@ class OnnxExport:
         return sess.run(["logits"], {"eeg": X.astype(np.float32)})[0]
 
     @staticmethod
-    def parity(net, onnx_path: str | Path, X_std: np.ndarray, device: str = "cpu") -> float:
+    def parity(net, onnx_path: str | Path, X_std: Float[np.ndarray, "n ch t"], device: str = "cpu") -> float:
         """Max abs difference between torch logits and ONNX logits on the same input. Gate before trusting."""
         net = net.to(device).eval()
         with torch.no_grad():
@@ -68,7 +69,7 @@ class OnnxExport:
         return round(Path(path).stat().st_size / 1e6, 3)
 
     @staticmethod
-    def latency_ms(path: str | Path, X_std: np.ndarray, runs: int = 100, warmup: int = 10) -> float:
+    def latency_ms(path: str | Path, X_std: Float[np.ndarray, "n ch t"], runs: int = 100, warmup: int = 10) -> float:
         """Mean single-sample inference latency (ms) on ORT CPU — the edge-realistic number."""
         sess = OnnxExport._session(path)
         x = X_std[:1].astype(np.float32)
