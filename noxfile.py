@@ -1,45 +1,94 @@
-"""nox task runner (bd kvo) — one command reproduces the CI gate suite locally.
+"""Task runner for mindscape.
 
-`nox` runs everything; `nox -s lint test fitness dup` picks sessions. Each session shells the SAME pinned
-tools CI uses (single source for the gate commands, so local == CI). venv backend is `none`: tools run via
-uv/uvx/npx which handle their own isolation, so no per-session venv is built.
+Every session shells out to ``uvx``/``uv run`` with pinned tool versions so a local ``nox`` run
+executes exactly what CI executes. Sessions declare ``venv_backend="none"`` — nox does not build an
+environment; ``uv`` owns dependency resolution.
 """
+
 import nox
 
-nox.options.default_venv_backend = "none"
-nox.options.sessions = ["lint", "test", "fitness", "dup"]   # `dup` (jscpd) needs Node; drop it if absent
+nox.options.sessions = ["lint", "test", "cov"]
 
-_RUFF = "ruff@0.15.13"
-_VULTURE = "vulture@2.16"
-_SELECT = "W,F,I,B,T20,E7,E501,PLR2004,PLC0415,FBT,C901,PLR0912,PLR0915,BLE001,S101,S110,PLR0913,RUF100"
-_PKGS = ("core", "neuroscan")
+RUFF = "ruff@0.15.13"
+VULTURE = "vulture@2.16"
+SELECT = "F,B,E501,I,T201,FBT,BLE001,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,SIM"
+LAYERS = ["core", "neuroscan"]
 
 
-@nox.session
-def lint(session):
-    """Static gates with no project env: ruff (enforced) + vulture + import-linter + ast-grep."""
-    session.run("uvx", _RUFF, "check", "core", "neuroscan", "baselines", "--select", _SELECT, external=True)
-    session.run("uvx", _VULTURE, "--min-confidence", "80", external=True)
+@nox.session(venv_backend="none")
+def lint(session: nox.Session) -> None:
+    """ruff check (enforced) + ruff format --check (advisory) + vulture + import-linter + arch-fitness + ast-grep + jscpd."""
+    session.run("uvx", RUFF, "check", *LAYERS, "--select", SELECT, external=True)
+    # Advisory (mirrors CI, never blocks): full curated config over the whole tree + format drift.
+    session.run("uvx", RUFF, "check", ".", "--statistics", external=True, success_codes=[0, 1])
+    session.run("uvx", RUFF, "format", "--check", ".", external=True, success_codes=[0, 1])
+    # vulture takes NO package args — scope is config-driven via [tool.vulture] paths (the vulture-scan
+    # LOCAL-SLOT), same as CI + pre-commit. A repo widens the dead-code scan there, not on the CLI.
+    session.run("uvx", VULTURE, "--min-confidence", "80", external=True)
+    # Advisory: conf60 dead-code (real signal, but eats no-fan-in FPs so it can't block). vulture exits 3
+    # when it finds dead code — success_codes swallows that (0=clean, 3=found), only a usage error blocks.
+    session.run("uvx", VULTURE, "--min-confidence", "60", external=True, success_codes=[0, 3])
     session.run("uvx", "--from", "import-linter", "lint-imports", external=True)
-    session.run("uvx", "--from", "ast-grep-cli", "ast-grep", "scan", "-c", "devtools/sgconfig.yml", *_PKGS,
-                external=True)
+    # --extra devtools: graph.py needs grimp+networkx (optional extra), same as CI's synced tests job.
+    session.run(
+        "uv", "run", "--extra", "devtools", "python", "-m", "devtools.graph", "--assert", *LAYERS, external=True
+    )
+    session.run(
+        "uvx",
+        "--from",
+        "ast-grep-cli",
+        "ast-grep",
+        "scan",
+        "-c",
+        "devtools/sgconfig.yml",
+        *LAYERS,
+        external=True,
+    )
+    # DRY gate — ENFORCED (blocks over the jscpd.json threshold), matching the cardiac/mindscape majority.
+    session.run(
+        "npx",
+        "--yes",
+        "jscpd",
+        *LAYERS,
+        "--config",
+        "devtools/jscpd.json",
+        external=True,
+    )
+    # Advisory class-shape explorers — print a ranked report, always exit 0 (never block).
+    for _tool in ("state_candidates", "lcom", "data_clumps"):
+        session.run("uv", "run", "python", "-m", f"devtools.{_tool}", *LAYERS, external=True)
+    # Advisory magic-literal detector — recurring string vocab + repeated dict schemas (StrEnum/record
+    # candidates), the non-comparison axis ruff PLR2004 can't see. Report-only (no --max-* ceilings);
+    # a repo opts into the count-ratchet by passing --max-strings/--max-key-sets in its own CI.
+    session.run("uv", "run", "python", "-m", "devtools.magic_literals", *LAYERS, external=True)
 
 
-@nox.session
-def test(session):
-    """Test + coverage floor (needs the synced env)."""
-    session.run("uv", "run", "--extra", "dev", "--extra", "devtools", "pytest", "tests/unit", "--cov", "-q",
-                external=True)
+@nox.session(venv_backend="none")
+def test(session: nox.Session) -> None:
+    """pytest."""
+    session.run("uv", "run", "pytest", "tests", "-q", external=True)
+
+
+@nox.session(venv_backend="none")
+def cov(session: nox.Session) -> None:
+    """pytest with coverage, failing under the floor."""
+    session.run(
+        "uv",
+        "run",
+        "pytest",
+        "tests",
+        "--cov",
+        "--cov-report=term-missing",
+        external=True,
+    )
     session.run("uv", "run", "coverage", "report", "--fail-under=80", external=True)
+    # Advisory: 95% target — warns, never fails (coverage exits 2 when under; success_codes swallows it).
+    session.run("uv", "run", "coverage", "report", "--fail-under=95", external=True, success_codes=[0, 2])
 
 
-@nox.session
-def fitness(session):
-    """Architecture fitness gate (grimp+networkx; needs the devtools extra)."""
-    session.run("uv", "run", "--extra", "devtools", "python", "-m", "devtools.graph", "--assert", external=True)
-
-
-@nox.session
-def dup(session):
-    """Duplication — enforced, blocks >1% (jscpd; needs Node)."""
-    session.run("npx", "--yes", "jscpd@4", *_PKGS, "--config", "devtools/jscpd.json", external=True)
+@nox.session(venv_backend="none")
+def gates(session: nox.Session) -> None:
+    """Run every gate: lint + test + cov."""
+    lint(session)
+    test(session)
+    cov(session)

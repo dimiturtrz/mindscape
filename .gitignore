@@ -75,3 +75,10 @@ scratch_*.sh
 
 # external git-repo deps: checked out, pinned, never vendored (see CLAUDE.md)
 external/
+
+# devtools gate caches (sdlc-scaffold adoption — bd 588n)
+.ruff_cache/
+.grimp_cache/
+.import_linter_cache/
+.pytest_cache/
+htmlcov/

@@ -77,31 +77,11 @@ def test_pydantic_config_class_is_skipped():
     """)) == {}
 
 
-def test_autograd_function_is_skipped():
-    """A torch.autograd.Function threads `ctx` by the framework API (forward/backward) — a contract, not
-    promotable instance state -> skipped like the pydantic config."""
-    assert shared_state(_cls("""
-        class GradReverse(Function):
-            @staticmethod
-            def forward(ctx, x, lambd): ...
-            @staticmethod
-            def backward(ctx, grad): ...
-    """)) == {}
-
-
-def test_scan_skips_coverage_omit_shells(tmp_path, monkeypatch):
-    """scan() reuses [tool.coverage] omit — a runner/adapter shell's shared params are its data, not object
-    identity, so an omitted file is not flagged; a non-omitted logic file with the same shape is."""
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "pyproject.toml").write_text('[tool.coverage.run]\nomit = ["pkg/runner.py"]\n')
-    pkg = tmp_path / "pkg"
-    pkg.mkdir()
-    shape = "class C:\n    @staticmethod\n    def a(model, x): ...\n    @staticmethod\n    def b(model, y): ...\n"
-    (pkg / "runner.py").write_text(shape)     # declared an omit shell -> skipped
-    (pkg / "logic.py").write_text(shape)      # logic module -> flagged
-    files = [r[2].replace("\\", "/") for r in scan(["pkg"])]
-    assert any("logic.py" in f for f in files)
-    assert not any("runner.py" in f for f in files)
+# NOTE: the autograd.Function-skip + coverage-omit-shell-skip tests were removed on sdlc-scaffold
+# adoption (bd 588n): v0.10's state_candidates skips CLI-dispatcher / `__init__` classes but not
+# torch.autograd.Function subclasses or coverage-omit shells (it no longer reads devtools/omit.py).
+# Re-upstreaming both exclusions to the template is tracked in sdlc-scaffold — they return via
+# `copier update`, with their tests, once shipped.
 
 
 def test_single_method_class_has_no_shared_state():

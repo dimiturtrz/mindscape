@@ -102,26 +102,10 @@ def test_static_and_init_excluded_from_graph():
     assert sorted(m for comp in comps for m in comp) == ["uses_a", "uses_b"]
 
 
-def test_transformer_contract_excluded():
-    """A class whose methods are the sklearn/transform contract (fit + transform, sharing no field) is the
-    interface, not a fused class -> excluded even though its LCOM4 is 2."""
-    c = _cls("""
-        class Scaler:
-            def fit(self, X): self.m = X.mean()
-            def transform(self, X): return X - 1
-    """)
-    assert lcom4(c)[0] == 2                   # fit touches self.m, transform touches nothing -> disjoint
-    assert _is_split_candidate(c) is None     # ...but the transformer contract exempts it
-
-
-def test_fit_call_contract_excluded():
-    """fit + __call__ (the callable-transform variant) is also the contract -> excluded."""
-    c = _cls("""
-        class Ema:
-            def fit(self, X): self.s = 1
-            def __call__(self, x): return x
-    """)
-    assert _is_split_candidate(c) is None
+# NOTE: the sklearn fit/transform + fit/__call__ contract-exclusion tests were removed on sdlc-scaffold
+# adoption (bd 588n): v0.10's lcom excludes by SUBCLASS (interface-impl / ABC), not the name-based
+# fit-contract heuristic mindscape's detector had. Re-upstreaming that exclusion to the template is
+# tracked in sdlc-scaffold — the exclusion returns via `copier update`, with its test, once shipped.
 
 
 def test_scan_returns_empty_on_cohesive_package(tmp_path):

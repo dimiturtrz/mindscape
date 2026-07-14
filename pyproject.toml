@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Honest, efficient non-invasive neural decoding (EEG/MEG) — decode, evaluate under shift, deploy on the edge."
 readme = "README.md"
 requires-python = ">=3.11"
+# LOCAL MOD (not slotted, kept across copier update): the ML dep tree. The template skeleton ships only
+# numpy+pydantic; mindscape's runtime deps live here as a permanent local divergence (bd 588n step 5).
 dependencies = [
     "numpy",
     "scipy",
@@ -34,53 +36,46 @@ devtools = ["grimp", "networkx", "nox"]   # import-graph diagnostic/fitness (bd 
 source = ["nibabel"]   # EEG->cortex source localization: MNE fsaverage forward/inverse (bd 728; core.features.eeg.source)
 all = ["pytest", "onnx", "onnxruntime"]
 
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["core*", "neuroscan*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]   # so `devtools` imports under pytest (top-level package, not under a src root)
+pythonpath = ["."]
+addopts = "--import-mode=importlib"
 
-# Code-quality ratchet (bd mindscape-y63): one family fixed-to-zero per PR, then graduated into the CI
-# enforced --select. `select` here is the ADVISORY target (the full curated backlog); CI's enforced step
-# passes a growing --select subset. N (the X/y tensor idiom, 383 hits) and RUF001/002/003 (intentional
-# → ≈ × unicode in docstrings) are deliberately not selected.
 [tool.ruff]
 line-length = 120
-extend-exclude = ["mlruns", "runs", "*.egg-info", "docs", "learning", "research", "neuroviz/web"]
+# >>> LOCAL-SLOT: ruff-exclude — edit freely, the template will not overwrite intent here
+extend-exclude = ["mlruns", "runs", "*.egg-info", "docs", "learning", "research", "interpretations", "neuroviz/web"]
+# <<< LOCAL-SLOT: ruff-exclude
 
 [tool.ruff.lint]
-select = ["F", "I", "E", "W", "B", "C4", "UP", "T20", "PLR", "PLC", "BLE", "S", "FBT", "SIM", "RUF", "C90"]
+select = ["F", "B", "E501", "I", "T201", "FBT", "BLE001", "S110", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "SIM"]
 ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "PLR2004", "FBT"]   # asserts, magic literals, bool args are fine in tests
-"__init__.py" = ["F401"]                  # re-export facades
+"__init__.py" = ["F401"]
+"tests/**" = ["PLR2004", "FBT"]
 
-# Vulture: dead-code (functions/classes/attrs) — the axis ruff can't see. Scans core+neuroscan+baselines
-# ONLY (NOT tests): a prod symbol referenced solely by a test surfaces as dead here instead of being masked
-# by its test fan-in (the trap that fools both vulture and coverage). CI runs two tiers — conf>=80 blocks
-# (near-certain: unreachable, unused locals; currently clean), conf>=60 warns (dead funcs, eats
-# entry-point/no-fan-in FPs). ignore_names/decorators kill the pydantic FPs (a ClassVar `model_config` +
-# validator/serializer methods look unused but are framework-called — mindscape has many BaseModel configs).
 [tool.vulture]
-paths = ["core", "neuroscan", "baselines"]
-exclude = ["neuroviz", "runs", "mlruns"]
 min_confidence = 60
-# framework false positives (used implicitly, not dead): torch nn.Module.forward (called via __call__),
-# onnxruntime SessionOptions.intra_op_num_threads (read by the ORT session), CBraMod.proj_out (set to
-# Identity to expose the backbone's pre-projection features — an external attribute vulture can't trace).
+# LOCAL MOD (not slotted): mindscape's framework-implicit names beyond the template's model_config —
+# torch nn.Module.forward (via __call__), ORT SessionOptions.intra_op_num_threads, CBraMod.proj_out
+# (Identity-set to expose backbone features). Used implicitly, not dead.
 ignore_names = ["model_config", "forward", "intra_op_num_threads", "proj_out"]
 ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
+# >>> LOCAL-SLOT: vulture-scan — edit freely, the template will not overwrite intent here
+paths = ["core", "neuroscan", "baselines"]
+exclude = ["neuroviz", "runs", "mlruns"]
+# <<< LOCAL-SLOT: vulture-scan
 
-# Coverage (pytest-cov). Denominator is LIBRARY LOGIC, not dependency glue: we test our input/output logic,
-# NOT the filesystem, mlflow, libs, downloads, or GPU training. So `omit` drops the dependency/entrypoint
-# SHELLS — CLI runners (load->fit->record orchestration), torch models + trainers (device+data), data
-# adapters (OSF/OpenNeuro download, disk read), onnx/CLIP glue, mlflow tracking. Honesty rule: never omit a
-# module to DODGE pure logic — extract the core and test it (e.g. `_eval.cv_score`, `combine`, `base`), then
-# omit the shell. Logic files stay IN; low coverage there is honest signal to close (bd mindscape-y63
-# coverage-ratchet), not noise to hide. The logic cores under `tasks/` are now extracted + tested, so the
-# gate is ENFORCED: CI blocks below 80% (logic %) via `coverage report --fail-under=80` — a regression
-# guard well under the current ~92%, not the target (ratchet the floor up deliberately as coverage settles);
-# the advisory report step stays for the per-file missing-line view.
 [tool.coverage.run]
+# >>> LOCAL-SLOT: coverage-scan — edit freely, the template will not overwrite intent here
 source = ["core", "neuroscan", "baselines"]
 omit = [
     # top-level CLI entrypoints (argparse + dispatch)
@@ -125,9 +120,7 @@ omit = [
     "neuroscan/tasks/cli.py",   # runner glue: logging.basicConfig + quiet-libs (side-effect setup, like tracking.py)
     "core/data/eeg/bnci2014_001.py",   # MOABB BNCI2014_001 adapter (download/disk, like the things_eeg*/shin2017 adapters)
 ]
-
-# Coverage floor is ENFORCED at 80% (logic %) in CI (coverage report --fail-under=80) — regression guard
-# under the current ~92%. Ratchet up deliberately as coverage settles higher.
+# <<< LOCAL-SLOT: coverage-scan
 
 [tool.coverage.report]
 show_missing = true
@@ -140,22 +133,15 @@ exclude_lines = [
     "@(abc\\.)?abstractmethod",
 ]
 
-# Architecture fitness thresholds (bd 3nn; enforced in CI via `python -m devtools.graph --assert`). The METRIC
-# arch axis import-linter's categorical layer contracts can't express — god-module / import-cycle / god-file
-# block; line-floor + betweenness chokepoint + test-mirror are advisory. Defaults chosen against today's graph
-# so the blocking rules start CLEAN and only ratchet TIGHTER (never relaxed). Mirrors the cardiac-seg/synthscape
-# superset. `file_min=0` = floor OFF (no honest floor — small files are SSOT/strategy/shared-vocab leaves).
-[tool.structure]
-bottleneck_degree = 8       # a module with BOTH fan-in and fan-out over this is a god-module (0 today)
-file_max = 750              # god-file ceiling (largest today ~373)
-file_min = 0                # OFF: no honest line floor exists (small files are legit SSOT/strategy leaves)
-betweenness_max = 0.10      # advisory chokepoint threshold
 
-# Architecture as a static import-graph contract (bd o92; enforced in CI via `lint-imports`). Three tiers,
-# imports point DOWN only: core (clean kernel) < neuroscan (trainer) < neuroviz (viewer). The viewer reusing
-# neuroscan's model registry (neuroviz -> neuroscan.models.get_method) is an INTENDED downward edge, so —
-# unlike the sibling cardiac-seg — there is no "viewer forbids trainer" contract here. What we forbid is
-# UPWARD drift: the kernel importing its consumers, or the trainer importing the viewer.
+# Directional layer gate (import-linter): forbidden-import CONTRACTS graph.py can't express — a one-way
+# `core -> trainer` import is no cycle, so it passes the graph gate but must fail here. The gate is
+# universal (all house repos run it); the SCOPE + contracts are project-local, hence the slot.
+# >>> LOCAL-SLOT: import-contracts — layering scope + your directional rules. `root_packages` is the set
+# import-linter analyses (defaults to `packages`; widen it if a scope-only package such as a viewer carries
+# layer rules but isn't in the arch set). mindscape widens to include neuroviz (the viewer): it reuses
+# neuroscan's model registry (an intended downward edge), so it isn't in the arch gate set but DOES carry
+# the "never import the viewer upward" rules. Three tiers, imports point DOWN only: core < neuroscan < neuroviz.
 [tool.importlinter]
 root_packages = ["core", "neuroscan", "neuroviz"]
 
@@ -170,9 +156,24 @@ name = "neuroscan (trainer) never imports neuroviz (viewer)"
 type = "forbidden"
 source_modules = ["neuroscan"]
 forbidden_modules = ["neuroviz"]
+# <<< LOCAL-SLOT: import-contracts
 
-# torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there so uv resolves the cu130 wheel
-# (RTX 5090) instead of the CPU build. `explicit` = only packages pinned in [tool.uv.sources] use it.
+
+# Architecture fitness thresholds read by devtools/graph.py --assert.
+[tool.structure]
+# >>> LOCAL-SLOT: arch-thresholds — tune per repo; the template ships defaults and won't churn these,
+# so a per-project override survives `copier update` without a merge conflict.
+bottleneck_degree = 8    # fan-in AND fan-out both over this = god-module
+file_max = 750           # god-file line ceiling — raise as real files grow
+file_min = 0             # advisory line floor — 0 = OFF (no honest universal floor; raise per repo if wanted)
+betweenness_max = 0.10   # advisory chokepoint threshold
+test_layout = "mirror"   # every logic module needs a unit test: "mirror" = tests/unit/<pkg>/<path>/test_<name>.py
+                         # (strict, one home); "flat" = test_<name>.py anywhere under tests/; "off" = no check
+# <<< LOCAL-SLOT: arch-thresholds
+
+
+# LOCAL MOD (not slotted): torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there so uv
+# resolves the cu130 wheel (RTX 5090) instead of the CPU build. `explicit` = only pinned packages use it.
 [[tool.uv.index]]
 name = "pytorch-cu130"
 url = "https://download.pytorch.org/whl/cu130"
@@ -180,10 +181,3 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu130" }
-
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-include = ["core*", "neuroscan*"]

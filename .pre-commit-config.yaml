@@ -1,41 +1,77 @@
-# Local pre-commit hooks (bd dno) — the FAST static gates run before every commit, so a violation is caught
-# locally instead of in CI. Same pinned tools + scopes as .github/workflows/ci.yml (one source of truth for
-# the commands; the pin is the uvx tool version). Enable with `pre-commit install` (note: this repo also ships
-# .beads/hooks/pre-commit for the issue tracker — if you install this, chain or keep the beads hook separately).
-# Run without installing: `uvx pre-commit run --all-files`.
-#
-# These gates scan FIXED scopes (core/neuroscan/baselines), not the staged file list, so pass_filenames=false
-# + always_run=true. The slow test/coverage gate stays CI-only (too slow for every commit).
+# Commit-event binding of the same gates CI enforces. No-git MVP: LOCAL hooks (repo: local +
+# language: system) that shell out to uvx / uv run with the SPEC-pinned versions — no remote repo+rev
+# (that path is the root .pre-commit-hooks.yaml, unused until this goes remote+versioned).
 repos:
   - repo: local
     hooks:
-      - id: ruff
-        name: ruff — enforced families
-        entry: uvx ruff@0.15.13 check core neuroscan baselines --select W,F,I,B,T20,E7,E501,PLR2004,PLC0415,FBT,C901,PLR0912,PLR0915,BLE001,S101,S110,PLR0913,RUF100
+      - id: ruff-gate
+        name: ruff — enforced (full select)
+        entry: uvx ruff@0.15.13 check core neuroscan --select F,B,E501,I,T201,FBT,BLE001,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,SIM
         language: system
         pass_filenames: false
         always_run: true
-      - id: ast-grep
-        name: ast-grep — module shape (no top-level funcs / import-time side effects)
-        entry: uvx --from ast-grep-cli ast-grep scan -c devtools/sgconfig.yml core neuroscan
+
+      - id: ruff-format-gate
+        name: ruff — format check (advisory)
+        entry: uvx ruff@0.15.13 format --check .
         language: system
         pass_filenames: false
         always_run: true
-      - id: arch-fitness
-        name: architecture fitness — graph.py --assert
-        entry: uv run --extra devtools python -m devtools.graph --assert
-        language: system
-        pass_filenames: false
-        always_run: true
-      - id: import-linter
-        name: import layers — core < neuroscan < neuroviz
-        entry: uvx --from import-linter lint-imports
-        language: system
-        pass_filenames: false
-        always_run: true
-      - id: vulture
-        name: dead code — vulture conf>=80
+        verbose: true
+
+      - id: vulture-gate
+        name: vulture — dead code (conf>=80)
         entry: uvx vulture@2.16 --min-confidence 80
         language: system
         pass_filenames: false
         always_run: true
+      
+      - id: importlinter-gate
+        name: import-linter — directional layers
+        entry: uvx --from import-linter lint-imports
+        language: system
+        pass_filenames: false
+        always_run: true
+      
+      - id: arch-fitness
+        name: architecture fitness (graph.py --assert)
+        entry: uv run --extra devtools python -m devtools.graph --assert core neuroscan
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: astgrep-gate
+        name: ast-grep — module shape
+        entry: uvx --from ast-grep-cli ast-grep scan -c devtools/sgconfig.yml core neuroscan
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Class-shape smells — advisory explorers (LCOM4 cohesion / Fowler data-clumps / namespace-state).
+      # They only print a ranked report and always exit 0, so as commit hooks they surface findings
+      # without ever blocking — advisory by construction, not by continue-on-error.
+      - id: state-candidates
+        name: class-shape — namespace-state (advisory)
+        entry: uv run python -m devtools.state_candidates core neuroscan
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: lcom
+        name: class-shape — LCOM4 cohesion (advisory)
+        entry: uv run python -m devtools.lcom core neuroscan
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: data-clumps
+        name: class-shape — data clumps (advisory)
+        entry: uv run python -m devtools.data_clumps core neuroscan
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: magic-literals
+        name: magic-literals — recurring string vocab + dict schemas (advisory)
+        entry: uv run python -m devtools.magic_literals core neuroscan
+        language: system
+        pass_filenames: false
+        always_run: true
+      

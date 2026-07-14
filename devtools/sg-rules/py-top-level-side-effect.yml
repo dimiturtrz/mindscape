@@ -1,6 +1,9 @@
-# No import-time side effects: a top-level call expression runs at import — move it into a function/main so
-# importing a module is free of work (matplotlib.use() is the one exempt backend-selection call). Ported from
-# cardiac-seg/synthscape (bd ylq).
+# No side-effect LOGIC at module scope: a bare call at import time (e.g. `setup()` / `configure()` in the
+# module body) runs on import, couples import to execution, and hides work. Constants, class/def, imports,
+# `log = getLogger(...)` assignments, and the `if __name__ == "__main__"` block are fine — this targets a
+# top-level expression-statement that IS a call. `matplotlib.use(...)` is exempt: the Agg backend MUST be
+# selected at module scope before pyplot imports, so it's a required top-level call, not a smell.
+# Severity `error`: clean on a fresh project, so it ratchets — a new accidental import-time call fails.
 id: py-top-level-side-effect
 language: python
 severity: error
