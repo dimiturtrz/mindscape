@@ -118,7 +118,7 @@ class Foundation:
         adapter (EEGPT needs it to map channels to its CHANNEL_DICT; CBraMod ignores it)."""
         builders = {"cbramod": lambda: Foundation._loaded_cbramod(),
                     "eegpt": lambda: Foundation._loaded_eegpt(channel_names, None, "eegpt"),
-                    "eegpt_ov": lambda: Foundation._loaded_eegpt(channel_names, 16, "eegpt_ov")}
+                    "eegpt_ov": lambda: Foundation._loaded_eegpt(channel_names, 32, "eegpt_ov")}
         if name not in builders:
             raise KeyError(f"unknown backbone {name!r} — registered: {sorted(builders)}")
         return builders[name]()
@@ -129,8 +129,9 @@ class Foundation:
 
     @staticmethod
     def _loaded_eegpt(channel_names: list[str] | None, patch_stride: int | None, name: str) -> LoadedBackbone:
-        """`eegpt` = non-overlapping patches (stride 64 -> N=4 on 1s); `eegpt_ov` = overlapping (stride 16 ->
-        N=13), the grow-N arm. `name` keys the feature cache so the two never collide."""
+        """`eegpt` = non-overlapping patches (stride 64 -> N=4 on 1s); `eegpt_ov` = 50%-overlap (stride 32 ->
+        N=7), the grow-N arm (50% is the conventional overlap; more is aggressively OOD vs the non-overlap
+        pretraining). `name` keys the feature cache so the two never collide."""
         if channel_names is None:
             raise ValueError("eegpt needs channel_names for its montage adapter (map to EEGPT's CHANNEL_DICT)")
         return LoadedBackbone(EegptBackbone(channel_names, patch_stride), patch_points=64, d_model=512,
