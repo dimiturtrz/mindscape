@@ -59,7 +59,12 @@ def main():
     run_dir = Path(args.out) if args.out else Path("runs") / f"{method}_{regime}_{dataset}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # classical baselines are CPU + fold-independent -> parallelize folds; GPU nets stay on one device
+    # classical baselines are CPU + fold-independent -> parallelize folds; GPU nets stay on one device.
+    # backend stays "threading" (harness default): measured to BEAT guarded loky on our classical methods
+    # (FBCSP bnci 4-fold: threading 86.8s vs loky 121.4s) — their heavy inner ops are BLAS/C that benefit
+    # from per-fold BLAS threads, which loky's oversubscription guard must disable, plus Windows spawn
+    # re-imports the whole torch/mne stack per worker. loky is available (Harness.run backend=) but not a
+    # fold-granularity win here; coarse cell-level OS-process parallelism is the real speedup (mindscape-07n).
     n_jobs = -1 if method in {"csp_lda", "riemann", "riemann_acm", "fnirs_lda"} else 1
     logger.info(f"\n=== {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
     method_obj = harness.Method(method, fit_fn, score_fn, n_classes, regime)

@@ -70,6 +70,7 @@ def main():
         folds = harness.Harness.folds_for(meta, regime, test_sessions=tsess)
         fit_fn, score_fn = models.Methods.get_method(method, fs=getattr(cfg, "resample", None))
         n_jobs = 1 if method in MODELS else -1                    # classical baselines parallelize folds; nets don't
+        # backend stays threading (default) — measured to beat guarded loky at fold granularity here (07n)
         run_dir = Path("runs") / f"{method}_{regime}_{dataset}"
         run_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"\n=== {name} · {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
