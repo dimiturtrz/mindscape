@@ -17,5 +17,14 @@ from core.features.fusion.camera import BrainCamera, PairedModalities
 from core.features.fusion.coupling import _HRF_WIDTH, Coupling
 from core.features.fusion.series import _BANDS, Series, SeriesConfig
 
-__all__ = ["EegMontage", "FnirsMontage", "CSD", "Chromophore", "Coupling",
-           "Series", "BrainCamera", "PairedModalities", "SeriesConfig"]
+__all__ = [
+           "CSD",
+           "BrainCamera",
+           "Chromophore",
+           "Coupling",
+           "EegMontage",
+           "FnirsMontage",
+           "PairedModalities",
+           "Series",
+           "SeriesConfig",
+]

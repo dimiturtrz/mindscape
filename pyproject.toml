@@ -26,6 +26,8 @@ dependencies = [
     "mlflow>=3.14.0",        # experiment tracking (neuroscan/tracking.py); MINDSCAPE_NO_MLFLOW = off-switch
     "open-clip-torch",       # CLIP image embeddings — the EEG->image retrieval target (Stage-3 NICE baseline)
     "pillow",                # image IO for the CLIP target computation (clip_targets.py)
+    "jaxtyping",   # Float[Tensor,"B C H W"] shape/dtype annotations — inert at runtime without a checker (no prod cost)
+    "beartype",    # the runtime checker jaxtyping delegates to; wrap as @shapecheck in your types module (see devtools/README)
 ]
 
 [project.optional-dependencies]
@@ -55,20 +57,62 @@ extend-exclude = ["mlruns", "runs", "*.egg-info", "docs", "learning", "research"
 # <<< LOCAL-SLOT: ruff-exclude
 
 [tool.ruff.lint]
-select = ["F", "B", "E501", "I", "T201", "FBT", "BLE001", "S110", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "SIM"]
-ignore = ["RUF001", "RUF002", "RUF003"]
+select = ["F", "B", "E501", "I", "T201", "FBT", "BLE001", "S101", "S110", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "N", "E741", "E742", "E743", "PLR0124", "PLR1714", "PLW3301", "RUF012", "RUF005", "RUF007", "RUF010", "RUF022", "RUF046", "C408", "C420", "SIM", "PERF401", "PLW0108", "E731", "E402", "ICN001", "S603", "S607", "PTH123", "SLF001"]
+ignore = [
+    # jaxtyping shape strings — `Float[Tensor, "b c h w"]` is a deliberate runtime-checked annotation;
+    # F722 misreads the dim string as a malformed forward ref. jaxtyping's own FAQ prescribes disabling it.
+    "F722",
+]
+
+# pep8-naming (N): case convention is a UNIVERSAL rule; the allowlisted idioms are per-repo FACTS. Every
+# name that carries a meaning renames — only symbols with no honest descriptive form belong here (a dodge
+# makes the gate useless).
+[tool.ruff.lint.pep8-naming]
+# >>> LOCAL-SLOT: pep8-naming — ignore-names VOCAB (this repo's ML/physics idioms); the block is shared,
+# only its contents differ. Add domain symbols (MRI T1/T2/TR/PD, canonical lib aliases…) here.
+# Single-uppercase = canonical linear-algebra matrices (A/B/C covariance, D diag, G gain, L lower-tri,
+# M/P projection, R rotation, T transform/temperature, W weights); `F*`/`C*`/`P*`/`R*`/`W*` glob the
+# feature-matrix + weight families (Ff/Fe/Ftr fnirs-eeg feature blocks, Cs/CF/CE covariances, Wq/W_f/W_e
+# weight maps, P_all/Rz derived). Design matrix / weight idioms with no honest lowercase form.
+ignore-names = ["X*", "Y*", "A", "B", "C*", "D", "F*", "G", "H", "L", "M", "P*", "R*", "T", "W*"]
+# <<< LOCAL-SLOT: pep8-naming
 
 [tool.ruff.lint.per-file-ignores]
+# Tests get a wider carve-out: literal fixtures (PLR2004) + bool flags (FBT); privates-under-test are the
+# point of a unit test (SLF001); mock classes mirror external PascalCase APIs + local math/alias scratch
+# (N8xx); fixtures take many params (PLR0913). The SUBSTANTIVE gates (imports-at-top, real bugs, dead
+# code) still apply to tests.
 "__init__.py" = ["F401"]
-"tests/**" = ["PLR2004", "FBT"]
+"tests/**" = ["S101", "PLR2004", "FBT", "SLF001", "N801", "N802", "N803", "N806", "N812", "PLR0913"]
+# >>> LOCAL-SLOT: per-file-ignores — repo-specific file carve-outs (e.g. a best-effort telemetry shell
+# that must never raise). Add lines here; copier update won't overwrite this region.
+# SLF001 (private-member-access) STRUCTURALLY conflicts with the mandated op-namespace pattern: the
+# ast-grep py-top-level-function gate forces every helper onto a class as a static method, so a stateless
+# sibling-helper call or a module-level function registry MUST reference `Cls._helper` — which SLF001
+# flags, though it's not a cross-boundary reach-in (ruff can't express "same module"). Carved out where the
+# pattern lives (runner tree + the static-op-namespace / feature-registry core files) until the scaffold
+# reconciles its own two rules upstream (sdlc-scaffold-8ex; union-superset law resolves conflicts separately).
+"neuroscan/tasks/**" = ["SLF001"]
+"neuroscan/models/**" = ["SLF001"]
+"neuroscan/evaluation/calibrate.py" = ["SLF001"]
+"core/config.py" = ["SLF001"]
+"core/features/fnirs/bank.py" = ["SLF001"]
+"core/features/fnirs/montage.py" = ["SLF001"]
+"core/data/fnirs/augment.py" = ["SLF001"]
+# <<< LOCAL-SLOT: per-file-ignores
 
 [tool.vulture]
 min_confidence = 60
-# LOCAL MOD (not slotted): mindscape's framework-implicit names beyond the template's model_config —
-# torch nn.Module.forward (via __call__), ORT SessionOptions.intra_op_num_threads, CBraMod.proj_out
-# (Identity-set to expose backbone features). Used implicitly, not dead.
-ignore_names = ["model_config", "forward", "intra_op_num_threads", "proj_out"]
 ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
+# ignore_names = symbols vulture must treat as USED — each IS referenced, but through a path its static
+# name-match can't follow (framework dispatch, iteration, string keys, external-lib attribute). NOT a
+# "don't care" list — a FACT VOCAB, per-repo, parallel to the pep8-naming slot (bd fy5). `model_config`
+# is the universal pydantic base (metaclass-read); add this repo's documented FPs below.
+# >>> LOCAL-SLOT: vulture-ignore-names — this repo's documented dead-code false positives.
+# Framework-implicit: torch nn.Module.forward (via __call__), ORT SessionOptions.intra_op_num_threads,
+# CBraMod.proj_out (Identity-set to expose backbone features). Referenced, not dead.
+ignore_names = ["model_config", "forward", "intra_op_num_threads", "proj_out"]
+# <<< LOCAL-SLOT: vulture-ignore-names
 # >>> LOCAL-SLOT: vulture-scan — edit freely, the template will not overwrite intent here
 paths = ["core", "neuroscan", "baselines"]
 exclude = ["neuroviz", "runs", "mlruns"]
@@ -167,9 +211,35 @@ bottleneck_degree = 8    # fan-in AND fan-out both over this = god-module
 file_max = 750           # god-file line ceiling — raise as real files grow
 file_min = 0             # advisory line floor — 0 = OFF (no honest universal floor; raise per repo if wanted)
 betweenness_max = 0.10   # advisory chokepoint threshold
+main_sequence_max = 0.0  # advisory Martin main-sequence distance |A+I-1| ceiling — 0 = OFF (a concrete
+                         # stable leaf legitimately sits at D≈1, so no honest universal floor; raise per repo)
 test_layout = "mirror"   # every logic module needs a unit test: "mirror" = tests/unit/<pkg>/<path>/test_<name>.py
                          # (strict, one home); "flat" = test_<name>.py anywhere under tests/; "off" = no check
 # <<< LOCAL-SLOT: arch-thresholds
+
+# magic-literals ENFORCED ratchet (devtools/magic_literals.py) — the recurring-string / repeated-key-set
+# floor is frozen as a ceiling; a NEW magic literal pushes the count over and fails the merge (migrate it
+# to a StrEnum/constant, or raise the ceiling in the same commit with a reason). The MECHANISM is a base
+# gate (all repos run it enforced); the NUMBERS are a per-repo FACT (each repo's legitimate non-enum-able
+# floor differs — column names, framework vocab, path segments). A fresh repo ships 0/0 and ratchets up.
+[tool.magic_literals]
+# >>> LOCAL-SLOT: magic-ceilings — this repo's frozen literal floor (raise only with a documented reason).
+# The floor is DataFrame-schema + metric-key vocab — column names ({run,session,subject,dataset,epoch,
+# label,label_id,file}) and metric keys ({acc,ece,kappa,fold,n}) recurring across the store/eval/results
+# layer. The magic-literals design names exactly these ("column names, framework vocab") as the legitimate
+# non-enum-able floor; frozen as the ratchet baseline (a NEW literal must migrate to a StrEnum or bump this
+# with a reason). Ratchets down as the schema vocab consolidates.
+max_strings = 33
+max_key_sets = 10
+# <<< LOCAL-SLOT: magic-ceilings
+
+# Shape-contract gate (devtools/shape_contracts.py) — a public array/tensor boundary must carry a
+# jaxtyping shape, not a bare `np.ndarray`/`Tensor`. The universal `ndarray`/`Tensor` are builtin; a
+# repo's own array ALIASES (its core.types names that also mean "an array") are the FACT that varies.
+[tool.shape_contracts]
+# >>> LOCAL-SLOT: shape-aliases — this repo's array-alias type names (e.g. Volume, Mask, Image, Batch)
+array_aliases = []
+# <<< LOCAL-SLOT: shape-aliases
 
 
 # LOCAL MOD (not slotted): torch's CUDA build lives on the PyTorch index, not PyPI. Pin it there so uv

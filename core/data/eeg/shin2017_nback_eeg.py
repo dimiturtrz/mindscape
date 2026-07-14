@@ -20,7 +20,7 @@ import re
 import numpy as np
 import polars as pl
 import scipy.io as sio
-from scipy.signal import resample as _rs
+from scipy.signal import resample as _resample
 
 from core.config import Config
 from core.data.eeg.base import EpochCfg
@@ -89,7 +89,7 @@ class Shin2017NbackEegAdapter:
             # no baseline: CSP/Riemann read covariance
             X, ye = Signal.block_epochs(BlockedRecording(cont, onsets, y), fs, cfg.tmin, tmax, baseline_s=0.0)
             if cfg.resample and cfg.resample != fs:
-                X = _rs(X, int(round(X.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
+                X = _resample(X, round(X.shape[2] * cfg.resample / fs), axis=2).astype(np.float32)
             n = len(ye)
             Xs.append(X)
             ys.append(ye)

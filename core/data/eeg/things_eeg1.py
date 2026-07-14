@@ -107,7 +107,7 @@ class ThingsEeg1:
             raise ValueError(f"onset sample {onset.max()} exceeds recording length {eeg.shape[1]} — "
                              "check the events.tsv onset units (BIDS = seconds)")
 
-        start, stop = int(round(cfg.tmin * fs)), int(round(cfg.tmax * fs))
+        start, stop = round(cfg.tmin * fs), round(cfg.tmax * fs)
         keep = (onset + start >= 0) & (onset + stop <= eeg.shape[1])
         onset = onset[keep]
         rows = rows.filter(pl.Series(keep))
@@ -117,7 +117,7 @@ class ThingsEeg1:
         # (the same fix as EEG2 — without it eval-mode embeddings collapse).
         epochs = (epochs - epochs.mean(axis=2, keepdims=True)) / (epochs.std(axis=2, keepdims=True) + 1e-7)
         if cfg.resample and cfg.resample != fs:
-            epochs = _resample(epochs, int(round(epochs.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
+            epochs = _resample(epochs, round(epochs.shape[2] * cfg.resample / fs), axis=2).astype(np.float32)
         return epochs, rows[_COL_CONCEPT].to_numpy(), rows[_COL_FILE].to_numpy()
 
     @staticmethod

@@ -96,11 +96,15 @@ keeps its own README/CLAUDE/AGENTS content.)
 
 ### Code quality — ruff ratchet (bd mindscape-y63)
 
-CI has an **enforced** lint gate (`ruff check core neuroscan baselines --select <graduated>`) that grows one
-family per PR — fix-all-first, then graduate the family into the enforced `--select`. Plus **advisory** steps
-(full curated backlog + `ruff format --check`). Config lives in `[tool.ruff]` (line-length 120). `N` (the
-`X`/`y` tensor idiom) and `RUF001/002/003` (intentional `→ ≈ ×` unicode in docstrings) are deliberately not
-selected. Working rules:
+CI has an **enforced** lint gate (`ruff check core neuroscan --select <union>`) over the house **union
+select** — the maximal superset the scaffold ships (bd o70; landed wholesale via sdlc-scaffold v0.14–v0.16,
+no longer grown per-family here): `N` case, `S101`+`S`-family, `RUF0xx`, `PLR`, `SLF001`, `PTH`, `PERF`, … .
+Plus **advisory** steps (full-tree `--statistics` + `ruff format --check`). Config in `[tool.ruff]`
+(line-length 120). `N` **is** selected now, with this repo's idiom vocab in the `pep8-naming` LOCAL-SLOT
+(`X*`/`F*` design + feature matrices, single-cap linalg `A/M/P/R/T/W`…); `RUF001/002/003` (intentional
+`→ ≈ ×` unicode) stay ignored, plus `F722` (jaxtyping shape strings). `SLF001` is carved in the
+`per-file-ignores` LOCAL-SLOT where the mandated op-namespace pattern forces `Cls._helper` access — a
+scaffold-owned rule conflict (sdlc-scaffold-8ex), not a dodge. Working rules:
 
 - **Bare `# noqa: CODE`** only — no prose (RUF100 enforces it suppresses a real hit). Prefer fixing.
 - **Imports at top** — break circulars by extraction, never lazy imports.
@@ -130,7 +134,8 @@ path-mirror test at `tests/unit/<path>/test_foo.py` (one home per module — a s
 different name does not count; rename it to the mirror path). Coverage-**omitted** shells (runners/adapters/
 GPU/download/viz glue) are exempt — a non-unit-testable shell has no meaningful mirror and forcing a stub
 violates no-stubs, so the same "not logic" set the coverage gate omits is exempt here too (`unmirrored()`
-reads `[tool.coverage] omit`). **Advisory** (logged, never blocks): line-floor + betweenness chokepoint. Thresholds
+reads `[tool.coverage] omit`). **Advisory** (logged, never blocks): line-floor + betweenness chokepoint + Martin main-sequence distance
+(`main_sequence_max`, off at 0.0). Thresholds
 live in `[tool.structure]`, chosen clean against today's graph — they **ratchet only tighter, never relax**.
 Runs in the CI `tests` job (needs the `[devtools]` extra).
 
@@ -164,6 +169,21 @@ exceeds 1% (currently 0.7% after the runner boilerplate was DRY-extracted into `
 `Riemann.cross_subject_decode`). Fix a regression by extracting the shared logic, not by raising the threshold —
 it ratchets **down** as dup settles. Genuinely-distinct-but-similar-shaped runners are left un-merged (don't
 over-couple to chase the number).
+
+### Magic literals — enforced ratchet (sdlc-scaffold)
+
+`devtools/magic_literals.py` — recurring string vocab + repeated dict schemas (StrEnum / record candidates),
+the non-comparison axis ruff `PLR2004` can't see. **Blocks** over the `[tool.magic_literals]` ceiling — a
+per-repo FACT frozen at mindscape's DataFrame-schema + metric-key floor (`max_strings=33`, `max_key_sets=10`:
+column names like `{run,session,subject}`, metric keys `{acc,ece,kappa}`). A NEW literal migrates to a
+StrEnum/constant or bumps the ceiling with a documented reason; ratchets **down** as the schema vocab settles.
+
+### Shape contracts — advisory (sdlc-scaffold)
+
+`devtools/shape_contracts.py` — a public array/tensor boundary should carry a **jaxtyping** shape
+(`Float[Tensor, "b c h w"]`, live at runtime via a `@shapecheck` beartype wrapper), not a bare
+`np.ndarray`/`Tensor`; repo array aliases in `[tool.shape_contracts]`. **Advisory** (report-only) until the
+tree is boundary-clean, then the scaffold graduates it to `--assert` (sdlc-scaffold-vip.4).
 
 ### Local gate runners — nox + pre-commit (bd kvo/dno)
 

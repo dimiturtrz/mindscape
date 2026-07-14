@@ -20,7 +20,7 @@ from neuroscan.tasks.workload._eval import CvConfig, CvData, Eval
 logger = logging.getLogger(__name__)
 
 _DATASET = "shin2017_nback"
-_ARMS = [("collapse (mean+slope+peak)", lambda: FnirsLda()),
+_ARMS = [("collapse (mean+slope+peak)", FnirsLda),
          ("glm-β (HRF, no deriv)", lambda: GlmBeta(derivatives=False)),
          ("glm-β (HRF + derivs)", lambda: GlmBeta(derivatives=True))]
 

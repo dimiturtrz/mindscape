@@ -5,6 +5,7 @@ the gap between confidence and accuracy that domain shift blows open (the siblin
 """
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 
 import numpy as np
@@ -93,7 +94,7 @@ class Metrics:
         conf, correct = np.asarray(conf, float), np.asarray(correct, float)
         edges = np.linspace(0, 1, n_bins + 1)
         e, bins = 0.0, []
-        for lo, hi in zip(edges[:-1], edges[1:], strict=True):
+        for lo, hi in itertools.pairwise(edges):
             m = (conf > lo) & (conf <= hi)
             if m.sum() == 0:
                 continue

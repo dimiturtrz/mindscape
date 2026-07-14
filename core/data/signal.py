@@ -46,14 +46,14 @@ class Signal:
         edge are dropped. Returns (X [n, ch, t] float32, y [n]). Vectorized: one fancy-index, no per-epoch loop.
         """
         cont = rec.cont
-        a, b = int(round(tmin * fs)), int(round(tmax * fs))
-        nb = int(round(baseline_s * fs))
+        start, stop = round(tmin * fs), round(tmax * fs)
+        n_baseline = round(baseline_s * fs)
         T = cont.shape[1]
         onsets, y = np.asarray(rec.onsets), np.asarray(rec.labels)
-        valid = (onsets + a >= 0) & (onsets + b <= T)                      # window fully on the recording
+        valid = (onsets + start >= 0) & (onsets + stop <= T)               # window fully on the recording
         if not valid.any():
-            return np.empty((0, cont.shape[0], b - a), np.float32), np.empty(0, np.int64)
-        idx = onsets[valid][:, None] + np.arange(a, b)                     # [n_valid, b-a] sample indices
-        segs = cont[:, idx].transpose(1, 0, 2).astype(np.float32)          # [n_valid, ch, b-a]
-        base = segs[:, :, :nb].mean(axis=2, keepdims=True) if nb > 0 else 0.0
+            return np.empty((0, cont.shape[0], stop - start), np.float32), np.empty(0, np.int64)
+        idx = onsets[valid][:, None] + np.arange(start, stop)              # [n_valid, stop-start] sample indices
+        segs = cont[:, idx].transpose(1, 0, 2).astype(np.float32)          # [n_valid, ch, stop-start]
+        base = segs[:, :, :n_baseline].mean(axis=2, keepdims=True) if n_baseline > 0 else 0.0
         return segs - base, y[valid].astype(np.int64)

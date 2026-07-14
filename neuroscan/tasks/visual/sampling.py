@@ -40,9 +40,7 @@ class Sampling:
         pools = [rng.permutation(idx).tolist() for idx in by_concept.values()]
         order: list[int] = []
         while any(pools):
-            for pool in pools:
-                if pool:
-                    order.append(pool.pop())
+            order.extend(pool.pop() for pool in pools if pool)
         return [np.asarray(order[i:i + batch_size]) for i in range(0, len(order), batch_size)]
 
     @staticmethod

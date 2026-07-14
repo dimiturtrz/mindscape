@@ -121,7 +121,7 @@ class RunFusion:
                                 ("fnirs_correct", fnirs_probs.argmax(1) == test.y)):
                 pooled[name].append(value)
             rows.append({
-                "fold": str(fold), "n": int(len(test.y)),
+                "fold": str(fold), "n": len(test.y),
                 "eeg": metrics.Metrics.accuracy(test.y, eeg_probs.argmax(1)),
                 "fnirs": metrics.Metrics.accuracy(test.y, fnirs_probs.argmax(1)),
                 "late": metrics.Metrics.accuracy(test.y, late.argmax(1)),

@@ -69,13 +69,13 @@ def main():
     # pure-shift scan: signed whole-head correlation vs lag — is there a coherent peak?
     Rz = (R - R.mean(1, keepdims=True)) / (R.std(1, keepdims=True) + 1e-9)
     logger.info("shift(s) : mean signed corr")
-    for sh in range(0, 12):
-        k = int(round(sh * _FPS))
-        d = np.roll(D, k, axis=1)
-        if k > 0:
-            d[:, :k] = D[:, :1]
-        dz = (d - d.mean(1, keepdims=True)) / (d.std(1, keepdims=True) + 1e-9)
-        logger.info(f"  {sh:2d}   {float((dz * Rz).mean(1).mean()):+.3f}")
+    for shift_s in range(0, 12):
+        lag = round(shift_s * _FPS)
+        drive_shifted = np.roll(D, lag, axis=1)
+        if lag > 0:
+            drive_shifted[:, :lag] = D[:, :1]
+        drive_z = (drive_shifted - drive_shifted.mean(1, keepdims=True)) / (drive_shifted.std(1, keepdims=True) + 1e-9)
+        logger.info(f"  {shift_s:2d}   {float((drive_z * Rz).mean(1).mean()):+.3f}")
 
     lag, decay, beta = bc.Coupling.estimate_coupling(D, R, _FPS)
     logger.info(f"\nPOOLED gamma fit: lag {lag:.1f}s · decay {decay:.2f}s · β {beta:.2g}")

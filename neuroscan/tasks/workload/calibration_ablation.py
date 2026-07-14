@@ -102,15 +102,15 @@ def main():
     }
     # fusion picture on the z-scored (transductive) features: EEG becomes the strong modality; oracle grows
     Fez, Ffz = SubjectNorm.zscore_per_subject(Fe, ge), SubjectNorm.zscore_per_subject(Ff, ge)
-    CE, CF, LATE = [], [], []
+    CE, CF, late_hits = [], [], []
     for train_subj, test_subj in GroupKFold(_K).split(subs, groups=subs):
         train_mask, test_mask = np.isin(ge, subs[train_subj]), np.isin(ge, subs[test_subj])
         pe = CalibrationAblation._lda().fit(Fez[train_mask], y[train_mask]).predict_proba(Fez[test_mask])
         pf = CalibrationAblation._lda().fit(Ffz[train_mask], y[train_mask]).predict_proba(Ffz[test_mask])
         CE.append(pe.argmax(1) == y[test_mask])
         CF.append(pf.argmax(1) == y[test_mask])
-        LATE.append(((pe + pf) / 2).argmax(1) == y[test_mask])
-    ce, cf, late = np.concatenate(CE), np.concatenate(CF), np.concatenate(LATE)
+        late_hits.append(((pe + pf) / 2).argmax(1) == y[test_mask])
+    ce, cf, late = np.concatenate(CE), np.concatenate(CF), np.concatenate(late_hits)
     out.update({
         "eeg_z_best": float(ce.mean()), "fnirs_z": float(cf.mean()),
         "late_z": float(late.mean()), "oracle_z": float((ce | cf).mean()),

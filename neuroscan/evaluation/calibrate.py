@@ -46,18 +46,18 @@ class TemperatureScaler:
     def fit(self, logits: np.ndarray, labels: np.ndarray) -> "TemperatureScaler":
         z = torch.tensor(logits, dtype=torch.float32)
         y = torch.tensor(labels, dtype=torch.long)
-        logT = torch.zeros(1, requires_grad=True)
-        opt = torch.optim.LBFGS([logT], lr=0.05, max_iter=80)
+        log_t = torch.zeros(1, requires_grad=True)
+        opt = torch.optim.LBFGS([log_t], lr=0.05, max_iter=80)
         nll = torch.nn.CrossEntropyLoss()
 
         def closure():                                       # LBFGS requires a closure
             opt.zero_grad()
-            loss = nll(z / logT.exp(), y)
+            loss = nll(z / log_t.exp(), y)
             loss.backward()
             return loss
 
         opt.step(closure)
-        self.T = float(logT.exp().detach())
+        self.T = float(log_t.exp().detach())
         return self
 
     def probs(self, logits: np.ndarray, T: float | None = None) -> np.ndarray:

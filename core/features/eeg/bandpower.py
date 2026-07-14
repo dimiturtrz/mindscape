@@ -21,7 +21,7 @@ class BandPower:
         `relative=False` -> log absolute power (best *within*-subject; the absolute scale is subject-specific so
         it transfers poorly). `relative=True` -> each band as a FRACTION of the epoch's total band-power (per
         channel), which divides out the subject/session amplitude offset — the standard cross-subject fix."""
-        nperseg = min(X.shape[2], int(round(fs * 2)))            # 2 s segments (or the whole epoch if shorter)
+        nperseg = min(X.shape[2], round(fs * 2))            # 2 s segments (or the whole epoch if shorter)
         freqs, psd = welch(X, fs=fs, nperseg=nperseg, axis=2)    # psd: [n, ch, f]
         P = np.stack([psd[:, :, (freqs >= lo) & (freqs < hi)].sum(axis=2) for _n, lo, hi in bands], axis=0)
         if relative:

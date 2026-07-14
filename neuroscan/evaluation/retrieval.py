@@ -7,6 +7,8 @@ gap. Both pure (numpy/sklearn on the [N, C] score matrix), testable without a tr
 """
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 from sklearn.metrics import average_precision_score
 
@@ -57,7 +59,7 @@ class Retrieval:
         edges = np.linspace(0.0, 1.0, n_bins + 1)
         bins = []
         ece = 0.0
-        for lo, hi in zip(edges[:-1], edges[1:], strict=True):
+        for lo, hi in itertools.pairwise(edges):
             in_bin = (confidence > lo) & (confidence <= hi) if lo > 0 else (confidence >= lo) & (confidence <= hi)
             count = int(in_bin.sum())
             if not count:
