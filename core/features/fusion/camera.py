@@ -96,7 +96,7 @@ class BrainCamera:
         eeg_maps = [BrainCamera._zscore(BrainCamera._apply(eeg[b], W_e, grid)) for b in _BANDS]   # strength layers
         neural_map = BrainCamera._zscore(BrainCamera._apply(neural, W_f, grid))                   # origin + spread
         cov = BrainCamera.coverage_map(paired.pos_eeg, paired.pos_fnirs, grid)                    # locality gate
-        stack = eeg_maps + [neural_map, BrainCamera._broadcast(cov, eeg_maps[0].shape)]
+        stack = [*eeg_maps, neural_map, BrainCamera._broadcast(cov, eeg_maps[0].shape)]
         return np.stack(stack, axis=1).astype(np.float32)                              # [n, C=5, grid, grid, T]
 
     @staticmethod

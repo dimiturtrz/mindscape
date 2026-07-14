@@ -89,7 +89,7 @@ class Shin2017NbackEegAdapter:
             # no baseline: CSP/Riemann read covariance
             X, ye = Signal.block_epochs(BlockedRecording(cont, onsets, y), fs, cfg.tmin, tmax, baseline_s=0.0)
             if cfg.resample and cfg.resample != fs:
-                X = _rs(X, int(round(X.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
+                X = _rs(X, round(X.shape[2] * cfg.resample / fs), axis=2).astype(np.float32)
             n = len(ye)
             Xs.append(X)
             ys.append(ye)

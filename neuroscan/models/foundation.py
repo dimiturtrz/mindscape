@@ -119,7 +119,7 @@ class Foundation:
         ([B,C,T] -> [B,C,S,d], owning its own patching + normalization). The seam the frozen-head loop swaps on:
         a new foundation model is one entry here, not a fork of the runner. `channel_names` feeds a montage
         adapter (EEGPT needs it to map channels to its CHANNEL_DICT; CBraMod ignores it)."""
-        builders = {"cbramod": lambda: Foundation._loaded_cbramod(),
+        builders = {"cbramod": Foundation._loaded_cbramod,
                     "eegpt": lambda: Foundation._loaded_eegpt(channel_names, 0.0, "eegpt"),
                     "eegpt_ov": lambda: Foundation._loaded_eegpt(channel_names, 0.5, "eegpt_ov")}
         if name not in builders:

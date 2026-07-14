@@ -85,7 +85,7 @@ class ThingsEeg2:
     def _stream(url: str, dest, chunk: int = 1 << 20) -> None:
         """Stream a URL to `dest` (atomic via .part), following OSF's redirect to files.osf.io."""
         tmp = dest.with_suffix(dest.suffix + ".part")
-        with urllib.request.urlopen(url, timeout=120) as r, open(tmp, "wb") as fh:
+        with urllib.request.urlopen(url, timeout=120) as r, tmp.open("wb") as fh:
             while True:
                 b = r.read(chunk)
                 if not b:
@@ -197,7 +197,7 @@ class ThingsEeg2:
         valid = (codes >= 1) & (codes <= len(concept_by_code))          # drop target/catch trials out of range
         onset, codes = onset[valid], codes[valid]
 
-        start, stop = int(round(cfg.tmin * fs)), int(round(cfg.tmax * fs))
+        start, stop = round(cfg.tmin * fs), round(cfg.tmax * fs)
         keep = (onset + start >= 0) & (onset + stop <= eeg.shape[1])
         onset, codes = onset[keep], codes[keep]
 
@@ -206,7 +206,7 @@ class ThingsEeg2:
         # ill-conditioned -> eval-mode embeddings collapse to chance. Standardizing to O(1) fixes it.
         epochs = (epochs - epochs.mean(axis=2, keepdims=True)) / (epochs.std(axis=2, keepdims=True) + 1e-7)
         if cfg.resample and cfg.resample != fs:
-            epochs = _resample(epochs, int(round(epochs.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
+            epochs = _resample(epochs, round(epochs.shape[2] * cfg.resample / fs), axis=2).astype(np.float32)
         return epochs, concept_by_code[codes - 1], file_by_code[codes - 1]
 
     @staticmethod

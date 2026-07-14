@@ -63,7 +63,7 @@ class BraindecodePre:
                                       init_block_size=cfg.init_block_size))
         preprocess(ds, steps)
 
-        start = int(round(cfg.trial_start_offset_s * sfreq))
+        start = round(cfg.trial_start_offset_s * sfreq)
         windows = create_windows_from_events(ds, trial_start_offset_samples=start,
                                              trial_stop_offset_samples=0, preload=True)
 

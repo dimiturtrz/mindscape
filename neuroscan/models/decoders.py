@@ -111,9 +111,9 @@ class BraindecodeClf:
         self.seed = config.seed
         self.std = _standardizer(config.standardize)
         torch.manual_seed(config.seed)                   # vary net init across seeds (seed-averaging)
-        Net = getattr(M, arch.cls)
+        net_cls = getattr(M, arch.cls)
         # net consumes crop_len samples when cropping, else the full trial
-        self.net = Net(n_chans=arch.n_chans, n_outputs=arch.n_classes, n_times=arch.n_times).to(self.device)
+        self.net = net_cls(n_chans=arch.n_chans, n_outputs=arch.n_classes, n_times=arch.n_times).to(self.device)
 
     def _make_train_val(self, Xs, y):
         """Trial-level train/val split (val carved from held-out TRIALS, no crop leakage), then crop."""

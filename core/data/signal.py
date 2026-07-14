@@ -46,8 +46,8 @@ class Signal:
         edge are dropped. Returns (X [n, ch, t] float32, y [n]). Vectorized: one fancy-index, no per-epoch loop.
         """
         cont = rec.cont
-        a, b = int(round(tmin * fs)), int(round(tmax * fs))
-        nb = int(round(baseline_s * fs))
+        a, b = round(tmin * fs), round(tmax * fs)
+        nb = round(baseline_s * fs)
         T = cont.shape[1]
         onsets, y = np.asarray(rec.onsets), np.asarray(rec.labels)
         valid = (onsets + a >= 0) & (onsets + b <= T)                      # window fully on the recording

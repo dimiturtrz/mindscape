@@ -28,17 +28,19 @@ _DATASET = "shin2017_nback"
 
 # the aggregation IS the design axis — sweep it, don't bet on one. Plus a window granularity (coarse vs fine):
 # coarse keeps the pooled stage-1 low-dim / concat tractable; fine gives temporal resolution but more to overfit.
-_ARMS: list[tuple[str, object]] = [("collapse (baseline)", None)]
 # concat carried the only within-subject gain; trace it across a granularity ladder (very-coarse -> fine) to
 # see if fewer windows (less to overfit) let the gain survive transfer. Keep one pooled tier as the ruled-out
-# control (mean/max/lse were all a wash below collapse).
-for _win, _hop, _tag in [(11.0, 11.0, "vcoarse 2w"), (7.0, 7.0, "coarse 3w"),
-                         (6.0, 3.0, "med 6/3"), (4.0, 1.0, "fine 4/1")]:
-    _ARMS.append((f"windowed concat · {_tag}",
-                  lambda w=_win, h=_hop: WindowedFnirs(WindowedConfig(win_s=w, hop_s=h, fs=_FS, aggregate="concat"))))
-for _agg in ("mean", "max", "lse"):
-    _ARMS.append((f"windowed {_agg} · med 6/3",
-                  lambda a=_agg: WindowedFnirs(WindowedConfig(win_s=6.0, hop_s=3.0, fs=_FS, aggregate=a))))
+# control (mean/max/lse were all a wash below collapse). One assignment (no import-time side effect).
+_ARMS: list[tuple[str, object]] = [
+    ("collapse (baseline)", None),
+    *((f"windowed concat · {_tag}",
+       lambda w=_win, h=_hop: WindowedFnirs(WindowedConfig(win_s=w, hop_s=h, fs=_FS, aggregate="concat")))
+      for _win, _hop, _tag in [(11.0, 11.0, "vcoarse 2w"), (7.0, 7.0, "coarse 3w"),
+                               (6.0, 3.0, "med 6/3"), (4.0, 1.0, "fine 4/1")]),
+    *((f"windowed {_agg} · med 6/3",
+       lambda a=_agg: WindowedFnirs(WindowedConfig(win_s=6.0, hop_s=3.0, fs=_FS, aggregate=a)))
+      for _agg in ("mean", "max", "lse")),
+]
 
 
 def main():

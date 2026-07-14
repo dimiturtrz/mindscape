@@ -70,7 +70,7 @@ def main():
     Rz = (R - R.mean(1, keepdims=True)) / (R.std(1, keepdims=True) + 1e-9)
     logger.info("shift(s) : mean signed corr")
     for sh in range(0, 12):
-        k = int(round(sh * _FPS))
+        k = round(sh * _FPS)
         d = np.roll(D, k, axis=1)
         if k > 0:
             d[:, :k] = D[:, :1]

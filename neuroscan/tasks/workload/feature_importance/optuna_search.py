@@ -98,7 +98,7 @@ class OptunaSearch:
         try:
             importances = optuna.importance.get_param_importances(study)      # family -> fANOVA importance
         except (RuntimeError, ValueError):                                    # fANOVA needs enough trials to fit
-            importances = {f: 0.0 for f in families}                         # (top-trial weights still hold below)
+            importances = dict.fromkeys(families, 0.0)                         # (top-trial weights still hold below)
         n_top = max(1, int(cfg.top_frac * cfg.n_trials))
         top = sorted(study.trials, key=lambda t: t.value, reverse=True)[:n_top]
         top_w = {f: float(np.mean([t.params[f] for t in top])) for f in families}   # mean weight in best trials

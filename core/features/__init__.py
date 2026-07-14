@@ -33,5 +33,13 @@ class SubjectNorm:
         return out
 
 
-__all__ = ["Covariance", "BandPower", "CANONICAL_BANDS", "Amplitude", "SubjectNorm",
-           "DescriptorBank", "FNIRS_FEATURE_FNS", "WeightedFamilyScaler"]
+__all__ = [
+    "CANONICAL_BANDS",
+    "FNIRS_FEATURE_FNS",
+    "Amplitude",
+    "BandPower",
+    "Covariance",
+    "DescriptorBank",
+    "SubjectNorm",
+    "WeightedFamilyScaler",
+]

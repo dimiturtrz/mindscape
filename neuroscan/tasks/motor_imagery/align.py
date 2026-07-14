@@ -90,14 +90,14 @@ class Align:
                                            transfer.Domain(test.cov[cal], test.labels[cal]),
                                            transfer.Domain(test.cov[ev]), cfg.mdwm_lambda)
         yev = test.labels[ev]
-        row = {"fold": str(s), "n": int(len(ev)), "n_calib": int(len(cal)),
+        row = {"fold": str(s), "n": len(ev), "n_calib": len(cal),
                "acc": metrics.Metrics.accuracy(yev, pred), "kappa": metrics.Metrics.kappa(yev, pred), "ece": 0.0}
         return row, None, yev
 
     @staticmethod
     def _row(s, yte, probs):
         pred = probs.argmax(1)
-        row = {"fold": str(s), "n": int(len(yte)), "acc": metrics.Metrics.accuracy(yte, pred),
+        row = {"fold": str(s), "n": len(yte), "acc": metrics.Metrics.accuracy(yte, pred),
                "kappa": metrics.Metrics.kappa(yte, pred), "ece": metrics.Metrics.ece_from_probs(probs, yte)}
         return row, probs, yte
 

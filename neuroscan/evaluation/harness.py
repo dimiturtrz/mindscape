@@ -74,7 +74,7 @@ class Harness:
         clf = fit_fn(Xtr, ytr)
         probs = np.asarray(score_fn(clf, Xte), dtype=float)
         pred = probs.argmax(1)
-        row = {"fold": str(name), "n": int(len(yte)),
+        row = {"fold": str(name), "n": len(yte),
                "acc": metrics.Metrics.accuracy(yte, pred), "kappa": metrics.Metrics.kappa(yte, pred),
                "ece": metrics.Metrics.ece_from_probs(probs, yte)}
         return str(name), row, probs, yte, clf

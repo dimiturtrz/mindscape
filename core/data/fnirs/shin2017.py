@@ -35,11 +35,11 @@ class Shin2017NirsAdapter:
     def subjects(self) -> list[int]:
         """Subjects actually present on disk (this cognitive set ships 26; robust to partial downloads)."""
         root = Config.raw_dir() / "shin2017"
-        subs = []
-        for d in sorted(root.glob("VP*-NIRS")):
-            if (d / f"cnt_{self.task}.mat").exists():
-                subs.append(int(d.name[2:5]))
-        return subs
+        return [
+            int(d.name[2:5])
+            for d in sorted(root.glob("VP*-NIRS"))
+            if (d / f"cnt_{self.task}.mat").exists()
+        ]
 
     def _subject_dir(self, sub: int):
         return Config.raw_dir() / "shin2017" / f"VP{sub:03d}-NIRS"
@@ -74,7 +74,7 @@ class Shin2017NirsAdapter:
             if cfg.clean is not None:                                                  # physiological-noise stage
                 X = Clean.make_cleaner(cfg.clean).transform(X).astype(np.float32)      # stateless -> leakage-free
             if cfg.resample and cfg.resample != fs:
-                X = _rs(X, int(round(X.shape[2] * cfg.resample / fs)), axis=2).astype(np.float32)
+                X = _rs(X, round(X.shape[2] * cfg.resample / fs), axis=2).astype(np.float32)
             n = len(ye)
             Xs.append(X)
             ys.append(ye)
