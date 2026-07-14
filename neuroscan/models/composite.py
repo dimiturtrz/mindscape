@@ -11,8 +11,8 @@ geometry-head search — into `Model(backbone, head)`:
 
 So the frozen probe is `Model(frozen bb, head)`, the fine-tune is `Model(unfrozen bb, head)`, and swapping the
 backbone (a finer-patching EEGPT) is a new `Backbone` with the SAME head zoo — no bespoke encoder. `Model`
-freezes/eval-locks the backbone when asked, and `encode_tokens` exposes the backbone output so a frozen sweep
-can cache it once and train heads alone (the frozen-head loop).
+freezes/eval-locks the backbone when asked, so a frozen sweep caches the backbone's token grid once and trains
+heads alone on the stored features (the frozen-head loop).
 
 `S` (temporal tokens per epoch) is 1 for CBraMod on a 1s/200Hz epoch and >1 for a finer-patching backbone.
 The geometry heads (`pos_attn`/`topo`/`gcn`) are SPATIAL — they collapse S (mean over time tokens) then fold
@@ -57,8 +57,8 @@ class Model(nn.Module):
     """The composite: `backbone` extracts tokens, `head` maps them to CLIP space, the output is L2-normalized
     (the `ImageEncoder` contract, so it drops into the registry + trainer unchanged). `freeze_backbone` keeps
     the pretrained weights fixed AND in eval (no dropout/norm drift) even under `.train()` — the frozen-probe
-    recipe; unfrozen = fine-tune. `encode_tokens` is the cache hook: run the backbone once, train heads on the
-    stored tokens."""
+    recipe; unfrozen = fine-tune. A frozen sweep caches the backbone's token grid once (the backbone is the
+    module the feature-cache persists) and trains heads on the stored tokens."""
 
     def __init__(self, backbone: Backbone, head: Head, freeze_backbone: bool = True):  # noqa: FBT001, FBT002
         super().__init__()
@@ -74,10 +74,6 @@ class Model(nn.Module):
         if self.freeze_backbone:
             self.backbone.eval()
         return self
-
-    def encode_tokens(self, x: torch.Tensor) -> torch.Tensor:
-        """The backbone's [B, C, S, d] token grid — the cacheable frozen features."""
-        return self.backbone(x)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return F.normalize(self.head(self.backbone(x)), dim=-1)

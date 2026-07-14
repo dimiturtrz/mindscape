@@ -62,12 +62,6 @@ def test_frozen_param_groups_is_head_only():
     assert len(groups) == 1 and groups[0]["lr"] == 1e-3
 
 
-def test_encode_tokens_exposes_backbone_grid():
-    m = _model()
-    tokens = m.encode_tokens(torch.randn(5, _C, _S * 4))
-    assert tokens.shape == (5, _C, _S, _D)               # the cacheable [B, C, S, d] grid
-
-
 def test_every_head_maps_grid_to_clip():
     grid = torch.randn(4, _C, _S, _D)
     for pool in ("mean", "attn", "flat", "pos_attn", "topo", "gcn", "temporal"):
