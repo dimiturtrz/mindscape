@@ -96,6 +96,31 @@ cross-subject, single-trial. The same encoder scored four ways
 deployable question the top-k can't: when the retrieval is confident, is it right? — ECE + a hit-vs-miss
 confidence gap.
 
+## Continuous metrics — the retrieval is a tiny margin, not a semantic hit
+
+Top-k accuracy is one bit per trial (did #1 hit); it hides *how* the misses miss. `Nice.retrieval_continuous`
+adds the geometry as **extras** (never replacing accuracy): cos-to-true, a discrimination **margin**
+(cos-to-true − mean cos-to-the-other-199), **mean-rank** of the true concept, and a **z** against the concept
+bank's own random-pair cosine — CLIP concepts cluster (two *different* THINGS concepts already sit at cos
+0.334 ± 0.09), so absolute cosine isn't self-interpretable. Backfilled across the frozen CBraMod head zoo
+(120 ep, [writeup](../../../learning/2026-07-14_perception_continuous_metrics.md)):
+
+| frozen head | single-top1 | cos-to-true (≈ angle) | margin | mean-rank |
+|---|---|---|---|---|
+| mean_lin | 0.60% | 0.001 (~90°) | 0.001 | 97 |
+| gcn | 1.07% | 0.026 (~89°) | 0.009 | 82 |
+| flat_mlp | 1.21% | 0.054 (~87°) | 0.009 | 76 |
+| pos_attn | 1.59% | 0.012 (~89°) | 0.017 | 74 |
+| topo_cnn | 1.75% | 0.058 (~87°) | 0.015 | 70 |
+
+**Every arm points ~90° from the true concept — even the best.** The encoder never lands *near* the right
+concept absolutely; retrieval lives entirely in a **tiny positive margin** (topo's 1.75% = 3.5× chance from a
+0.015 margin). Raw cos-to-true is geometry-confounded — EEG embeddings sit *outside* the tight CLIP concept
+cluster, so every arm reads ~orthogonal — while **margin and mean-rank** are what track accuracy, exactly what
+InfoNCE optimizes (relative closeness, not absolute alignment). The single-trial cross-subject "signal" is a
+faint relative tilt, not a semantic hit. *(single-trial embeddings; the trial-averaged cut may align better —
+untested.)*
+
 ## Cross-dataset zero-shot — the hardest test, a measured null
 
 [`cross_dataset_eval.py`](cross_dataset_eval.py) trains on **THINGS-EEG1** (Grootswagers ds003825 — 50 subj,
