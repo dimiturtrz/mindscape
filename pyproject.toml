@@ -34,7 +34,11 @@ dependencies = [
 dev = ["pytest", "pytest-cov", "fvcore"]   # fvcore: params + FLOPs profiling (neuroscan/models/profile.py)
 export = ["onnx", "onnxruntime", "onnxscript"]   # ONNX export + parity check (Stage 2; core/export_onnx.py)
 data = ["osfclient", "openneuro-py"]   # dataset fetch (Stage-3 EEG->image: OSF / OpenNeuro); not a runtime dep
-devtools = ["grimp", "networkx", "nox"]   # import-graph diagnostic/fitness (bd 2r9/3nn) + gate runner (bd kvo; noxfile.py)
+# The guardrail ANALYZERS are an installed package pinned by scaffold tag (not vendored source) — an engine
+# update is a one-line `devtools_ref` bump on `copier update`, no source diff in your PRs. Imports as
+# `devtools` (`python -m devtools.graph …`); grimp/networkx arrive transitively. ast-grep/jscpd configs are
+# located from the install via `python -m devtools.config`. Pin lives in .copier-answers.yml (devtools_ref).
+devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.2.0#subdirectory=sdlc-devtools"]
 source = ["nibabel"]   # EEG->cortex source localization: MNE fsaverage forward/inverse (bd 728; core.features.eeg.source)
 all = ["pytest", "onnx", "onnxruntime"]
 
