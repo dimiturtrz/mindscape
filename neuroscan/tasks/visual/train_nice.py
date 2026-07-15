@@ -37,7 +37,7 @@ from core.features.eeg.covariance import Covariance
 from core.normalization.normalization import NormContext
 from neuroscan.evaluation.invariants import Invariants
 from neuroscan.evaluation.metrics import Metrics
-from neuroscan.models.encoders import EncoderRegistry, EncoderSpec
+from neuroscan.models.encoders import NORMALIZE_CHOICES, EncoderRegistry, EncoderSpec
 from neuroscan.models.nice import Nice, SubjectDiscriminator
 from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual import clip_targets
@@ -395,7 +395,7 @@ def main():
     ap.add_argument("--batch", type=int, default=None, help="<=1024 (cuDNN cap on this shape)")
     ap.add_argument("--lr", type=float, default=None)
     ap.add_argument("--resample", type=float, default=None)
-    ap.add_argument("--normalize", default=None, choices=["auto", "zscore", "mvnn", "scale"],
+    ap.add_argument("--normalize", default=None, choices=NORMALIZE_CHOICES,
                     help="input-normalization chain (bd 4aoz): auto = the per-encoder canonical chain")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--patience", type=int, default=None)

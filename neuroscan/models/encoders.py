@@ -27,6 +27,7 @@ _BUILDERS: dict[str, Callable[[EncoderSpec], nn.Module]] = {}
 # then /100 = x1e4 -> our O(10uV) signal lands at the O(1) amplitude the pretrained conv filters saw (bd 7mi4).
 _CBRAMOD_SCALE = 1e4
 _AUTO = "auto"
+NORMALIZE_CHOICES = (_AUTO, "zscore", "mvnn", "scale")   # the --normalize CLI vocab, shared by the perception runners
 
 
 class EncoderRegistry:
