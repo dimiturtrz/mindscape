@@ -27,7 +27,7 @@ dependencies = [
     "open-clip-torch",       # CLIP image embeddings — the EEG->image retrieval target (Stage-3 NICE baseline)
     "pillow",                # image IO for the CLIP target computation (clip_targets.py)
     "jaxtyping",   # Float[Tensor,"B C H W"] shape/dtype annotations — inert at runtime without a checker (no prod cost)
-    "beartype",    # the runtime checker jaxtyping delegates to; wrap as @shapecheck in your types module (see devtools/README)
+    "beartype",    # the runtime checker jaxtyping delegates to for live @shapecheck boundaries (see AGENTS.md)
 ]
 
 [project.optional-dependencies]
@@ -226,7 +226,10 @@ test_layout = "mirror"   # every logic module needs a unit test: "mirror" = test
 # layer. The magic-literals design names exactly these ("column names, framework vocab") as the legitimate
 # non-enum-able floor; frozen as the ratchet baseline (a NEW literal must migrate to a StrEnum or bump this
 # with a reason). Ratchets down as the schema vocab consolidates.
-max_strings = 33
+# 33 -> 34 (bd b40j): the `Normalize` StrEnum (things_eeg2) migrated the 'zscore'/'none' normalize vocab off
+# raw literals, but its 'none' VALUE-string collides with 3 pre-existing unrelated 'none' occurrences, tipping
+# that count 3->4. An incidental value collision, not sprinkled magic — the enum IS the mandated migration.
+max_strings = 34
 max_key_sets = 10
 # <<< LOCAL-SLOT: magic-ceilings
 

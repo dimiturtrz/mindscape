@@ -29,6 +29,7 @@ import re
 import urllib.request
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from enum import StrEnum
 
 import numpy as np
 import polars as pl
@@ -52,15 +53,24 @@ _API = "https://api.osf.io/v2/nodes/{node}/files/{prov}/?page[size]=100"
 _META = None
 
 
+class Normalize(StrEnum):
+    """Per-epoch scaling applied by the adapter: `ZSCORE` (per-channel, the default numerical conditioner) or
+    `NONE` (raw — for a downstream whitener like MVNN that supplies its own scaling)."""
+    ZSCORE = "zscore"
+    NONE = "none"
+
+
 class ThingsEpochCfg(BaseModel):
     """THINGS-EEG2 epoching knobs. `split` = 'training'|'test'; `tmin`/`tmax` = the epoch window (s) around
-    each stimulus onset; `resample` = target rate (Hz); `fmin`/`fmax` = optional bandpass (None = skip)."""
+    each stimulus onset; `resample` = target rate (Hz); `fmin`/`fmax` = optional bandpass (None = skip);
+    `normalize` = per-epoch scaling (see `Normalize`)."""
     split: str = "training"
     tmin: float = 0.0
     tmax: float = 1.0
     resample: float = 250.0
     fmin: float | None = None
     fmax: float | None = None
+    normalize: Normalize = Normalize.ZSCORE
 
 
 class ThingsEeg2:
@@ -202,9 +212,10 @@ class ThingsEeg2:
         onset, codes = onset[keep], codes[keep]
 
         epochs = np.stack([eeg[:, at + start:at + stop] for at in onset]).astype(np.float32)   # [n,63,t]
-        # per-channel z-score: EEG is in volts (~1e-5), which leaves BatchNorm's running variance
-        # ill-conditioned -> eval-mode embeddings collapse to chance. Standardizing to O(1) fixes it.
-        epochs = (epochs - epochs.mean(axis=2, keepdims=True)) / (epochs.std(axis=2, keepdims=True) + 1e-7)
+        if cfg.normalize == Normalize.ZSCORE:
+            # per-channel z-score: EEG is in volts (~1e-5), which leaves BatchNorm's running variance
+            # ill-conditioned -> eval-mode embeddings collapse to chance. Standardizing to O(1) fixes it.
+            epochs = (epochs - epochs.mean(axis=2, keepdims=True)) / (epochs.std(axis=2, keepdims=True) + 1e-7)
         if cfg.resample and cfg.resample != fs:
             epochs = _resample(epochs, round(epochs.shape[2] * cfg.resample / fs), axis=2).astype(np.float32)
         return epochs, concept_by_code[codes - 1], file_by_code[codes - 1]

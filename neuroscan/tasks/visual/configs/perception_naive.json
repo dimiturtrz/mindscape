@@ -1,10 +1,11 @@
 {
   "epochs": 40,
   "batch": 512,
-  "lr": 3e-4,
+  "lr": 0.0003,
   "patience": 8,
   "train_frac": 1.0,
   "sampling": "uniform",
   "hard_beta": 0.0,
-  "amp": false
+  "amp": false,
+  "resample": 200
 }
