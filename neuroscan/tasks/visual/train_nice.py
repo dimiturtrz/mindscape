@@ -34,6 +34,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.covariance import Covariance
+from core.features.eeg.mvnn import Mvnn
 from neuroscan.evaluation.invariants import Invariants
 from neuroscan.evaluation.metrics import Metrics
 from neuroscan.models.encoders import EncoderRegistry, EncoderSpec
@@ -82,6 +83,9 @@ class TrainConfig(BaseModel):
     warmup_epochs: int = 0           # >0 = linear LR warmup 0->full over N epochs (preserves the per-group ratio),
                                      # then hold. Pairs with backbone_lr_scale for the standard foundation-FT recipe.
     resample: float = 250.0
+    mvnn: bool = False           # multivariate noise normalization (bd b40j): whiten by the per-subject
+                                 # within-condition noise covariance (official THINGS-EEG2 / Guggenmos 2018),
+                                 # an opt-in alternative to the adapter's per-channel z-score
     seed: int = 0
     patience: int = 8            # early-stop patience on val-top1 (epochs)
     val_fraction: float = 0.1    # share of TRAINING concepts held out for leak-free model selection
@@ -147,13 +151,17 @@ class TrainNice:
         return np.stack([by_file[name] for name in image_files]).astype(np.float32)
 
     @staticmethod
-    def _load_split(subjects: list[int], split: str, resample: float, *, recenter: bool = False,
-                    shrinkage: float = 0.0):
+    def _load_split(subjects: list[int], split: str, cfg: TrainConfig):
+        normalize = things.Normalize.NONE if cfg.mvnn else things.Normalize.ZSCORE  # MVNN supplies own scaling
         epochs, concept, image_files, meta = things.ThingsEeg2.get_epochs(
-            subjects, things.ThingsEpochCfg(split=split, resample=resample))
-        if recenter:
-            epochs = Covariance.recenter_signals(epochs, meta["subject"].to_numpy(), shrinkage=shrinkage)  # M^-1/2 X
-        return epochs, concept, TrainNice._clip_targets(image_files, split), meta["subject"].to_numpy().astype(np.int64)
+            subjects, things.ThingsEpochCfg(split=split, resample=cfg.resample, normalize=normalize))
+        subject = meta["subject"].to_numpy()
+        if cfg.mvnn:
+            condition = np.unique(image_files, return_inverse=True)[1]      # same exemplar image = one condition
+            epochs = Mvnn.whiten(epochs, subject, condition)               # Σ_subject^{-1/2} X
+        if cfg.recenter:
+            epochs = Covariance.recenter_signals(epochs, subject, shrinkage=cfg.recenter_shrinkage)  # M^-1/2 X
+        return epochs, concept, TrainNice._clip_targets(image_files, split), subject.astype(np.int64)
 
     @staticmethod
     @torch.no_grad()
@@ -347,9 +355,8 @@ class TrainNice:
         logger.info(f"regime={regime}  train={train_subjects}  test={test_subject}  device={device}")
 
         train_eeg, train_concept, train_targets, train_subj = TrainNice._load_split(
-            train_subjects, "training", cfg.resample, recenter=cfg.recenter, shrinkage=cfg.recenter_shrinkage)
-        test_eeg, test_concept, _, _ = TrainNice._load_split(
-            [test_subject], "test", cfg.resample, recenter=cfg.recenter, shrinkage=cfg.recenter_shrinkage)
+            train_subjects, "training", cfg)
+        test_eeg, test_concept, _, _ = TrainNice._load_split([test_subject], "test", cfg)
         subj_map = {s: i for i, s in enumerate(sorted(set(train_subjects)))}
         subj_idx = np.array([subj_map[int(s)] for s in train_subj], dtype=np.int64) if cfg.adversarial else None
         test_bank = clip_targets.ClipTargets.concept_prototypes("test")
@@ -388,6 +395,8 @@ def main():
     ap.add_argument("--batch", type=int, default=None, help="<=1024 (cuDNN cap on this shape)")
     ap.add_argument("--lr", type=float, default=None)
     ap.add_argument("--resample", type=float, default=None)
+    ap.add_argument("--mvnn", action="store_true", default=None,
+                    help="multivariate noise normalization instead of the per-channel z-score (bd b40j)")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--patience", type=int, default=None)
     ap.add_argument("--out", default=None)

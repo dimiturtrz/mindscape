@@ -1,12 +1,13 @@
 {
   "epochs": 60,
   "batch": 512,
-  "lr": 1e-3,
+  "lr": 0.001,
   "patience": 15,
   "train_frac": 1.0,
   "sampling": "uniform",
   "hard_beta": 0.0,
   "amp": true,
   "backbone_lr_scale": 1.0,
-  "warmup_epochs": 0
+  "warmup_epochs": 0,
+  "resample": 200
 }

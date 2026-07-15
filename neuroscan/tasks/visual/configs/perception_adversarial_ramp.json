@@ -1,5 +1,14 @@
 {
-  "epochs": 60, "batch": 512, "lr": 3e-4, "patience": 12, "train_frac": 1.0,
-  "sampling": "uniform", "amp": true,
-  "adversarial": true, "adv_lambda": 1.0, "adv_weight": 0.5, "adv_lambda_ramp": true
+  "epochs": 60,
+  "batch": 512,
+  "lr": 0.0003,
+  "patience": 12,
+  "train_frac": 1.0,
+  "sampling": "uniform",
+  "amp": true,
+  "adversarial": true,
+  "adv_lambda": 1.0,
+  "adv_weight": 0.5,
+  "adv_lambda_ramp": true,
+  "resample": 200
 }
