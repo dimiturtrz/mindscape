@@ -34,7 +34,6 @@ from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.covariance import Covariance
-from core.normalization.normalization import NormContext
 from neuroscan.evaluation.invariants import Invariants
 from neuroscan.evaluation.metrics import Metrics
 from neuroscan.models.encoders import NORMALIZE_CHOICES, EncoderRegistry, EncoderSpec
@@ -157,8 +156,8 @@ class TrainNice:
             subjects, things.ThingsEpochCfg(split=split, resample=cfg.resample))
         subject = meta["subject"].to_numpy()
         condition = np.unique(image_files, return_inverse=True)[1]          # same exemplar image = one condition (MVNN)
-        chain = EncoderRegistry.normalization(cfg.model, cfg.normalize)     # per-encoder chain of Normalizer objects
-        epochs = chain.apply(epochs, NormContext(groups=subject, conditions=condition))
+        chain = EncoderRegistry.normalization(cfg.model, cfg.normalize, subject, condition)   # per-encoder chain
+        epochs = chain.fit(epochs).apply(epochs)
         if cfg.recenter:
             epochs = Covariance.recenter_signals(epochs, subject, shrinkage=cfg.recenter_shrinkage)  # M^-1/2 X
         return epochs, concept, TrainNice._clip_targets(image_files, split), subject.astype(np.int64)

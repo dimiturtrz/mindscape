@@ -37,7 +37,6 @@ from torch import nn
 from core.config import Config
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.montage import EegMontage
-from core.normalization.normalization import NormContext
 from neuroscan.models.composite import HeadContext, Heads, HeadSpec
 from neuroscan.models.encoders import NORMALIZE_CHOICES, EncoderRegistry
 from neuroscan.models.foundation import Foundation, LoadedBackbone
@@ -124,7 +123,8 @@ class FrozenHead:
         first run through the backbone's normalization chain (bd 4aoz — `normalize='auto'` picks CBraMod's
         amplitude scale / EEGPT's z-score; a forced value drives the A/B), then patched by the Backbone: CBraMod
         gives S=1, a finer-patching backbone (EEGPT) gives S>1."""
-        eeg = EncoderRegistry.normalization(backbone, normalize).apply(eeg, NormContext())
+        chain = EncoderRegistry.normalization(backbone, normalize)   # cbramod/eegpt -> stateless z-score (or scale)
+        eeg = chain.fit(eeg).apply(eeg)
         out = []
         for i in range(0, len(eeg), _FEAT_BATCH):
             x = torch.tensor(eeg[i:i + _FEAT_BATCH]).to(device)

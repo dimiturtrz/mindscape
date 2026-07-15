@@ -4,17 +4,17 @@ from __future__ import annotations
 import numpy as np
 from jaxtyping import Float
 
-from core.normalization.normalization import Normalizer, NormContext
+from core.normalization.normalization import Normalizer
 
 _EPS = 1e-7
 
 
 class ZScore(Normalizer):
     """Per-channel z-score over time, per epoch: each channel → zero mean, unit variance within a trial. The
-    ad-hoc numerical conditioner that keeps a downstream net's running stats well-scaled. Stateless — it fits
-    nothing from `ctx` (every trial normalizes against itself), so it ignores the context."""
+    numerical conditioner that keeps a downstream net's running stats well-scaled. Stateless — every trial
+    normalizes against itself, so there is nothing to fit."""
 
-    def apply(self, X: Float[np.ndarray, "n ch t"], ctx: NormContext) -> Float[np.ndarray, "n ch t"]:
+    def apply(self, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch t"]:
         mean = X.mean(axis=2, keepdims=True)
         std = X.std(axis=2, keepdims=True)
         return ((X - mean) / (std + _EPS)).astype(np.float32)
