@@ -305,7 +305,11 @@ the measurement correctness, and the evaluation are mine. The architecture (two-
 split-as-criteria, dataset-adapter registry, calibration-under-shift) is carried from a mature prior ML
 project of mine; see [`docs/STRUCTURE.md`](docs/STRUCTURE.md). The neuroscience and decoding specifics I
 learn as I go. The tooling and quality gates are provisioned by an in-house copier template
-(sdlc-scaffold); refresh with `uvx copier update`.
+(sdlc-scaffold, version-pinned in `.copier-answers.yml`): the structural analyzers install as a pinned
+`sdlc-devtools` package — not vendored, so an engine update is a one-line pin bump and a template refresh is
+`uvx copier update`. What each gate enforces — the ruff ratchet, arch-fitness + test-mirror, import-linter
+layer contracts, and the magic-literal / shape-contract / duplication ratchets — is documented in
+[`AGENTS.md`](AGENTS.md).
 
 ## References
 - **BCI Competition IV-2a** — Tangermann et al., *Review of the BCI Competition IV*, Front. Neurosci. 2012.

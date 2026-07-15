@@ -27,7 +27,7 @@ dependencies = [
     "open-clip-torch",       # CLIP image embeddings — the EEG->image retrieval target (Stage-3 NICE baseline)
     "pillow",                # image IO for the CLIP target computation (clip_targets.py)
     "jaxtyping",   # Float[Tensor,"B C H W"] shape/dtype annotations — inert at runtime without a checker (no prod cost)
-    "beartype",    # the runtime checker jaxtyping delegates to; wrap as @shapecheck in your types module (see devtools/README)
+    "beartype",    # the runtime checker jaxtyping delegates to for live @shapecheck boundaries (see AGENTS.md)
 ]
 
 [project.optional-dependencies]
