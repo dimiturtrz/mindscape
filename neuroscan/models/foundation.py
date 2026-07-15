@@ -43,7 +43,7 @@ from jaxtyping import Float
 from torch import nn
 
 from core.config import REPO, Config
-from neuroscan.models.composite import Backbone, HeadSpec, Model, TokenHead
+from neuroscan.models.composite import Backbone, HeadContext, HeadSpec, Model, TokenHead
 from neuroscan.models.lora import Lora
 
 if TYPE_CHECKING:
@@ -189,7 +189,7 @@ class Foundation:
     def _cbramod_model(spec: EncoderSpec, pool: str, freeze: bool) -> Model:  # noqa: FBT001
         """`Model(CBraModBackbone, TokenHead)` — the frozen probe / fine-tune / attn-pool as one composite."""
         bb = CBraModBackbone()
-        head = TokenHead(HeadSpec("cbramod", pool), bb.d_model, None, spec.embed_dim)  # mean/attn -> no n_tok
+        head = TokenHead(HeadSpec("cbramod", pool), HeadContext(bb.d_model, None, spec.embed_dim), None)  # mean/attn -> no n_tok
         return Model(bb, head, freeze_backbone=freeze)
 
     @staticmethod

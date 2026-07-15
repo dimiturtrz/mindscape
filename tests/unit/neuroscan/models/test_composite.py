@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import torch
 
-from neuroscan.models.composite import Backbone, Head, Heads, HeadSpec, Model
+from neuroscan.models.composite import Backbone, Head, HeadContext, Heads, HeadSpec, Model
 
 _C, _S, _D, _EMBED = 8, 3, 16, 32
 
@@ -30,7 +30,7 @@ def _pos():
 
 
 def _model(pool="mean", freeze=True):
-    head = Heads.build(HeadSpec(pool, pool), _D, _pos(), n_tok=_C * _S, embed_dim=_EMBED)
+    head = Heads.build(HeadSpec(pool, pool), HeadContext(_D, _pos(), _EMBED), n_tok=_C * _S)
     return Model(_FakeBackbone(), head, freeze_backbone=freeze)
 
 
@@ -65,7 +65,7 @@ def test_frozen_param_groups_is_head_only():
 def test_every_head_maps_grid_to_clip():
     grid = torch.randn(4, _C, _S, _D)
     for pool in ("mean", "attn", "flat", "pos_attn", "topo", "gcn", "temporal"):
-        head = Heads.build(HeadSpec(pool, pool), _D, _pos(), n_tok=_C * _S, embed_dim=_EMBED)
+        head = Heads.build(HeadSpec(pool, pool), HeadContext(_D, _pos(), _EMBED), n_tok=_C * _S)
         out = head(grid)
         assert out.shape == (4, _EMBED), pool
 
@@ -73,7 +73,7 @@ def test_every_head_maps_grid_to_clip():
 def test_temporal_head_uses_time_order():
     """The temporal head convolves ALONG the first (time) axis — reversing time changes its output, unlike a
     global-mean/flat head. Guards that it actually processes the sequence the S-token backbones expose."""
-    head = Heads.build(HeadSpec("temporal", "temporal"), _D, _pos(), embed_dim=_EMBED).eval()
+    head = Heads.build(HeadSpec("temporal", "temporal"), HeadContext(_D, _pos(), _EMBED)).eval()
     grid = torch.randn(2, _C, _S, _D)
     with torch.no_grad():
         forward, reversed_ = head(grid), head(grid.flip(1))
@@ -83,9 +83,9 @@ def test_temporal_head_uses_time_order():
 def test_flat_head_sizes_mlp_at_construction():
     """flat's MLP in-dim is n_tok·d — it must exist BEFORE the optimizer is built (a lazy init would leave its
     params out of the optimizer and it would never train). Requires n_tok; errors without it."""
-    head = Heads.build(HeadSpec("flat", "flat"), _D, _pos(), n_tok=_C * _S, embed_dim=_EMBED)
+    head = Heads.build(HeadSpec("flat", "flat"), HeadContext(_D, _pos(), _EMBED), n_tok=_C * _S)
     assert isinstance(head, Head)
     trainable = [p for p in head.parameters() if p.requires_grad]
     assert trainable and any(p.shape[-1] == _C * _S * _D for p in trainable)   # first linear sees all tokens
     with pytest.raises(ValueError, match="flat pool needs n_tok"):
-        Heads.build(HeadSpec("flat", "flat"), _D, _pos(), embed_dim=_EMBED)
+        Heads.build(HeadSpec("flat", "flat"), HeadContext(_D, _pos(), _EMBED))
