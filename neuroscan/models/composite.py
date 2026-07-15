@@ -105,21 +105,29 @@ class HeadSpec:
     rbf_sigma: float = _RBF_SIGMA
 
 
+@dataclass
+class HeadContext:
+    """Sizing + geometry context shared by every head constructor: token width `d`, electrode positions
+    `pos [C, 2]` on the unit-disk scalp (None for geometry-blind heads), and the CLIP output width."""
+    d: int
+    pos: np.ndarray | None
+    embed_dim: int = _EMBED
+
+
 class Heads:
     """Builders + fixed geometry operators for the head zoo (montage-derived, computed once)."""
 
     @staticmethod
-    def build(spec: HeadSpec, d: int, pos: Float[np.ndarray, "ch 2"], n_tok: int | None = None,
-              embed_dim: int = _EMBED) -> Head:
-        """A `Head` for this arm, sized to the token width `d` and (for geometry arms) the electrode positions
-        `pos [C, 2]` on the unit-disk scalp. `n_tok` (= C·S) is required only by the flat pool (its MLP in-dim
-        is n_tok·d); mean/attn/geometry/temporal ignore it."""
+    def build(spec: HeadSpec, context: HeadContext, n_tok: int | None = None) -> Head:
+        """A `Head` for this arm, sized to the context (token width, electrode positions, CLIP dim).
+        `n_tok` (= C·S) is required only by the flat pool (its MLP in-dim is n_tok·d);
+        mean/attn/geometry/temporal ignore it."""
         geometry = {"pos_attn": PosAttnHead, "topo": TopoHead, "gcn": GcnHead}
         if spec.pool in geometry:
-            return geometry[spec.pool](spec, d, pos, embed_dim)
+            return geometry[spec.pool](spec, context)
         if spec.pool == "temporal":
-            return TemporalConvHead(spec, d, embed_dim)
-        return TokenHead(spec, d, n_tok, embed_dim)
+            return TemporalConvHead(spec, context)
+        return TokenHead(spec, context, n_tok)
 
     @staticmethod
     def mlp(in_dim: int, hidden: int, dropout: float, embed_dim: int) -> nn.Module:
@@ -164,17 +172,17 @@ class TokenHead(Head):
     flat pool needs `n_tok` (= C·S) up front to size its MLP in-dim (n_tok·d) at construction — so every param
     exists before the optimizer is built."""
 
-    def __init__(self, spec: HeadSpec, d: int, n_tok: int | None, embed_dim: int):
+    def __init__(self, spec: HeadSpec, context: HeadContext, n_tok: int | None):
         super().__init__()
         self.pool = spec.pool
-        self.attn = nn.Linear(d, 1) if spec.pool == "attn" else None
+        self.attn = nn.Linear(context.d, 1) if spec.pool == "attn" else None
         if spec.pool == "flat":
             if n_tok is None:
                 raise ValueError("flat pool needs n_tok (= C·S) to size its MLP")
-            in_dim = n_tok * d
+            in_dim = n_tok * context.d
         else:
-            in_dim = d                                   # mean/attn collapse the tokens to d
-        self.mlp = Heads.mlp(in_dim, spec.hidden, spec.dropout, embed_dim)
+            in_dim = context.d                                   # mean/attn collapse the tokens to d
+        self.mlp = Heads.mlp(in_dim, spec.hidden, spec.dropout, context.embed_dim)
 
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         f = tokens.flatten(1, 2)                          # [B, C·S, d]
@@ -190,13 +198,13 @@ class TokenHead(Head):
 class PosAttnHead(Head):
     """Electrode-position embedding + self-attention over the C channel tokens (geometry via learned pos)."""
 
-    def __init__(self, spec: HeadSpec, d: int, pos: np.ndarray, embed_dim: int):
+    def __init__(self, spec: HeadSpec, context: HeadContext):
         super().__init__()
-        self.register_buffer("pos", torch.tensor(pos, dtype=torch.float32))          # [C, 2]
-        self.pos_proj = nn.Linear(2, d)
-        self.enc = nn.TransformerEncoderLayer(d, _NHEAD, dim_feedforward=spec.hidden or d,
+        self.register_buffer("pos", torch.tensor(context.pos, dtype=torch.float32))          # [C, 2]
+        self.pos_proj = nn.Linear(2, context.d)
+        self.enc = nn.TransformerEncoderLayer(context.d, _NHEAD, dim_feedforward=spec.hidden or context.d,
                                               dropout=spec.dropout, batch_first=True, activation="gelu")
-        self.mlp = Heads.mlp(d, spec.hidden, spec.dropout, embed_dim)
+        self.mlp = Heads.mlp(context.d, spec.hidden, spec.dropout, context.embed_dim)
 
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         f = Heads.spatial(tokens)                         # [B, C, d]
@@ -206,14 +214,14 @@ class PosAttnHead(Head):
 class TopoHead(Head):
     """RBF-interpolate the C electrode features onto a scalp image, then 2D-convolve (Bashivan 2016)."""
 
-    def __init__(self, spec: HeadSpec, d: int, pos: np.ndarray, embed_dim: int):
+    def __init__(self, spec: HeadSpec, context: HeadContext):
         super().__init__()
         self.grid = spec.grid
-        self.register_buffer("wtopo", Heads.topo_weights(pos, spec.grid, spec.rbf_sigma))   # [H·W, C]
+        self.register_buffer("wtopo", Heads.topo_weights(context.pos, spec.grid, spec.rbf_sigma))   # [H·W, C]
         self.conv = nn.Sequential(
-            nn.Conv2d(d, 64, 3, padding=1), nn.GELU(),
+            nn.Conv2d(context.d, 64, 3, padding=1), nn.GELU(),
             nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.GELU(), nn.AdaptiveAvgPool2d(1))
-        self.mlp = Heads.mlp(64, spec.hidden, spec.dropout, embed_dim)
+        self.mlp = Heads.mlp(64, spec.hidden, spec.dropout, context.embed_dim)
 
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         f = Heads.spatial(tokens)                         # [B, C, d]
@@ -226,12 +234,12 @@ class TopoHead(Head):
 class GcnHead(Head):
     """2-layer graph conv over the electrode-adjacency graph (signal mixes between adjacent electrodes)."""
 
-    def __init__(self, spec: HeadSpec, d: int, pos: np.ndarray, embed_dim: int):
+    def __init__(self, spec: HeadSpec, context: HeadContext):
         super().__init__()
-        self.register_buffer("adj", Heads.adjacency(pos))                            # [C, C] normalized Â
-        self.gcn1 = nn.Linear(d, d)
-        self.gcn2 = nn.Linear(d, d)
-        self.mlp = Heads.mlp(d, spec.hidden, spec.dropout, embed_dim)
+        self.register_buffer("adj", Heads.adjacency(context.pos))                            # [C, C] normalized Â
+        self.gcn1 = nn.Linear(context.d, context.d)
+        self.gcn2 = nn.Linear(context.d, context.d)
+        self.mlp = Heads.mlp(context.d, spec.hidden, spec.dropout, context.embed_dim)
 
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         f = Heads.spatial(tokens)                         # [B, C, d]
@@ -247,12 +255,12 @@ class TemporalConvHead(Head):
     tokens — then convolves along it (kernel 3, size-agnostic) and reads out — LATE aggregation that preserves
     the temporal order a global mean or flat bag throws away. Folds the TIME axis (vs geometry's ELECTRODE axis)."""
 
-    def __init__(self, spec: HeadSpec, d: int, embed_dim: int):
+    def __init__(self, spec: HeadSpec, context: HeadContext):
         super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(d, 64, 3, padding=1), nn.GELU(),
+            nn.Conv1d(context.d, 64, 3, padding=1), nn.GELU(),
             nn.Conv1d(64, 64, 3, padding=1), nn.GELU(), nn.AdaptiveAvgPool1d(1))
-        self.mlp = Heads.mlp(64, spec.hidden, spec.dropout, embed_dim)
+        self.mlp = Heads.mlp(64, spec.hidden, spec.dropout, context.embed_dim)
 
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         x = tokens.flatten(1, 2)                          # [B, N·embed_num, d] — keep the summary tokens as
