@@ -54,3 +54,4 @@ class EncoderRegistry:
         EncoderRegistry.register("cbramod", Foundation._build_cbramod)          # frozen backbone + head (linear probe)
         EncoderRegistry.register("cbramod_ft", Foundation._build_cbramod_ft)    # unfrozen — fine-tune on perception
         EncoderRegistry.register("cbramod_ft_attn", Foundation._build_cbramod_ft_attn)  # unfrozen + attention pool (bd)
+        EncoderRegistry.register("cbramod_lora", Foundation._build_cbramod_lora)  # frozen + rank-8 LoRA adapters (29z)

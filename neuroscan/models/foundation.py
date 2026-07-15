@@ -32,6 +32,7 @@ Backbone checked out (not vendored) under `external/CBraMod`; pretrained weights
 """
 from __future__ import annotations
 
+import logging
 import sys
 from dataclasses import dataclass
 from functools import partial
@@ -43,9 +44,12 @@ from torch import nn
 
 from core.config import REPO, Config
 from neuroscan.models.composite import Backbone, HeadSpec, Model, TokenHead
+from neuroscan.models.lora import Lora
 
 if TYPE_CHECKING:
     from neuroscan.models.encoder_spec import EncoderSpec
+
+logger = logging.getLogger(__name__)
 
 _CBRAMOD_ROOT = REPO / "external" / "CBraMod"   # checked out @ 0ff6be91 (MIT); see the fetch step above
 _EEGPT_MODELS = REPO / "external" / "EEGPT" / "downstream" / "Modules" / "models"   # checked out @ a0e0a8f (Apache-2.0)
@@ -199,3 +203,15 @@ class Foundation:
     @staticmethod
     def _build_cbramod_ft_attn(spec: EncoderSpec) -> Model:
         return Foundation._cbramod_model(spec, pool="attn", freeze=False)
+
+    @staticmethod
+    def _build_cbramod_lora(spec: EncoderSpec) -> Model:
+        """LoRA fine-tune (bd 29z): a frozen CBraMod with rank-8 adapters injected into its feed-forward linears
+        (`linear1`/`linear2`) — the cheap middle between the frozen probe (0.6%, chance) and the full fine-tune
+        (2.38%; the fused attention stays frozen — it isn't module-callable, see lora.py). The
+        backbone is frozen/eval-locked; `Lora.inject` re-arms only the low-rank A/B, which `Model.param_groups`
+        picks up via `requires_grad` as the sole trainable backbone group."""
+        model = Foundation._cbramod_model(spec, pool="mean", freeze=True)
+        n_adapted = Lora.inject(model.backbone.module)
+        logger.info(f"cbramod_lora: injected rank-8 LoRA into {n_adapted} linear layers")
+        return model
