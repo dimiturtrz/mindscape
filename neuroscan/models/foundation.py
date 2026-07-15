@@ -7,11 +7,13 @@ lives in the frozen pretrained weights; only a small head learns the CLIP map (t
 at n≤17 subjects" — the big net isn't trained on the tiny labelled set).
 
 CBraMod's input is patched: `[B, C, S, P]`, `P=200` points/patch at **200 Hz**. Our sensor epoch `[B, C, T]`
-arrives already normalized by the upstream `core.normalization` chain (for CBraMod: an amplitude-preserving
-scale into the microvolts/100 range its pretraining used — `pretrain_trainer.py` does `x/100`, NOT a z-score;
-bd 7mi4 corrected the earlier deep-dive claim), then it is reshaped to `[B, C, T//P, P]`. The backbone's
-per-token `d_model` features are mean-pooled over (C, S); a trainable MLP maps `d_model → CLIP dim`. Channel
-count is flexible (verified: 63 posterior channels feed straight through), so no montage projection is needed.
+arrives already normalized by the upstream `core.normalization` chain, then it is reshaped to `[B, C, T//P, P]`.
+Its pretraining scale is microvolts/100 (`pretrain_trainer.py` does `x/100`, NOT the z-score the deep-dive
+claimed — bd 7mi4), so feeding that amplitude-preserving `scale` link was the pfad hypothesis — but on the
+frozen probe it REGRESSED the geometry heads vs z-score, so the chain feeds CBraMod a **z-score** by default
+(`scale` remains an override to test under fine-tuning). The backbone's per-token `d_model` features are
+mean-pooled over (C, S); a trainable MLP maps `d_model → CLIP dim`. Channel count is flexible (verified: 63
+posterior channels feed straight through), so no montage projection is needed.
 
 Backbone checked out (not vendored) under `external/CBraMod`; pretrained weights live out-of-repo under
 `<data_root>/pretrained/CBraMod/pretrained_weights.pth`. Reproduce:

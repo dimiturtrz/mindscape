@@ -53,16 +53,18 @@ class EncoderRegistry:
     @staticmethod
     def normalization(model: str, override: str = _AUTO) -> CompositeNormalization:
         """The input-normalization chain an encoder expects, as directly-constructed objects (no registry).
-        `override=_AUTO` picks the per-encoder canonical: CBraMod wants the amplitude-preserving pretraining
-        scale (its conv filters were trained on microvolts/100, NOT a z-score — bd 7mi4); EEGPT is fed a
-        z-score; NICE (and the default) get the official THINGS-EEG2 MVNN whitening. A non-auto override forces
-        a single named link, for the matched normalization A/B."""
+        `override=_AUTO` picks the per-encoder canonical: NICE (and the default) get the official THINGS-EEG2
+        MVNN whitening; CBraMod + EEGPT get a per-channel z-score. NOTE (bd 7mi4): CBraMod's pretraining scale
+        is microvolts/100 (the `scale` link), and feeding that amplitude-preserving input was the pfad
+        hypothesis — but on the frozen probe it REGRESSED the geometry heads (topo 1.75->1.21) vs z-score, so
+        z-score is the evidenced default. `scale` stays a named override to test the amplitude input under
+        fine-tuning (the open question — the frozen probe can't adapt the backbone to exploit it)."""
+        if override == "scale":
+            return CompositeNormalization([Scale(_CBRAMOD_SCALE)])
         forced = {"zscore": ZScore, "mvnn": Mvnn}.get(override)
         if forced is not None:
             return CompositeNormalization([forced()])
-        if override == "scale" or (override == _AUTO and model.startswith("cbramod")):
-            return CompositeNormalization([Scale(_CBRAMOD_SCALE)])
-        if model.startswith("eegpt"):
+        if model.startswith(("cbramod", "eegpt")):
             return CompositeNormalization([ZScore()])
         return CompositeNormalization([Mvnn()])
 
