@@ -27,8 +27,7 @@ def test_epochs_window_extraction_and_labels():
     epochs, concept, files = ThingsEeg1.epochs_from_events(eeg, 1000.0, ev, cfg)
     assert epochs.shape == (3, 63, 200)
     assert list(concept) == ["aardvark", "antelope", "axe"] and list(files) == ["a.jpg", "b.jpg", "c.jpg"]
-    # per-channel z-score: ~0 mean, ~unit std within each epoch-channel
-    assert np.allclose(epochs.mean(axis=2), 0, atol=1e-4) and np.allclose(epochs.std(axis=2), 1, atol=1e-2)
+    assert epochs.dtype == np.float32                          # raw volts — normalization is the chain's job now
 
 
 def test_drop_targets_and_validation_filtering():

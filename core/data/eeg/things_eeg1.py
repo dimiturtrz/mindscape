@@ -113,10 +113,7 @@ class ThingsEeg1:
         onset = onset[keep]
         rows = rows.filter(pl.Series(keep))
 
-        epochs = np.stack([eeg[:, at + start:at + stop] for at in onset]).astype(np.float32)   # [n, ch, t]
-        # per-channel z-score: EEG is in volts (~1e-5); O(1) scaling keeps the encoder's BatchNorm conditioned
-        # (the same fix as EEG2 — without it eval-mode embeddings collapse).
-        epochs = (epochs - epochs.mean(axis=2, keepdims=True)) / (epochs.std(axis=2, keepdims=True) + 1e-7)
+        epochs = np.stack([eeg[:, at + start:at + stop] for at in onset]).astype(np.float32)   # [n, ch, t] raw volts
         if cfg.resample and cfg.resample != fs:
             epochs = _resample(epochs, round(epochs.shape[2] * cfg.resample / fs), axis=2).astype(np.float32)
         return epochs, rows[_COL_CONCEPT].to_numpy(), rows[_COL_FILE].to_numpy()

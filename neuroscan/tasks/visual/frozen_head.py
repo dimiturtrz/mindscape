@@ -37,7 +37,9 @@ from torch import nn
 from core.config import Config
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.montage import EegMontage
+from core.normalization.normalization import NormContext
 from neuroscan.models.composite import HeadContext, Heads, HeadSpec
+from neuroscan.models.encoders import EncoderRegistry
 from neuroscan.models.foundation import Foundation, LoadedBackbone
 from neuroscan.models.nice import Nice
 from neuroscan.tasks.visual import clip_targets
@@ -108,10 +110,11 @@ class FrozenHead:
 
     @staticmethod
     @torch.no_grad()
-    def _features(module: nn.Module, eeg: np.ndarray, device: str) -> torch.Tensor:
-        """Frozen token grid for every epoch, `[N, C, S, d]` float16 on CPU (the one-time cost). The composite
-        Backbone owns its own patching + normalization, so a raw `[B, C, T]` epoch goes straight in — CBraMod
-        gives S=1, a finer-patching backbone (EEGPT) gives S>1."""
+    def _features(module: nn.Module, eeg: np.ndarray, device: str, backbone: str) -> torch.Tensor:
+        """Frozen token grid for every epoch, `[N, C, S, d]` float16 on CPU (the one-time cost). Raw epochs are
+        first run through the backbone's normalization chain (bd 4aoz — CBraMod's amplitude scale, EEGPT's
+        z-score), then patched by the Backbone: CBraMod gives S=1, a finer-patching backbone (EEGPT) gives S>1."""
+        eeg = EncoderRegistry.normalization(backbone).apply(eeg, NormContext())
         out = []
         for i in range(0, len(eeg), _FEAT_BATCH):
             x = torch.tensor(eeg[i:i + _FEAT_BATCH]).to(device)
@@ -139,7 +142,9 @@ class FrozenHead:
     def _cache_path(backbone: str, subjects: list[int], split: str) -> Path:
         """One home per (backbone, split, subject-set) frozen-feature blob, out-of-repo under <data>/cache."""
         subj = "-".join(str(s) for s in sorted(subjects))
-        return Config.data_root("cache") / "frozen_features" / f"{backbone}__{split}__{subj}.pt"
+        # __n2: the normalization moved to the core.normalization chain (bd 4aoz) — CBraMod is now amplitude-
+        # scaled, not z-scored, so pre-4aoz feature blobs are stale; the suffix forces a clean recompute.
+        return Config.data_root("cache") / "frozen_features" / f"{backbone}__{split}__{subj}__n2.pt"
 
     @staticmethod
     def _loaded(backbone: str, device: str) -> LoadedBackbone:
@@ -162,7 +167,7 @@ class FrozenHead:
             logger.info(f"cache hit {path.name}: {tuple(blob['feat'].shape)}")
             return blob["feat"], blob["concept"], blob["files"]
         eeg, concept, files, _ = FrozenHead._load(subjects, split, loaded.sample_rate)
-        feat = FrozenHead._features(loaded.module, eeg, device)
+        feat = FrozenHead._features(loaded.module, eeg, device, loaded.name)
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save({"feat": feat, "concept": concept, "files": files}, path)
         logger.info(f"cached {path.name}: {tuple(feat.shape)} (float16)")

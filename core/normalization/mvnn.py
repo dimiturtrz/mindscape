@@ -4,14 +4,14 @@ Within an image condition the *signal* is fixed, so the trial-to-trial variance 
 that noise covariance `Σ` (per subject), then whitens every trial by `Σ^{-1/2}` so the channels the decoder
 sees carry spatially-white, unit-variance noise — the Mahalanobis frame in which a Euclidean decoder is
 optimal. This is the step Gifford (2022) applied to THINGS-EEG2 and a documented reason the NICE baseline
-works; here it is an opt-in alternative to the per-channel z-score (both hand the encoder ~unit-scale input;
-MVNN additionally decorrelates the noise).
+works; as a `Normalizer` it is a data-fitted link — it reads `ctx.groups` (subject) and `ctx.conditions`
+(image) to fit one whitener per subject from that subject's own trials.
 
 The estimate pools **within-condition residuals** (each trial minus its condition mean) across ALL conditions
 before a single Ledoit-Wolf shrinkage fit: THINGS-EEG2 train carries only 4 reps/concept, so any one
 condition's 63×63 covariance is rank-deficient — averaging the residual structure over the thousands of
-conditions (plus shrinkage) is what makes `Σ` well-conditioned. `Σ` is estimated per subject (a subject's own
-trials), so it applies unsupervised to a held-out subject at deployment.
+conditions (plus shrinkage) is what makes `Σ` well-conditioned. `Σ` is per subject (a subject's own trials),
+so it applies unsupervised to a held-out subject at deployment.
 """
 from __future__ import annotations
 
@@ -20,12 +20,14 @@ from jaxtyping import Float, Int
 from pyriemann.utils.base import invsqrtm
 from sklearn.covariance import LedoitWolf
 
+from core.normalization.normalization import Normalizer, NormContext
+
 _MAX_COV_SAMPLES = 100_000   # a 63×63 covariance is well-determined by ~10⁵ residual samples (»63²); more only
                              # adds compute. The whitener still applies to every trial — only the ESTIMATE is capped.
 
 
-class Mvnn:
-    """Per-subject multivariate noise normalization (Guggenmos 2018) — a stateless whitening op-namespace."""
+class Mvnn(Normalizer):
+    """Per-subject multivariate noise normalization (Guggenmos 2018) — a data-fitted `Normalizer`."""
 
     @staticmethod
     def _condition_residual(Xg: Float[np.ndarray, "m ch t"], conditions: Int[np.ndarray, "m"]
@@ -48,17 +50,16 @@ class Mvnn:
         sigma = LedoitWolf(assume_centered=True).fit(residuals).covariance_
         return invsqrtm(sigma)
 
-    @staticmethod
-    def whiten(X: Float[np.ndarray, "n ch t"], groups: Int[np.ndarray, "n"],
-               conditions: Int[np.ndarray, "n"]) -> Float[np.ndarray, "n ch t"]:
+    def apply(self, X: Float[np.ndarray, "n ch t"], ctx: NormContext) -> Float[np.ndarray, "n ch t"]:
         """Whiten each trial by its subject's noise covariance: per group `g`, residualize every trial against
         its condition mean, pool the residuals over trials+time, fit `Σ_g` (Ledoit-Wolf), and apply
-        `X -> Σ_g^{-1/2} X` to every trial of that group. `groups [n]` = subject id per trial; `conditions [n]`
-        = image/concept id per trial (defines the within-condition noise). Unsupervised in the labels being
-        decoded (uses only the repeat structure), so it applies to a held-out subject."""
+        `X -> Σ_g^{-1/2} X` to every trial of that group. Requires `ctx.groups` (subject) + `ctx.conditions`
+        (image) — the within-condition noise is undefined without them."""
+        if ctx.groups is None or ctx.conditions is None:
+            raise ValueError("Mvnn needs ctx.groups (subject) and ctx.conditions (image) to fit the noise covariance")
         X = np.asarray(X, dtype=np.float64)
-        groups = np.asarray(groups)
-        conditions = np.asarray(conditions)
+        groups = np.asarray(ctx.groups)
+        conditions = np.asarray(ctx.conditions)
         out = np.empty_like(X)
         for g in np.unique(groups):
             idx = groups == g
