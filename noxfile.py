@@ -22,11 +22,9 @@ JSCPD_LAYERS = ["core", "neuroscan"]
 @nox.session(venv_backend="none")
 def lint(session: nox.Session) -> None:
     """ruff check (enforced) + ruff format --check (advisory) + vulture + import-linter + arch-fitness + ast-grep + jscpd."""
-    # --select on the CLI bypasses pyproject [tool.ruff.lint] ignore, so the ml F722 waiver (jaxtyping dim
-    # strings) is repeated here — matching CI (bd skr GAP1). Off domain=ml it's absent (no jaxtyping dep).
-    # F821 alongside F722: jaxtyping SINGLE-axis dim strings (Float[np.ndarray, "n"]) parse as forward-refs
-    # to an undefined name (F821), not malformed syntax (F722) — the ml waiver must cover both or the shape
-    # gate self-contradicts. Local stopgap until the scaffold folds F821 into the ml waiver (sdlc-scaffold-kqk).
+    # --select on the CLI bypasses pyproject [tool.ruff.lint] ignore, so the ml jaxtyping waiver is repeated
+    # here — matching CI (bd skr GAP1/kqk). F722 = multi-token dim strings ("b c h w"); F821 = single-axis
+    # ("n") which parses as an undefined forward-ref. Off domain=ml both are absent (no jaxtyping dep).
     session.run("uvx", RUFF, "check", *LINT_LAYERS, "--select", SELECT, "--ignore", "F722,F821", external=True)
     # Advisory (mirrors CI, never blocks): full curated config + the advisory-only codes (E501/SLF001 —
     # cosmetic / house-gate-conflicting, bd 4c2/8ex) surfaced via --extend-select, plus format drift.
