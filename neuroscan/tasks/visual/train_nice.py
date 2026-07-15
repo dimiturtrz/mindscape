@@ -152,15 +152,16 @@ class TrainNice:
 
     @staticmethod
     def _load_split(subjects: list[int], split: str, cfg: TrainConfig):
-        epochs, concept, image_files, meta = things.ThingsEeg2.get_epochs(   # raw epochs — normalization is the chain's
+        """RAW epochs + metadata for a split — normalization is NOT applied here (the chain is fit on train and
+        applied to both splits by `train`, so the eval set is never fit on). Returns (epochs, concept, targets,
+        subject, condition=same-image id for MVNN)."""
+        epochs, concept, image_files, meta = things.ThingsEeg2.get_epochs(
             subjects, things.ThingsEpochCfg(split=split, resample=cfg.resample))
         subject = meta["subject"].to_numpy()
         condition = np.unique(image_files, return_inverse=True)[1]          # same exemplar image = one condition (MVNN)
-        chain = EncoderRegistry.normalization(cfg.model, cfg.normalize, subject, condition)   # per-encoder chain
-        epochs = chain.fit(epochs).apply(epochs)
-        if cfg.recenter:
+        if cfg.recenter:   # opt-in per-subject signal recenter (transductive; off by default, bd dpi killed)
             epochs = Covariance.recenter_signals(epochs, subject, shrinkage=cfg.recenter_shrinkage)  # M^-1/2 X
-        return epochs, concept, TrainNice._clip_targets(image_files, split), subject.astype(np.int64)
+        return epochs, concept, TrainNice._clip_targets(image_files, split), subject.astype(np.int64), condition
 
     @staticmethod
     @torch.no_grad()
@@ -353,9 +354,12 @@ class TrainNice:
         regime = "within" if train_subjects == [test_subject] else "cross"
         logger.info(f"regime={regime}  train={train_subjects}  test={test_subject}  device={device}")
 
-        train_eeg, train_concept, train_targets, train_subj = TrainNice._load_split(
+        train_eeg, train_concept, train_targets, train_subj, train_cond = TrainNice._load_split(
             train_subjects, "training", cfg)
-        test_eeg, test_concept, _, _ = TrainNice._load_split([test_subject], "test", cfg)
+        test_eeg, test_concept, _, _, _ = TrainNice._load_split([test_subject], "test", cfg)
+        chain = EncoderRegistry.normalization(cfg.model, cfg.normalize, train_subj, train_cond)  # fit on TRAIN only
+        chain.fit(train_eeg)
+        train_eeg, test_eeg = chain.apply(train_eeg), chain.apply(test_eeg)   # train-fit whitener -> both (no eval fit)
         subj_map = {s: i for i, s in enumerate(sorted(set(train_subjects)))}
         subj_idx = np.array([subj_map[int(s)] for s in train_subj], dtype=np.int64) if cfg.adversarial else None
         test_bank = clip_targets.ClipTargets.concept_prototypes("test")
