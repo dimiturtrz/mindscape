@@ -80,12 +80,16 @@ class Model(nn.Module):
         return F.normalize(self.head(self.backbone(x)), dim=-1)
 
     def param_groups(self, base_lr: float, backbone_lr_scale: float = 1.0) -> list[dict]:
-        """Optimizer groups: head at `base_lr`; a trainable backbone at `base_lr × backbone_lr_scale` (1.0 =
-        whole-model single-LR, the winning fine-tune recipe). Frozen backbone -> head-only group."""
-        if self.freeze_backbone:
-            return [{"params": list(self.head.parameters()), "lr": base_lr}]
-        return [{"params": list(self.backbone.parameters()), "lr": base_lr * backbone_lr_scale},
-                {"params": list(self.head.parameters()), "lr": base_lr}]
+        """Optimizer groups: the trainable backbone params (if any) at `base_lr × backbone_lr_scale`, then the
+        head at `base_lr`. One path covers all three regimes by reading `requires_grad`: frozen -> no backbone
+        group (head only); full fine-tune -> the whole backbone; LoRA -> only the injected A/B adapters (the
+        base weights stay frozen). `backbone_lr_scale=1.0` is the whole-model single-LR fine-tune recipe."""
+        groups = []
+        trainable_backbone = [p for p in self.backbone.parameters() if p.requires_grad]
+        if trainable_backbone:
+            groups.append({"params": trainable_backbone, "lr": base_lr * backbone_lr_scale})
+        groups.append({"params": list(self.head.parameters()), "lr": base_lr})
+        return groups
 
 
 @dataclass

@@ -76,6 +76,11 @@ class TrainConfig(BaseModel):
     batch: int = 512
     lr: float = 3e-4
     weight_decay: float = 1e-4
+    backbone_lr_scale: float = 1.0   # foundation fine-tune (bd 07m): backbone LR = lr × this; <1 = discriminative
+                                     # LR (lower backbone, avoids forgetting pretrained features). 1.0 = the single-
+                                     # LR winning recipe (unchanged default). Only bites when the backbone is trainable.
+    warmup_epochs: int = 0           # >0 = linear LR warmup 0->full over N epochs (preserves the per-group ratio),
+                                     # then hold. Pairs with backbone_lr_scale for the standard foundation-FT recipe.
     resample: float = 250.0
     seed: int = 0
     patience: int = 8            # early-stop patience on val-top1 (epochs)
@@ -226,21 +231,26 @@ class TrainNice:
 
     @staticmethod
     def _build_optim(spec: EncoderSpec, n_subjects: int, cfg: TrainConfig, device: str):
-        """Encoder (by `cfg.model`, from the registry) + logit-scale + (optional) subject discriminator, all under
-        one AdamW."""
+        """Encoder (by `cfg.model`, from the registry) + logit-scale + (optional) subject discriminator under one
+        AdamW, plus a linear LR-warmup scheduler (opt-in, bd 07m: scales every group equally so the discriminative
+        backbone/head ratio survives the ramp; warmup_epochs=0 -> a no-op constant-1.0 schedule)."""
         encoder = EncoderRegistry.build_encoder(cfg.model, spec).to(device)
         logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
         # per-encoder optimizer groups if the encoder defines them (foundation: discriminative backbone/head LR),
         # else one group at cfg.lr (NICE — unchanged).
         make_groups = getattr(encoder, "param_groups", None)
-        groups = make_groups(cfg.lr) if make_groups else [{"params": [*encoder.parameters()], "lr": cfg.lr}]
+        groups = (make_groups(cfg.lr, cfg.backbone_lr_scale) if make_groups
+                  else [{"params": [*encoder.parameters()], "lr": cfg.lr}])
         groups.append({"params": [logit_scale], "lr": cfg.lr})
         discriminator = None
         if cfg.adversarial:
             discriminator = SubjectDiscriminator(spec.embed_dim, n_subjects).to(device)
             groups.append({"params": [*discriminator.parameters()], "lr": cfg.lr})
             logger.info(f"domain-adversarial: {n_subjects} subjects, lambda {cfg.adv_lambda}, weight {cfg.adv_weight}")
-        return encoder, logit_scale, discriminator, torch.optim.AdamW(groups, lr=cfg.lr, weight_decay=cfg.weight_decay)
+        optimizer = torch.optim.AdamW(groups, lr=cfg.lr, weight_decay=cfg.weight_decay)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer, lambda ep: min(1.0, (ep + 1) / cfg.warmup_epochs) if cfg.warmup_epochs > 0 else 1.0)
+        return encoder, logit_scale, discriminator, optimizer, scheduler
 
     @staticmethod
     def _dann_lambda(progress: float, max_lambda: float, gamma: float = 10.0) -> float:
@@ -269,7 +279,7 @@ class TrainNice:
               f"fit {len(fit_indices)} trials, {epoch_n}/epoch (train_frac {cfg.train_frac})")
 
         spec = EncoderSpec(n_channels=train_eeg.shape[1], n_times=train_eeg.shape[2], embed_dim=train_targets.shape[1])
-        encoder, logit_scale, discriminator, optimizer = TrainNice._build_optim(
+        encoder, logit_scale, discriminator, optimizer, scheduler = TrainNice._build_optim(
             spec, int(subject.max()) + 1, cfg, device)
 
         neighbor_groups = None
@@ -278,8 +288,7 @@ class TrainNice:
                 train_targets[fit_indices], train_concept[fit_indices], cfg.concepts_per_batch)
 
         fit_data = _FitArrays(train_eeg, train_targets, train_concept, fit_indices, subject)
-        best_val, best_state, best_epoch, since_improved = -1.0, None, -1, 0
-        run_start = time.perf_counter()                        # total-run ETA so a long fit reveals its cost live
+        best_val, best_state, best_epoch, since_improved, run_start = -1.0, None, -1, 0, time.perf_counter()
         for epoch in range(cfg.epochs):
             lam = (TrainNice._dann_lambda(epoch / max(1, cfg.epochs - 1), cfg.adv_lambda)
                    if cfg.adv_lambda_ramp else cfg.adv_lambda)
@@ -301,6 +310,7 @@ class TrainNice:
                 optimizer.step()
                 total_loss += loss.item()
                 n_batches += 1
+            scheduler.step()                               # per-epoch LR warmup ramp (no-op when warmup_epochs=0)
 
             train_s = time.perf_counter() - epoch_start
             if epoch % cfg.val_every == 0 or epoch == cfg.epochs - 1:      # stride the big val eval (bd)
