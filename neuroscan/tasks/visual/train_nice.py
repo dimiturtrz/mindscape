@@ -83,9 +83,12 @@ class TrainConfig(BaseModel):
     warmup_epochs: int = 0           # >0 = linear LR warmup 0->full over N epochs (preserves the per-group ratio),
                                      # then hold. Pairs with backbone_lr_scale for the standard foundation-FT recipe.
     resample: float = 250.0
-    mvnn: bool = False           # multivariate noise normalization (bd b40j): whiten by the per-subject
-                                 # within-condition noise covariance (official THINGS-EEG2 / Guggenmos 2018),
-                                 # an opt-in alternative to the adapter's per-channel z-score
+    mvnn: bool = True            # multivariate noise normalization (bd b40j): whiten by the per-subject
+                                 # within-condition noise covariance (official THINGS-EEG2 / Guggenmos 2018).
+                                 # DEFAULT preprocessing (the principled field-standard; beats the z-score
+                                 # substitute on single-trial +0.35pp + ~2x faster convergence). --no-mvnn falls
+                                 # back to per-channel z-score. NOTE: measured for NICE; the CBraMod path also
+                                 # double-normalizes in-wrapper (foundation.py) — see bd pfad/x17a.
     seed: int = 0
     patience: int = 8            # early-stop patience on val-top1 (epochs)
     val_fraction: float = 0.1    # share of TRAINING concepts held out for leak-free model selection
@@ -395,8 +398,8 @@ def main():
     ap.add_argument("--batch", type=int, default=None, help="<=1024 (cuDNN cap on this shape)")
     ap.add_argument("--lr", type=float, default=None)
     ap.add_argument("--resample", type=float, default=None)
-    ap.add_argument("--mvnn", action="store_true", default=None,
-                    help="multivariate noise normalization instead of the per-channel z-score (bd b40j)")
+    ap.add_argument("--mvnn", action=argparse.BooleanOptionalAction, default=None,
+                    help="multivariate noise normalization vs per-channel z-score (bd b40j; default on, --no-mvnn to disable)")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--patience", type=int, default=None)
     ap.add_argument("--out", default=None)

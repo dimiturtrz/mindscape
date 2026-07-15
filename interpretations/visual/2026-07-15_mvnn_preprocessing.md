@@ -57,8 +57,17 @@ the field-standard pipeline it is modestly better. Exactly what Phase-0 "verify 
 
 ## Caveats / next
 
-Single seed, one test subject (5). The +0.35pp single-trial is *suggestive, not proven* — now that a number
-moved, multi-seed + LOSO is the warranted hardening (stage-gated rigor: harden a number that moved), filed as a
-follow-up. Not promoted to the default preprocessing until multi-seed confirms; kept opt-in
-(`TrainConfig.mvnn`). Baseline correction (a *separate* axis — needs a pre-stim window our tmin=0 lacks) was
-deliberately not bundled here, so this A/B isolates normalization; it is the next preprocessing axis to test.
+**Now the default** (`TrainConfig.mvnn=True`, `--no-mvnn` to fall back to z-score). The promotion rests on
+*principle*, not the single seed: MVNN is the official THINGS-EEG2 / Guggenmos preprocessing — the field-standard
+whitening — whereas the per-channel z-score was our ad-hoc numerical substitute. Defaulting to the principled
+method (physics/stats > a fitted tweak) is the right base; the measured single-trial +0.35pp + ~2× faster
+convergence corroborate the direction. The +0.35pp magnitude is still single-seed → multi-seed + LOSO (bd x17a)
+validates the size, not the decision.
+
+**Caveat — measured for NICE only.** The CBraMod path additionally z-scores *inside* the backbone wrapper
+(`foundation.py`) and expects amplitude-preserving `/100` input (bd jwzl), so CBraMod + MVNN is untested and the
+in-wrapper double-normalize likely fights the whitening — resolve via bd pfad before trusting the default there.
+The existing CBraMod ft/LoRA numbers were measured under z-score.
+
+Baseline correction (a *separate* axis — needs a pre-stim window our tmin=0 lacks) was deliberately not bundled
+here, so this A/B isolates normalization; it is the next preprocessing axis to test.
