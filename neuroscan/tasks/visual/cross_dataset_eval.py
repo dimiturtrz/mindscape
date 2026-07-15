@@ -21,6 +21,7 @@ import torch
 from pydantic import BaseModel
 
 from core.data.eeg import things_eeg1, things_eeg2
+from core.normalization.zscore import ZScore
 from neuroscan.evaluation import cross_dataset as bridge
 from neuroscan.evaluation.retrieval import Retrieval
 from neuroscan.tasks.cli import Cli
@@ -91,6 +92,7 @@ class CrossDatasetEval:
         keep = (bridge.CrossDataset.holdout_mask(e1_concept, holdout)
                 & np.array([n in name_to_proto for n in e1_concept]))
         e1_eeg, e1_names = e1_eeg[keep], e1_concept[keep]
+        e1_eeg = ZScore().apply(e1_eeg)   # raw adapters now -> normalize here (stateless z-score)
         targets = np.stack([name_to_proto[name] for name in e1_names]).astype(np.float32)
         name_id = {name: i for i, name in enumerate(sorted(set(e1_names)))}      # concept ids for the val split
         concept_ids = np.array([name_id[name] for name in e1_names])
@@ -103,6 +105,7 @@ class CrossDatasetEval:
             list(cfg.eeg2_subjects), things_eeg2.ThingsEpochCfg(split="test", resample=cfg.resample))
         # same shared montage the encoder trained on
         e2_eeg = bridge.CrossDataset.align_channels(e2_eeg, e2_ch, common_ch)
+        e2_eeg = ZScore().apply(e2_eeg)   # match the EEG1 train normalization
         test_bank = clip_targets.ClipTargets.concept_prototypes("test")
         topk = TrainNice.evaluate(encoder, RetrievalSet(e2_eeg, e2_concept, test_bank), device)
 

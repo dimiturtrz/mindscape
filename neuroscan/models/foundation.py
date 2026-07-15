@@ -7,10 +7,13 @@ lives in the frozen pretrained weights; only a small head learns the CLIP map (t
 at n≤17 subjects" — the big net isn't trained on the tiny labelled set).
 
 CBraMod's input is patched: `[B, C, S, P]`, `P=200` points/patch at **200 Hz**. Our sensor epoch `[B, C, T]`
-is per-channel z-scored (the deep-dive's normalization note — pretraining saw z-scored signals, not our
-pipeline's) then reshaped to `[B, C, T//P, P]`. The backbone's per-token `d_model` features are mean-pooled
-over (C, S); a trainable MLP maps `d_model → CLIP dim`. Channel count is flexible (verified: 63 posterior
-channels feed straight through), so no montage projection is needed.
+arrives already normalized by the upstream `core.normalization` chain, then it is reshaped to `[B, C, T//P, P]`.
+Its pretraining scale is microvolts/100 (`pretrain_trainer.py` does `x/100`, NOT the z-score the deep-dive
+claimed — bd 7mi4), so feeding that amplitude-preserving `scale` link was the pfad hypothesis — but on the
+frozen probe it REGRESSED the geometry heads vs z-score, so the chain feeds CBraMod a **z-score** by default
+(`scale` remains an override to test under fine-tuning). The backbone's per-token `d_model` features are
+mean-pooled over (C, S); a trainable MLP maps `d_model → CLIP dim`. Channel count is flexible (verified: 63
+posterior channels feed straight through), so no montage projection is needed.
 
 Backbone checked out (not vendored) under `external/CBraMod`; pretrained weights live out-of-repo under
 `<data_root>/pretrained/CBraMod/pretrained_weights.pth`. Reproduce:
@@ -71,8 +74,9 @@ class LoadedBackbone:
 
 
 class CBraModBackbone(Backbone):
-    """CBraMod as a `composite.Backbone`: per-channel z-scored epoch -> `[B, C, S, d]` token grid. The
-    checkpoint fixes `patch_points` (200 pts = 1s at 200 Hz -> S=1 on our stimulus) and `d_model` (200)."""
+    """CBraMod as a `composite.Backbone`: pre-normalized epoch -> `[B, C, S, d]` token grid. Input normalization
+    is the upstream chain's job (CBraMod's amplitude scale, bd 7mi4), not the backbone's. The checkpoint fixes
+    `patch_points` (200 pts = 1s at 200 Hz -> S=1 on our stimulus) and `d_model` (200)."""
 
     def __init__(self):
         super().__init__()
@@ -84,8 +88,7 @@ class CBraModBackbone(Backbone):
         b, c, t = x.shape
         p = self.patch_points
         s = t // p
-        x = x[:, :, :s * p]                                        # drop the ragged tail patch
-        x = (x - x.mean(-1, keepdim=True)) / (x.std(-1, keepdim=True) + 1e-6)   # per-channel z-score
+        x = x[:, :, :s * p]                                        # drop the ragged tail patch (input already scaled)
         return self.module(x.reshape(b, c, s, p))                 # [B, C, S, d_model]
 
 
@@ -108,8 +111,7 @@ class EegptBackbone(Backbone):
         self.register_buffer("chan_ids", module.prepare_chan_ids([channel_names[i] for i in keep]))
 
     def forward(self, x: Float[torch.Tensor, "n ch t"]) -> Float[torch.Tensor, "n n_time embed_num d"]:
-        x = x[:, self.keep, :]                                    # -> the 58 EEGPT channels
-        x = (x - x.mean(-1, keepdim=True)) / (x.std(-1, keepdim=True) + 1e-6)   # per-channel z-score (assumed norm)
+        x = x[:, self.keep, :]                                    # -> the 58 EEGPT channels (input pre-normalized)
         return self.module(x, chan_ids=self.chan_ids)            # [B, N_time, embed_num, d]
 
 

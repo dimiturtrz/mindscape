@@ -38,6 +38,7 @@ from core.config import Config
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.montage import EegMontage
 from neuroscan.models.composite import HeadContext, Heads, HeadSpec
+from neuroscan.models.encoders import NORMALIZE_CHOICES, EncoderRegistry
 from neuroscan.models.foundation import Foundation, LoadedBackbone
 from neuroscan.models.nice import Nice
 from neuroscan.tasks.visual import clip_targets
@@ -56,6 +57,15 @@ class FitCfg:
     epochs: int = 60
     lr: float = 1e-3
     seed: int = 0
+
+
+@dataclass
+class _Extract:
+    """How to compute features on a cache miss: the loaded backbone (None if the cache is warm), the device,
+    and the normalization override that picks the input chain (bd 4aoz)."""
+    loaded: LoadedBackbone | None
+    device: str
+    normalize: str
 
 
 _GEOMETRY_POOLS = {"pos_attn", "topo", "gcn"}   # fold the ELECTRODE axis — need grid C == #electrodes
@@ -108,10 +118,13 @@ class FrozenHead:
 
     @staticmethod
     @torch.no_grad()
-    def _features(module: nn.Module, eeg: np.ndarray, device: str) -> torch.Tensor:
-        """Frozen token grid for every epoch, `[N, C, S, d]` float16 on CPU (the one-time cost). The composite
-        Backbone owns its own patching + normalization, so a raw `[B, C, T]` epoch goes straight in — CBraMod
+    def _features(module: nn.Module, eeg: np.ndarray, device: str, backbone: str, normalize: str) -> torch.Tensor:
+        """Frozen token grid for every epoch, `[N, C, S, d]` float16 on CPU (the one-time cost). Raw epochs are
+        first run through the backbone's normalization chain (bd 4aoz — `normalize='auto'` picks CBraMod's
+        amplitude scale / EEGPT's z-score; a forced value drives the A/B), then patched by the Backbone: CBraMod
         gives S=1, a finer-patching backbone (EEGPT) gives S>1."""
+        chain = EncoderRegistry.normalization(backbone, normalize)   # cbramod/eegpt -> stateless z-score (or scale)
+        eeg = chain.fit(eeg).apply(eeg)
         out = []
         for i in range(0, len(eeg), _FEAT_BATCH):
             x = torch.tensor(eeg[i:i + _FEAT_BATCH]).to(device)
@@ -136,10 +149,12 @@ class FrozenHead:
         return ~mask, mask, np.array([remap[c] for c in concept[mask]]), bank
 
     @staticmethod
-    def _cache_path(backbone: str, subjects: list[int], split: str) -> Path:
-        """One home per (backbone, split, subject-set) frozen-feature blob, out-of-repo under <data>/cache."""
+    def _cache_path(backbone: str, subjects: list[int], split: str, normalize: str) -> Path:
+        """One home per (backbone, normalization, split, subject-set) frozen-feature blob, out-of-repo under
+        <data>/cache. `normalize` is in the key so the scale-vs-zscore A/B (bd 7mi4) does not collide; the __n2
+        suffix retires pre-4aoz blobs (normalization moved to the core.normalization chain)."""
         subj = "-".join(str(s) for s in sorted(subjects))
-        return Config.data_root("cache") / "frozen_features" / f"{backbone}__{split}__{subj}.pt"
+        return Config.data_root("cache") / "frozen_features" / f"{backbone}__{normalize}__{split}__{subj}__n2.pt"
 
     @staticmethod
     def _loaded(backbone: str, device: str) -> LoadedBackbone:
@@ -152,17 +167,18 @@ class FrozenHead:
         return LoadedBackbone(module, lb.patch_points, lb.d_model, lb.sample_rate, lb.name)
 
     @staticmethod
-    def _split_features(path: Path, subjects: list[int], split: str, loaded: LoadedBackbone | None,
-                        device: str) -> tuple[torch.Tensor, np.ndarray, np.ndarray]:
+    def _split_features(path: Path, subjects: list[int], split: str, extract: _Extract
+                        ) -> tuple[torch.Tensor, np.ndarray, np.ndarray]:
         """Frozen features + (concept, files) for one split — from the disk cache if present (skips the eeg
-        load AND the backbone forward), else compute through `loaded` and persist. Cache holds the
+        load AND the backbone forward), else compute through `extract` and persist. Cache holds the
         backbone-independent concept/files too, so a reused sweep needs neither mne nor the GPU."""
         if path.exists():
             blob = torch.load(path, weights_only=False)   # our own cache (feat tensor + numpy concept/files)
             logger.info(f"cache hit {path.name}: {tuple(blob['feat'].shape)}")
             return blob["feat"], blob["concept"], blob["files"]
+        loaded = extract.loaded
         eeg, concept, files, _ = FrozenHead._load(subjects, split, loaded.sample_rate)
-        feat = FrozenHead._features(loaded.module, eeg, device)
+        feat = FrozenHead._features(loaded.module, eeg, extract.device, loaded.name, extract.normalize)
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save({"feat": feat, "concept": concept, "files": files}, path)
         logger.info(f"cached {path.name}: {tuple(feat.shape)} (float16)")
@@ -170,12 +186,13 @@ class FrozenHead:
 
     @staticmethod
     def _build_cache(train_subjects: list[int], test_subject: int, device: str,
-                     backbone: str = "cbramod") -> Cache:
-        tr_path = FrozenHead._cache_path(backbone, train_subjects, "training")
-        te_path = FrozenHead._cache_path(backbone, [test_subject], "test")
+                     backbone: str = "cbramod", normalize: str = "auto") -> Cache:
+        tr_path = FrozenHead._cache_path(backbone, train_subjects, "training", normalize)
+        te_path = FrozenHead._cache_path(backbone, [test_subject], "test", normalize)
         loaded = None if (tr_path.exists() and te_path.exists()) else FrozenHead._loaded(backbone, device)
-        tr_feat, tr_concept, tr_files = FrozenHead._split_features(tr_path, train_subjects, "training", loaded, device)
-        test_feat, te_concept, _ = FrozenHead._split_features(te_path, [test_subject], "test", loaded, device)
+        extract = _Extract(loaded, device, normalize)
+        tr_feat, tr_concept, tr_files = FrozenHead._split_features(tr_path, train_subjects, "training", extract)
+        test_feat, te_concept, _ = FrozenHead._split_features(te_path, [test_subject], "test", extract)
         tr_tgt = torch.tensor(FrozenHead._clip_targets(tr_files, "training"))
         test_bank = torch.tensor(clip_targets.ClipTargets.concept_prototypes("test"))
         pos = EegMontage.eeg_positions(things.ThingsEeg2.channels())   # [C, 2], same channel order as the features
@@ -255,6 +272,8 @@ def main():
     ap.add_argument("--train", type=int, nargs="+", default=[1, 2, 3, 4])
     ap.add_argument("--test", type=int, default=5)
     ap.add_argument("--backbone", default="cbramod", help="frozen backbone (registry name in Foundation.load_backbone)")
+    ap.add_argument("--normalize", default="auto", choices=NORMALIZE_CHOICES,
+                    help="input-normalization chain (bd 4aoz): auto = the backbone's canonical chain")
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--seed", type=int, default=0)
@@ -264,7 +283,7 @@ def main():
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    cache = FrozenHead._build_cache(args.train, args.test, device, args.backbone)
+    cache = FrozenHead._build_cache(args.train, args.test, device, args.backbone, args.normalize)
     fit = FitCfg(epochs=args.epochs, lr=args.lr, seed=args.seed)
     arms = FrozenHead._topo_arms() if args.topo_sweep else _ARMS
     if args.only:

@@ -226,9 +226,9 @@ test_layout = "mirror"   # every logic module needs a unit test: "mirror" = test
 # layer. The magic-literals design names exactly these ("column names, framework vocab") as the legitimate
 # non-enum-able floor; frozen as the ratchet baseline (a NEW literal must migrate to a StrEnum or bump this
 # with a reason). Ratchets down as the schema vocab consolidates.
-# 33 -> 34 (bd b40j): the `Normalize` StrEnum (things_eeg2) migrated the 'zscore'/'none' normalize vocab off
-# raw literals, but its 'none' VALUE-string collides with 3 pre-existing unrelated 'none' occurrences, tipping
-# that count 3->4. An incidental value collision, not sprinkled magic — the enum IS the mandated migration.
+# 33 -> 34 (bd 4aoz): the normalization-choice vocab ('auto'/'zscore'/'mvnn'/'scale') — the
+# EncoderRegistry.normalization override + the --normalize CLI choices — is the config surface for the chain.
+# A small closed enum of chain names, kept as strings for JSON-config + argparse choices, not sprinkled magic.
 max_strings = 34
 max_key_sets = 10
 # <<< LOCAL-SLOT: magic-ceilings

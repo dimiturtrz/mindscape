@@ -11,13 +11,25 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import numpy as np
+from jaxtyping import Int
 from torch import nn
 
+from core.normalization.mvnn import Mvnn
+from core.normalization.normalization import CompositeNormalization
+from core.normalization.scale import Scale
+from core.normalization.zscore import ZScore
 from neuroscan.models.encoder_spec import EncoderSpec, ImageEncoder
 from neuroscan.models.foundation import Foundation
 from neuroscan.models.nice import NiceConfig, NiceEncoder
 
 _BUILDERS: dict[str, Callable[[EncoderSpec], nn.Module]] = {}
+
+# our THINGS-EEG2 raw is Volts; CBraMod pretrained on microvolts/100 (pretrain_trainer.py x/100). V->uV is x1e6,
+# then /100 = x1e4 -> our O(10uV) signal lands at the O(1) amplitude the pretrained conv filters saw (bd 7mi4).
+_CBRAMOD_SCALE = 1e4
+_AUTO = "auto"
+NORMALIZE_CHOICES = (_AUTO, "zscore", "mvnn", "scale")   # the --normalize CLI vocab, shared by the perception runners
 
 
 class EncoderRegistry:
@@ -39,6 +51,22 @@ class EncoderRegistry:
         if name not in _BUILDERS:
             raise KeyError(f"unknown encoder {name!r}; have {sorted(_BUILDERS)}")
         return _BUILDERS[name](spec)
+
+    @staticmethod
+    def normalization(model: str, override: str = _AUTO, groups: Int[np.ndarray, "n"] | None = None,
+                      conditions: Int[np.ndarray, "n"] | None = None) -> CompositeNormalization:
+        """The input-normalization chain an encoder expects, as directly-constructed objects (no registry).
+        `override=_AUTO` picks the per-encoder canonical: NICE (and the default) get the official THINGS-EEG2
+        MVNN whitening (which needs `groups`=subject + `conditions`=image per trial); CBraMod + EEGPT get a
+        per-channel z-score. NOTE (bd 7mi4): CBraMod's pretraining scale is microvolts/100 (the `scale` link),
+        and feeding that amplitude-preserving input was the pfad hypothesis — but on the frozen probe it
+        REGRESSED the geometry heads (topo 1.75->1.21) vs z-score, so z-score is the evidenced default. `scale`
+        stays a named override to test the amplitude input under fine-tuning (the open question)."""
+        if override == "scale":
+            return CompositeNormalization([Scale(_CBRAMOD_SCALE)])
+        if override == "mvnn" or (override == _AUTO and not model.startswith(("cbramod", "eegpt"))):
+            return CompositeNormalization([Mvnn(groups, conditions)])
+        return CompositeNormalization([ZScore()])   # explicit 'zscore', or the CBraMod/EEGPT canonical
 
     @staticmethod
     def _build_nice(spec: EncoderSpec) -> nn.Module:

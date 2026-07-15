@@ -34,10 +34,9 @@ from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.covariance import Covariance
-from core.features.eeg.mvnn import Mvnn
 from neuroscan.evaluation.invariants import Invariants
 from neuroscan.evaluation.metrics import Metrics
-from neuroscan.models.encoders import EncoderRegistry, EncoderSpec
+from neuroscan.models.encoders import NORMALIZE_CHOICES, EncoderRegistry, EncoderSpec
 from neuroscan.models.nice import Nice, SubjectDiscriminator
 from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual import clip_targets
@@ -83,12 +82,10 @@ class TrainConfig(BaseModel):
     warmup_epochs: int = 0           # >0 = linear LR warmup 0->full over N epochs (preserves the per-group ratio),
                                      # then hold. Pairs with backbone_lr_scale for the standard foundation-FT recipe.
     resample: float = 250.0
-    mvnn: bool = True            # multivariate noise normalization (bd b40j): whiten by the per-subject
-                                 # within-condition noise covariance (official THINGS-EEG2 / Guggenmos 2018).
-                                 # DEFAULT preprocessing (the principled field-standard; beats the z-score
-                                 # substitute on single-trial +0.35pp + ~2x faster convergence). --no-mvnn falls
-                                 # back to per-channel z-score. NOTE: measured for NICE; the CBraMod path also
-                                 # double-normalizes in-wrapper (foundation.py) — see bd pfad/x17a.
+    normalize: str = "auto"      # input-normalization chain (bd 4aoz), resolved per-encoder by
+                                 # EncoderRegistry.normalization(model, normalize). "auto" = the canonical chain
+                                 # for the encoder (NICE->MVNN, CBraMod->amplitude scale, EEGPT->z-score); a
+                                 # forced value ("zscore"|"mvnn"|"scale") pins one link for the matched A/B.
     seed: int = 0
     patience: int = 8            # early-stop patience on val-top1 (epochs)
     val_fraction: float = 0.1    # share of TRAINING concepts held out for leak-free model selection
@@ -155,13 +152,12 @@ class TrainNice:
 
     @staticmethod
     def _load_split(subjects: list[int], split: str, cfg: TrainConfig):
-        normalize = things.Normalize.NONE if cfg.mvnn else things.Normalize.ZSCORE  # MVNN supplies own scaling
-        epochs, concept, image_files, meta = things.ThingsEeg2.get_epochs(
-            subjects, things.ThingsEpochCfg(split=split, resample=cfg.resample, normalize=normalize))
+        epochs, concept, image_files, meta = things.ThingsEeg2.get_epochs(   # raw epochs — normalization is the chain's
+            subjects, things.ThingsEpochCfg(split=split, resample=cfg.resample))
         subject = meta["subject"].to_numpy()
-        if cfg.mvnn:
-            condition = np.unique(image_files, return_inverse=True)[1]      # same exemplar image = one condition
-            epochs = Mvnn.whiten(epochs, subject, condition)               # Σ_subject^{-1/2} X
+        condition = np.unique(image_files, return_inverse=True)[1]          # same exemplar image = one condition (MVNN)
+        chain = EncoderRegistry.normalization(cfg.model, cfg.normalize, subject, condition)   # per-encoder chain
+        epochs = chain.fit(epochs).apply(epochs)
         if cfg.recenter:
             epochs = Covariance.recenter_signals(epochs, subject, shrinkage=cfg.recenter_shrinkage)  # M^-1/2 X
         return epochs, concept, TrainNice._clip_targets(image_files, split), subject.astype(np.int64)
@@ -398,8 +394,8 @@ def main():
     ap.add_argument("--batch", type=int, default=None, help="<=1024 (cuDNN cap on this shape)")
     ap.add_argument("--lr", type=float, default=None)
     ap.add_argument("--resample", type=float, default=None)
-    ap.add_argument("--mvnn", action=argparse.BooleanOptionalAction, default=None,
-                    help="multivariate noise normalization vs per-channel z-score (bd b40j; default on, --no-mvnn to disable)")
+    ap.add_argument("--normalize", default=None, choices=NORMALIZE_CHOICES,
+                    help="input-normalization chain (bd 4aoz): auto = the per-encoder canonical chain")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--patience", type=int, default=None)
     ap.add_argument("--out", default=None)
