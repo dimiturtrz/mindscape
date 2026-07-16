@@ -40,7 +40,7 @@ data = ["osfclient", "openneuro-py"]   # dataset fetch (Stage-3 EEG->image: OSF 
 # update is a one-line `devtools_ref` bump on `copier update`, no source diff in your PRs. Imports as
 # `devtools` (`python -m devtools.graph …`); grimp/networkx arrive transitively. ast-grep/jscpd configs are
 # located from the install via `python -m devtools.config`. Pin lives in .copier-answers.yml (devtools_ref).
-devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.10.0#subdirectory=sdlc-devtools"]
+devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.12.0#subdirectory=sdlc-devtools"]
 source = ["nibabel"]   # EEG->cortex source localization: MNE fsaverage forward/inverse (bd 728; core.features.eeg.source)
 all = ["pytest", "onnx", "onnxruntime"]
 
@@ -100,7 +100,7 @@ extend-exclude = ["mlruns", "runs", "*.egg-info", "docs", "learning", "research"
 # <<< LOCAL-SLOT: ruff-exclude
 
 [tool.ruff.lint]
-select = ["F", "B", "I", "T201", "FBT", "BLE001", "S101", "S110", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "N", "E741", "E742", "E743", "PLR0124", "PLR1714", "PLW3301", "RUF012", "RUF005", "RUF007", "RUF010", "RUF022", "RUF046", "C408", "C420", "SIM", "PERF401", "PLW0108", "E731", "E402", "ICN001", "S603", "S607", "PTH123"]
+select = ["F", "B", "I", "T201", "FBT", "BLE001", "S101", "S110", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "N", "E741", "E742", "E743", "PLR0124", "PLR1714", "PLW3301", "RUF012", "RUF005", "RUF007", "RUF010", "RUF022", "RUF046", "C408", "C420", "SIM", "PERF401", "PLW0108", "E731", "E402", "ICN001", "S603", "S607", "PTH123", "E501", "SLF001"]
 ignore = [
     # jaxtyping shape strings are deliberate runtime-checked annotations that ruff's forward-ref parser
     # misreads (jaxtyping's own FAQ prescribes disabling both): F722 = a multi-token dim string
@@ -127,14 +127,17 @@ ignore-names = ["X*", "Y*", "A", "B", "C*", "D", "F*", "G", "H", "L", "M", "P*",
 [tool.ruff.lint.per-file-ignores]
 # Tests get a wider carve-out: literal fixtures (PLR2004) + bool flags (FBT); mock classes mirror external
 # PascalCase APIs + local math/alias scratch (N8xx); fixtures take many params (PLR0913). The SUBSTANTIVE
-# gates (imports-at-top, real bugs, dead code) still apply to tests. (SLF001 is no longer enforced anywhere
-# — moved to the advisory surface, bd 8ex — so it needs no tests carve-out.)
+# gates (imports-at-top, real bugs, dead code) still apply to tests. SLF001 is enforced house-wide again
+# (bd 8ex reopened) but tests legitimately poke privates-under-test, so it sits in the tests carve-out.
 "__init__.py" = ["F401"]
-"tests/**" = ["S101", "PLR2004", "FBT", "N801", "N802", "N803", "N806", "N812", "PLR0913"]
+"tests/**" = ["S101", "PLR2004", "FBT", "SLF001", "N801", "N802", "N803", "N806", "N812", "PLR0913"]
 # >>> LOCAL-SLOT: per-file-ignores — repo-specific file carve-outs (e.g. a best-effort telemetry shell
 # that must never raise). Add lines here; copier update won't overwrite this region.
-# (The SLF001 carve-out was dropped at v1.0: sdlc-scaffold-8ex resolved it — SLF001 is now advisory-only,
-# so the op-namespace pattern no longer needs a per-file exemption.)
+# NO SLF001 carve: scaffold v1.12 re-enforced SLF001 house-wide, and the op-namespace tree was migrated to
+# honour it (bd b8i) — @staticmethod op-namespaces are now @classmethod so same-class sibling calls read `cls._x`
+# (allowlisted, not a reach-in); module `main()`s moved into their class as `@classmethod main(cls)`; genuinely
+# shared helpers a sibling module needed were promoted to public API (the real reach-ins SLF001 flagged). The
+# only residual is the documented moabb `_sanitize_path` monkeypatch, `# noqa: SLF001` at its three sites.
 # <<< LOCAL-SLOT: per-file-ignores
 
 [tool.vulture]
@@ -147,7 +150,10 @@ ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer"
 # >>> LOCAL-SLOT: vulture-ignore-names — this repo's documented dead-code false positives.
 # Framework-implicit: torch nn.Module.forward (via __call__), ORT SessionOptions.intra_op_num_threads,
 # CBraMod.proj_out (Identity-set to expose backbone features). Referenced, not dead.
-ignore_names = ["model_config", "forward", "intra_op_num_threads", "proj_out"]
+# JointForward: the source-space fusion generator (bd shd) — exercised by tests/ (which vulture doesn't scan)
+# and pending the decode-integration wiring; the SLF001 op-namespace migration removed the internal
+# self-refs that had masked it. Test-referenced, not dead.
+ignore_names = ["model_config", "forward", "intra_op_num_threads", "proj_out", "allow_tf32", "JointForward"]
 # <<< LOCAL-SLOT: vulture-ignore-names
 # >>> LOCAL-SLOT: vulture-scan — edit freely, the template will not overwrite intent here
 paths = ["core", "neuroscan", "baselines"]

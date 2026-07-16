@@ -159,7 +159,7 @@ class ThingsEeg2:
                 if str(kind) == "eeg"]
 
     @staticmethod
-    def _meta() -> dict:
+    def meta() -> dict:
         global _META
         if _META is None:
             _META = np.load(Config.raw_dir() / _ROOT / "images" / "image_metadata.npy",
@@ -174,7 +174,7 @@ class ThingsEeg2:
     @staticmethod
     def _labels_for(split: str) -> tuple[np.ndarray, np.ndarray]:
         """(concept_idx per code, img_file per code) as arrays indexed by code-1, for 'training' | 'test'."""
-        meta = ThingsEeg2._meta()
+        meta = ThingsEeg2.meta()
         key = "train" if split == "training" else "test"
         concepts = np.asarray(meta[f"{key}_img_concepts"])
         files = np.asarray(meta[f"{key}_img_files"])

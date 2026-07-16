@@ -40,12 +40,12 @@ _FNIRS_BASELINE_ACC = 0.595                        # EEG-only re-centered Rieman
 class FusionRiemannEval:
     """Brain-camera fusion Riemann-eval helpers — the free helpers folded in as staticmethods."""
 
-    @staticmethod
-    def _cov(X):
+    @classmethod
+    def _cov(cls, X):
         return Covariances("oas").transform(X.astype(np.float64))
 
-    @staticmethod
-    def _build_all(band="sum"):
+    @classmethod
+    def _build_all(cls, band="sum"):
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
         mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
@@ -59,37 +59,37 @@ class FusionRiemannEval:
                 raise ValueError(f"subject {s} EEG/fNIRS misaligned")
             if _CSD:
                 Xe = bc.CSD.csd_transform(Xe, ch_e, 100.0)                 # spatial deblur before fusion
-            pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter()._subject_dir(int(s)))
+            pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter().subject_dir(int(s)))
             joint, _ = bc.BrainCamera.fused_node_series(bc.PairedModalities(Xe, Xf, pos_e, pos_f), band=band,
                                                         series=bc.SeriesConfig(fps=_FPS, t_end=_TEND))
-            Cs.append(FusionRiemannEval._cov(joint))
+            Cs.append(cls._cov(joint))
             ys.append(ye)
             gs.append(np.array([s] * len(ye)))
         return np.concatenate(Cs), np.concatenate(ys), np.concatenate(gs)
 
-
-def main():
-    Cli.setup_logging()
-    C, y, g = FusionRiemannEval._build_all()
-    logger.info(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · "
-                f"cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
-    accs, kaps = [], []
-    for seed in _SEEDS:
-        for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(C, y, g):
-            # winning EEG method: per-subject re-center (train AND test, unsupervised) -> tangent -> LR
-            proba = transfer.zero_shot_predict(transfer.Domain(C[tr], y[tr], g[tr]),
-                                               transfer.Domain(C[te], groups=g[te]), scale=False)
-            pred = proba.argmax(1)
-            accs.append(metrics.Metrics.accuracy(y[te], pred))
-            kaps.append(metrics.Metrics.kappa(y[te], pred))
-    a, k = float(np.mean(accs)), float(np.mean(kaps))
-    logger.info(f"\n  fused-only (joint EEG×fNIRS×coverage) · re-centered tangent · "
-          f"cross-subject {len(_SEEDS)}x{_K}-fold: "
-          f"acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
-    logger.info("  reference (same protocol, EEG-only re-centered Riemann): best-single 0.580")
-    verdict = "FUSION CASHED something" if a > _FNIRS_BASELINE_ACC else "fair null (fusion adds nothing decodable)"
-    logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {verdict}")
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        C, y, g = cls._build_all()
+        logger.info(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · "
+                    f"cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
+        accs, kaps = [], []
+        for seed in _SEEDS:
+            for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(C, y, g):
+                # winning EEG method: per-subject re-center (train AND test, unsupervised) -> tangent -> LR
+                proba = transfer.zero_shot_predict(transfer.Domain(C[tr], y[tr], g[tr]),
+                                                   transfer.Domain(C[te], groups=g[te]), scale=False)
+                pred = proba.argmax(1)
+                accs.append(metrics.Metrics.accuracy(y[te], pred))
+                kaps.append(metrics.Metrics.kappa(y[te], pred))
+        a, k = float(np.mean(accs)), float(np.mean(kaps))
+        logger.info(f"\n  fused-only (joint EEG×fNIRS×coverage) · re-centered tangent · "
+              f"cross-subject {len(_SEEDS)}x{_K}-fold: "
+              f"acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
+        logger.info("  reference (same protocol, EEG-only re-centered Riemann): best-single 0.580")
+        verdict = "FUSION CASHED something" if a > _FNIRS_BASELINE_ACC else "fair null (fusion adds nothing decodable)"
+        logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  {verdict}")
 
 
 if __name__ == "__main__":
-    main()
+    FusionRiemannEval.main()

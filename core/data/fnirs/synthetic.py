@@ -50,7 +50,8 @@ class Synthetic:
         return h / np.abs(h).max()
 
     @staticmethod
-    def _systemic(n: int, length: int, fs: float, cfg: SynthConfig, rng: np.random.Generator) -> np.ndarray:
+    def systemic(n: int, length: int, fs: float, cfg: SynthConfig,
+                 rng: np.random.Generator) -> Float[np.ndarray, "n t"]:
         """Common-mode systemic physiology [n, T] — Mayer/respiration/cardiac oscillations at random phase, plus
         a slow drift. Added identically to HbO and HbR so CBSI cancels it."""
         t = np.arange(length) / fs
@@ -75,8 +76,8 @@ class Synthetic:
         hrf = Synthetic.double_gamma_hrf(fs, cfg)
         response = fftconvolve(drive, hrf[None, :], axes=1)[:, :drive.shape[1]]
         n, length = drive.shape
-        sys_o = Synthetic._systemic(n, length, fs, cfg, rng)
-        sys_r = sys_o + Synthetic._systemic(n, length, fs, cfg, rng) * 0.15   # near-common-mode (slight de-corr)
+        sys_o = Synthetic.systemic(n, length, fs, cfg, rng)
+        sys_r = sys_o + Synthetic.systemic(n, length, fs, cfg, rng) * 0.15   # near-common-mode (slight de-corr)
         hbo = response + sys_o + rng.standard_normal((n, length)) * cfg.noise_std
         hbr = -cfg.hbr_ratio * response + sys_r + rng.standard_normal((n, length)) * cfg.noise_std
         return hbo.astype(np.float32), hbr.astype(np.float32)

@@ -40,8 +40,8 @@ _MIN_HEADROOM = 0.02             # within−cross gap below this = no nuisance l
 class AugmentProbe:
     """Domain-randomization decode probe helpers (bd jdh) — the free helpers folded in as staticmethods."""
 
-    @staticmethod
-    def _build():
+    @classmethod
+    def _build(cls):
         """Paired (HbO, HbR) epochs restricted to the binary `_CLASSES` contrast, relabelled 0/1."""
         meta = store.Store.load("shin2017_nback", FnirsCfg())
         x, y, g = [], [], []
@@ -53,8 +53,8 @@ class AugmentProbe:
             g.append(np.array([s] * int(m.sum())))
         return np.concatenate(x), np.concatenate(y), np.concatenate(g)
 
-    @staticmethod
-    def _augment(x_tr: np.ndarray, y_tr: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    @classmethod
+    def _augment(cls, x_tr: np.ndarray, y_tr: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray]:
         """Append `_N_AUG` domain-randomized copies of the train epochs (HbO=0:36, HbR=36:72)."""
         xs, ys = [x_tr], [y_tr]
         for k in range(_N_AUG):
@@ -63,19 +63,19 @@ class AugmentProbe:
             ys.append(y_tr)
         return np.concatenate(xs), np.concatenate(ys)
 
-    @staticmethod
-    def _cross(x, y, g, *, augment: bool) -> tuple[float, float]:
+    @classmethod
+    def _cross(cls, x, y, g, *, augment: bool) -> tuple[float, float]:
         """Cross-subject grouped k-fold `FnirsLda`; optionally augment each fold's train set."""
         accs = []
         for seed in _SEEDS:
             for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(x, y, g):
-                x_tr, y_tr = (AugmentProbe._augment(x[tr], y[tr], seed) if augment else (x[tr], y[tr]))
+                x_tr, y_tr = (cls._augment(x[tr], y[tr], seed) if augment else (x[tr], y[tr]))
                 proba = FnirsLda().fit(x_tr, y_tr).predict_proba(x[te])
                 accs.append(metrics.Metrics.accuracy(y[te], proba.argmax(1)))
         return float(np.mean(accs)), float(np.std(accs))
 
-    @staticmethod
-    def _within(x, y, g) -> tuple[float, float]:
+    @classmethod
+    def _within(cls, x, y, g) -> tuple[float, float]:
         """Within-subject k-fold (pooled), the ceiling that bounds the cross-subject headroom."""
         accs = []
         for seed in _SEEDS:
@@ -84,23 +84,23 @@ class AugmentProbe:
                 accs.append(metrics.Metrics.accuracy(y[te], proba.argmax(1)))
         return float(np.mean(accs)), float(np.std(accs))
 
-
-def main():
-    Cli.setup_logging()
-    x, y, g = AugmentProbe._build()
-    logger.info(f"{len(y)} epochs · {len(set(g.tolist()))} subj · 0-back vs 2-back · {len(_SEEDS)}x{_K}-fold")
-    a_win, s_win = AugmentProbe._within(x, y, g)
-    a_cs, s_cs = AugmentProbe._cross(x, y, g, augment=False)
-    headroom = a_win - a_cs
-    logger.info(f"  within-subject   acc {a_win:.3f} ± {s_win:.3f}")
-    logger.info(f"  cross-subject    acc {a_cs:.3f} ± {s_cs:.3f}   (headroom {headroom:+.3f})")
-    if headroom < _MIN_HEADROOM:
-        logger.info("  -> no cross-subject headroom: augmentation can't close a gap that isn't there")
-    a_aug, s_aug = AugmentProbe._cross(x, y, g, augment=True)
-    logger.info(f"  cross + aug (x{_N_AUG}) acc {a_aug:.3f} ± {s_aug:.3f}")
-    verdict = "AUGMENTATION HELPS" if a_aug > a_cs + 0.01 else "fair null (nuisance variety, not signal)"
-    logger.info(f"  Δ aug − plain cross: {a_aug - a_cs:+.3f}  ->  {verdict}")
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        x, y, g = cls._build()
+        logger.info(f"{len(y)} epochs · {len(set(g.tolist()))} subj · 0-back vs 2-back · {len(_SEEDS)}x{_K}-fold")
+        a_win, s_win = cls._within(x, y, g)
+        a_cs, s_cs = cls._cross(x, y, g, augment=False)
+        headroom = a_win - a_cs
+        logger.info(f"  within-subject   acc {a_win:.3f} ± {s_win:.3f}")
+        logger.info(f"  cross-subject    acc {a_cs:.3f} ± {s_cs:.3f}   (headroom {headroom:+.3f})")
+        if headroom < _MIN_HEADROOM:
+            logger.info("  -> no cross-subject headroom: augmentation can't close a gap that isn't there")
+        a_aug, s_aug = cls._cross(x, y, g, augment=True)
+        logger.info(f"  cross + aug (x{_N_AUG}) acc {a_aug:.3f} ± {s_aug:.3f}")
+        verdict = "AUGMENTATION HELPS" if a_aug > a_cs + 0.01 else "fair null (nuisance variety, not signal)"
+        logger.info(f"  Δ aug − plain cross: {a_aug - a_cs:+.3f}  ->  {verdict}")
 
 
 if __name__ == "__main__":
-    main()
+    AugmentProbe.main()

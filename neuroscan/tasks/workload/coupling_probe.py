@@ -36,54 +36,56 @@ _LAG_STABLE_STD_S = 2                                # per-subject lag std (s) b
 class CouplingProbe:
     """EEG->blood coupling-lag probe helpers — the free helpers folded in as staticmethods."""
 
-    @staticmethod
-    def _global_series(subject_frames):
+    @classmethod
+    def _global_series(cls, subject_frames):
         """Whole-head-mean EEG-β envelope + zero-lag fNIRS CBSI per block, on the shared grid -> `[n, T]` each."""
         t_dst = np.arange(0, _TEND, 1.0 / _FPS)
         drives, resps, groups = [], [], []
         for s, (Xe, Xf) in subject_frames:
             ch_f = Xf.shape[1] // 2
             te = np.arange(Xe.shape[2]) / _FS_E
-            beta = bc.Series._resample_time(bc.Series._band_env(Xe, _FS_E, _BETA), te, t_dst).mean(1)   # [n, T]
+            beta = bc.Series.resample_time(bc.Series.band_env(Xe, _FS_E, _BETA), te, t_dst).mean(1)   # [n, T]
             tf = _TMIN_F + np.arange(Xf.shape[2]) / _FS_F
-            cbsi = bc.Chromophore.cbsi_neural(bc.Series._resample_time(Xf[:, :ch_f, :], tf, t_dst),
-                                              bc.Series._resample_time(Xf[:, ch_f:, :], tf, t_dst)).mean(1)   # [n, T]
+            cbsi = bc.Chromophore.cbsi_neural(bc.Series.resample_time(Xf[:, :ch_f, :], tf, t_dst),
+                                              bc.Series.resample_time(Xf[:, ch_f:, :], tf, t_dst)).mean(1)   # [n, T]
             drives.append(beta)
             resps.append(cbsi)
             groups.append([s] * len(beta))
         return drives, resps, groups
 
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
+        mf = store.Store.load("shin2017_nback", FnirsCfg())
+        subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
+        frames = [(s, (store.Store.gather(me.filter(me["subject"] == s))[0],
+                       store.Store.gather(mf.filter(mf["subject"] == s))[0]))
+                  for s in subs]
+        drives, resps, _ = cls._global_series(frames)
+        D, R = np.concatenate(drives), np.concatenate(resps)
+        logger.info(f"pooled n={D.shape[0]} blocks · {len(subs)} subjects")
 
-def main():
-    Cli.setup_logging()
-    me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
-    mf = store.Store.load("shin2017_nback", FnirsCfg())
-    subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
-    frames = [(s, (store.Store.gather(me.filter(me["subject"] == s))[0],
-                   store.Store.gather(mf.filter(mf["subject"] == s))[0]))
-              for s in subs]
-    drives, resps, _ = CouplingProbe._global_series(frames)
-    D, R = np.concatenate(drives), np.concatenate(resps)
-    logger.info(f"pooled n={D.shape[0]} blocks · {len(subs)} subjects")
+        # pure-shift scan: signed whole-head correlation vs lag — is there a coherent peak?
+        Rz = (R - R.mean(1, keepdims=True)) / (R.std(1, keepdims=True) + 1e-9)
+        logger.info("shift(s) : mean signed corr")
+        for shift_s in range(0, 12):
+            lag = round(shift_s * _FPS)
+            drive_shifted = np.roll(D, lag, axis=1)
+            if lag > 0:
+                drive_shifted[:, :lag] = D[:, :1]
+            mean_shifted = drive_shifted.mean(1, keepdims=True)
+            std_shifted = drive_shifted.std(1, keepdims=True) + 1e-9
+            drive_z = (drive_shifted - mean_shifted) / std_shifted
+            logger.info(f"  {shift_s:2d}   {float((drive_z * Rz).mean(1).mean()):+.3f}")
 
-    # pure-shift scan: signed whole-head correlation vs lag — is there a coherent peak?
-    Rz = (R - R.mean(1, keepdims=True)) / (R.std(1, keepdims=True) + 1e-9)
-    logger.info("shift(s) : mean signed corr")
-    for shift_s in range(0, 12):
-        lag = round(shift_s * _FPS)
-        drive_shifted = np.roll(D, lag, axis=1)
-        if lag > 0:
-            drive_shifted[:, :lag] = D[:, :1]
-        drive_z = (drive_shifted - drive_shifted.mean(1, keepdims=True)) / (drive_shifted.std(1, keepdims=True) + 1e-9)
-        logger.info(f"  {shift_s:2d}   {float((drive_z * Rz).mean(1).mean()):+.3f}")
-
-    lag, decay, beta = bc.Coupling.estimate_coupling(D, R, _FPS)
-    logger.info(f"\nPOOLED gamma fit: lag {lag:.1f}s · decay {decay:.2f}s · β {beta:.2g}")
-    per = np.array([bc.Coupling.estimate_coupling(dv, rp, _FPS)[0] for dv, rp in zip(drives, resps, strict=True)])
-    logger.info(f"per-subject lag: mean {per.mean():.1f}s · std {per.std():.1f}s · "
-          f"range [{per.min():.1f}, {per.max():.1f}] "
-          f"-> {'STABLE' if per.std() < _LAG_STABLE_STD_S else 'UNSTABLE (pool instead)'}")
+        lag, decay, beta = bc.Coupling.estimate_coupling(D, R, _FPS)
+        logger.info(f"\nPOOLED gamma fit: lag {lag:.1f}s · decay {decay:.2f}s · β {beta:.2g}")
+        per = np.array([bc.Coupling.estimate_coupling(dv, rp, _FPS)[0] for dv, rp in zip(drives, resps, strict=True)])
+        logger.info(f"per-subject lag: mean {per.mean():.1f}s · std {per.std():.1f}s · "
+              f"range [{per.min():.1f}, {per.max():.1f}] "
+              f"-> {'STABLE' if per.std() < _LAG_STABLE_STD_S else 'UNSTABLE (pool instead)'}")
 
 
 if __name__ == "__main__":
-    main()
+    CouplingProbe.main()

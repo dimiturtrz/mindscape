@@ -75,8 +75,8 @@ class TemperatureScaler:
 
 
 class Calibrate:
-    @staticmethod
-    def _parse_args():
+    @classmethod
+    def _parse_args(cls):
         ap = argparse.ArgumentParser(description=__doc__)
         ap.add_argument("--dataset", default="bnci2014_001")
         ap.add_argument("--method", default="atcnet", choices=sorted(decoders.MODELS))
@@ -87,8 +87,8 @@ class Calibrate:
         ap.add_argument("--out", default=None)
         return ap.parse_args()
 
-    @staticmethod
-    def _per_subject_rows(meta, fit, test_session):
+    @classmethod
+    def _per_subject_rows(cls, meta, fit, test_session):
         """One temperature-scaling row per subject: fit T on the in-session val, report val + cross-session ECE."""
         rows = []
         for s in sorted(meta["subject"].unique().to_list()):
@@ -112,8 +112,8 @@ class Calibrate:
                   f"test ECE {r['test_ece_uncal']:.3f}->{r['test_ece_temp']:.3f}  (acc {r['test_acc']:.3f})")
         return rows
 
-    @staticmethod
-    def _summarize(rows, method):
+    @classmethod
+    def _summarize(cls, rows, method):
         """Aggregate per-subject rows into the summary dict; returns (summary, val_fix, test_fix)."""
         m = {k: float(np.mean([r[k] for r in rows]))
              for k in ("T", "val_ece_uncal", "val_ece_temp", "test_ece_uncal", "test_ece_temp")}
@@ -128,8 +128,8 @@ class Calibrate:
         summary["transfer_ratio"] = round(test_fix / val_fix, 3) if val_fix > _EPS else None
         return summary, val_fix, test_fix
 
-    @staticmethod
-    def _report(summary, method, val_fix, test_fix):
+    @classmethod
+    def _report(cls, summary, method, val_fix, test_fix):
         """Log the val->test ECE transfer and store the verdict on `summary`."""
         logger.info(f"\n=== {method} temperature scaling (in-session val -> cross-session test) ===")
         logger.info(f"  val  ECE {summary['val_ece']['uncal']:.3f} -> "
@@ -148,29 +148,31 @@ class Calibrate:
         logger.info(f"  transfer ratio {tr} — {verdict}")
         summary["verdict"] = verdict
 
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        args = cls._parse_args()
 
-def main():
-    Cli.setup_logging()
-    args = Calibrate._parse_args()
+        meta = store.Store.load(args.dataset, EpochCfg(resample=args.resample, fmin=args.fmin, fmax=args.fmax))
+        fit, _ = decoders.BraindecodeClf.make(args.method)
 
-    meta = store.Store.load(args.dataset, EpochCfg(resample=args.resample, fmin=args.fmin, fmax=args.fmax))
-    fit, _ = decoders.BraindecodeClf.make(args.method)
+        rows = cls._per_subject_rows(meta, fit, args.test_session)
+        summary, val_fix, test_fix = cls._summarize(rows, args.method)
+        cls._report(summary, args.method, val_fix, test_fix)
 
-    rows = Calibrate._per_subject_rows(meta, fit, args.test_session)
-    summary, val_fix, test_fix = Calibrate._summarize(rows, args.method)
-    Calibrate._report(summary, args.method, val_fix, test_fix)
-
-    out = Path(args.out) if args.out else Path("runs") / f"calibrate_{args.method}_{args.dataset}"
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "calibration.json").write_text(json.dumps(summary, indent=2))
-    with tracking.Tracking.run("mindscape", f"calibrate_{args.method}", params={"method": args.method},
-                      tags={"method": args.method, "regime": "calibration"}, run_dir=out):
-        tracking.Tracking.metrics({"T_mean": summary["T_mean"],
-                          "val_ece_uncal": summary["val_ece"]["uncal"], "val_ece_temp": summary["val_ece"]["temp"],
-                          "test_ece_uncal": summary["test_ece"]["uncal"], "test_ece_temp": summary["test_ece"]["temp"]})
-        tracking.Tracking.artifact(out / "calibration.json")
-    logger.info(f"-> {out}/calibration.json")
+        out = Path(args.out) if args.out else Path("runs") / f"calibrate_{args.method}_{args.dataset}"
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "calibration.json").write_text(json.dumps(summary, indent=2))
+        with tracking.Tracking.run("mindscape", f"calibrate_{args.method}", params={"method": args.method},
+                          tags={"method": args.method, "regime": "calibration"}, run_dir=out):
+            tracking.Tracking.metrics({
+                "T_mean": summary["T_mean"],
+                "val_ece_uncal": summary["val_ece"]["uncal"], "val_ece_temp": summary["val_ece"]["temp"],
+                "test_ece_uncal": summary["test_ece"]["uncal"], "test_ece_temp": summary["test_ece"]["temp"],
+            })
+            tracking.Tracking.artifact(out / "calibration.json")
+        logger.info(f"-> {out}/calibration.json")
 
 
 if __name__ == "__main__":
-    main()
+    Calibrate.main()

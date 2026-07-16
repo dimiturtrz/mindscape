@@ -21,9 +21,9 @@ N_CHANS, N_TIMES, N_CLASSES = 22, 1125, 4
 
 
 class Profile:
-    @staticmethod
-    def profile(cls: type[torch.nn.Module], n_chans=N_CHANS, n_times=N_TIMES, n_classes=N_CLASSES) -> dict:
-        net = cls(n_chans=n_chans, n_outputs=n_classes, n_times=n_times).eval()
+    @classmethod
+    def profile(cls, model_cls: type[torch.nn.Module], n_chans=N_CHANS, n_times=N_TIMES, n_classes=N_CLASSES) -> dict:
+        net = model_cls(n_chans=n_chans, n_outputs=n_classes, n_times=n_times).eval()
         params = sum(p.numel() for p in net.parameters() if p.requires_grad)
         dummy = torch.zeros(1, n_chans, n_times)
         flops = None
@@ -33,11 +33,11 @@ class Profile:
             flops = int(FlopCountAnalysis(net, dummy).unsupported_ops_warnings(enabled=False)
                         .uncalled_modules_warnings(enabled=False).total())
         except Exception as e:  # noqa: BLE001
-            logger.info(f"  ({cls.__name__}: FLOPs unavailable: {e})")
-        return {"model": cls.__name__, "params": int(params), "flops": flops}
+            logger.info(f"  ({model_cls.__name__}: FLOPs unavailable: {e})")
+        return {"model": model_cls.__name__, "params": int(params), "flops": flops}
 
-    @staticmethod
-    def _fmt(n):
+    @classmethod
+    def _fmt(cls, n):
         if n is None:
             return "—"
         for unit, div in (("G", 1e9), ("M", 1e6), ("K", 1e3)):
@@ -46,15 +46,16 @@ class Profile:
         return str(n)
 
 
-def main():
-    Cli.setup_logging()
-    rows = [Profile.profile(cfg["cls"]) for cfg in MODELS.values()]
-    logger.info(f"\n=== params + FLOPs (input {N_CHANS}ch x {N_TIMES} samples, batch 1) ===")
-    logger.info(f"{'model':16} {'params':>10} {'FLOPs':>10}")
-    for r in rows:
-        logger.info(f"{r['model']:16} {Profile._fmt(r['params']):>10} {Profile._fmt(r['flops']):>10}")
-    return rows
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        rows = [cls.profile(cfg["cls"]) for cfg in MODELS.values()]
+        logger.info(f"\n=== params + FLOPs (input {N_CHANS}ch x {N_TIMES} samples, batch 1) ===")
+        logger.info(f"{'model':16} {'params':>10} {'FLOPs':>10}")
+        for r in rows:
+            logger.info(f"{r['model']:16} {cls._fmt(r['params']):>10} {cls._fmt(r['flops']):>10}")
+        return rows
 
 
 if __name__ == "__main__":
-    main()
+    Profile.main()

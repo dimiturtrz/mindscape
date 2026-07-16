@@ -56,8 +56,8 @@ class OptunaSearch:
     """The Optuna wrapper-feature-selector helpers (free functions folded in as staticmethods, public names
     kept)."""
 
-    @staticmethod
-    def _cv_score(bank: Bank, weights, fold_seeds, k) -> float:
+    @classmethod
+    def _cv_score(cls, bank: Bank, weights, fold_seeds, k) -> float:
         """Mean accuracy of standardise→per-family-weight→shrinkage-LDA over StratifiedGroupKFold repeated for
         each seed in `fold_seeds`. Grouped by subject (whole subjects per fold); the scaler fits on train only."""
         accs = []
@@ -69,8 +69,8 @@ class OptunaSearch:
             accs.append(float((lda.predict(sc.transform(bank.F[te])) == bank.y[te]).mean()))
         return float(np.mean(accs))
 
-    @staticmethod
-    def _storage(out: Path):
+    @classmethod
+    def _storage(cls, out: Path):
         """Optuna JournalStorage (file-backed) under the run dir — persists all trials for later querying. Uses
         the open()-based file lock, not the default symlink lock, so it works on Windows (symlink creation needs
         a privilege the client doesn't hold there)."""
@@ -80,12 +80,12 @@ class OptunaSearch:
                                                              lock_obj=optuna.storages.journal.JournalFileOpenLock(path))
         return optuna.storages.JournalStorage(backend)
 
-    @staticmethod
-    def _run_one_study(bank: Bank, families, cfg, tpe_seed, storage):
+    @classmethod
+    def _run_one_study(cls, bank: Bank, families, cfg, tpe_seed, storage):
         """One Optuna study (one TPE seed): returns (importances, top_weight_means, best_value, best_params)."""
         def objective(trial):
             weights = {f: trial.suggest_float(f, cfg.weight_low, cfg.weight_high) for f in families}
-            return OptunaSearch._cv_score(bank, weights, list(cfg.fold_seeds), cfg.k)
+            return cls._cv_score(bank, weights, list(cfg.fold_seeds), cfg.k)
 
         study = optuna.create_study(direction="maximize", storage=storage, load_if_exists=True,
                                     study_name=f"fnirs_importance_seed{tpe_seed}",
@@ -104,8 +104,8 @@ class OptunaSearch:
         top_w = {f: float(np.mean([t.params[f] for t in top])) for f in families}   # mean weight in best trials
         return importances, top_w, float(study.best_value), dict(study.best_params)
 
-    @staticmethod
-    def _stability(per_seed_importances, families, topn=5):
+    @classmethod
+    def _stability(cls, per_seed_importances, families, topn=5):
         """How much do the top-`topn` important families agree across the study reruns? Jaccard overlap of the
         top sets — high = a stable, trustworthy importance ranking; low = the 'importance' is search noise."""
         top_sets = [set(sorted(imp, key=imp.get, reverse=True)[:topn]) for imp in per_seed_importances]
@@ -115,65 +115,71 @@ class OptunaSearch:
                            reverse=True)
         return {"topn": topn, "mean_jaccard": float(np.mean(jac)), "consensus_order": consensus}
 
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        ap = argparse.ArgumentParser(description=__doc__)
+        ap.add_argument("--config", default=None, help="study config (default: optuna.yaml beside this module)")
+        ap.add_argument("--trials", type=int, default=None, help="override n_trials (the one common knob)")
+        args = ap.parse_args()
 
-def main():
-    Cli.setup_logging()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--config", default=None, help="study config (default: optuna.yaml beside this module)")
-    ap.add_argument("--trials", type=int, default=None, help="override n_trials (the one common knob)")
-    args = ap.parse_args()
+        optuna.logging.set_verbosity(optuna.logging.WARNING)                  # no per-trial spam
 
-    optuna.logging.set_verbosity(optuna.logging.WARNING)                  # no per-trial spam
+        cfg = OmegaConf.load(args.config or _CFG)
+        if args.trials:
+            cfg.n_trials = args.trials
 
-    cfg = OmegaConf.load(args.config or _CFG)
-    if args.trials:
-        cfg.n_trials = args.trials
+        meta = store.Store.load(cfg.dataset, FnirsCfg())
+        X, y = store.Store.gather(meta)
+        groups = meta["subject"].to_numpy()
+        F, fam = DescriptorBank.extract_bank(X)
+        bank = Bank(F, fam, y, groups)
+        families = DescriptorBank.family_names()
+        out = REPO / cfg.out
+        storage = cls._storage(out)
+        n_unique_subj = meta["subject"].n_unique()
+        chance = 1 / len(set(y.tolist()))
+        logger.info(
+            f"fNIRS bank: {F.shape[0]} blocks · {n_unique_subj} subjects · {len(families)} families · "
+            f"{F.shape[1]} cols · {cfg.n_trials} trials × {len(cfg.tpe_seeds)} seeds "
+            f"(chance {chance:.3f}) · journal {out}/journal.log"
+        )
 
-    meta = store.Store.load(cfg.dataset, FnirsCfg())
-    X, y = store.Store.gather(meta)
-    groups = meta["subject"].to_numpy()
-    F, fam = DescriptorBank.extract_bank(X)
-    bank = Bank(F, fam, y, groups)
-    families = DescriptorBank.family_names()
-    out = REPO / cfg.out
-    storage = OptunaSearch._storage(out)
-    logger.info(f"fNIRS bank: {F.shape[0]} blocks · {meta['subject'].n_unique()} subjects · {len(families)} families "
-          f"· {F.shape[1]} cols · {cfg.n_trials} trials × {len(cfg.tpe_seeds)} seeds "
-          f"(chance {1/len(set(y.tolist())):.3f}) · journal {out}/journal.log")
+        per_seed_imp, per_seed_topw, peaks, bests = [], [], [], []
+        for s in cfg.tpe_seeds:
+            imp, topw, best, bparams = cls._run_one_study(bank, families, cfg, int(s), storage)
+            per_seed_imp.append(imp)
+            per_seed_topw.append(topw)
+            peaks.append(best)
+            bests.append(bparams)
+            top3 = sorted(imp, key=imp.get, reverse=True)[:3]
+            logger.info(f"  seed {s}: peak-acc {best:.3f} (optimistic) · top-3 by importance {top3}")
 
-    per_seed_imp, per_seed_topw, peaks, bests = [], [], [], []
-    for s in cfg.tpe_seeds:
-        imp, topw, best, bparams = OptunaSearch._run_one_study(bank, families, cfg, int(s), storage)
-        per_seed_imp.append(imp)
-        per_seed_topw.append(topw)
-        peaks.append(best)
-        bests.append(bparams)
-        top3 = sorted(imp, key=imp.get, reverse=True)[:3]
-        logger.info(f"  seed {s}: peak-acc {best:.3f} (optimistic) · top-3 by importance {top3}")
+        stab = cls._stability(per_seed_imp, families)
+        cons_imp = {f: float(np.mean([imp.get(f, 0.0) for imp in per_seed_imp])) for f in families}
+        cons_topw = {f: float(np.mean([tw[f] for tw in per_seed_topw])) for f in families}
+        topw_sd = {f: float(np.std([tw[f] for tw in per_seed_topw])) for f in families}   # cross-seed spread
 
-    stab = OptunaSearch._stability(per_seed_imp, families)
-    cons_imp = {f: float(np.mean([imp.get(f, 0.0) for imp in per_seed_imp])) for f in families}
-    cons_topw = {f: float(np.mean([tw[f] for tw in per_seed_topw])) for f in families}
-    topw_sd = {f: float(np.std([tw[f] for tw in per_seed_topw])) for f in families}   # cross-seed spread
+        logger.info(f"\n=== importance (consensus over {len(cfg.tpe_seeds)} seeds) ===")
+        for f in sorted(families, key=lambda f: cons_imp[f], reverse=True):
+            logger.info(f"  {f:<14} importance {cons_imp[f]:.3f}  ·  mean top-trial weight {cons_topw[f]:.2f} "
+                  f"(±{topw_sd[f]:.2f})")
+        verdict = ("STABLE — trust the ranking" if stab["mean_jaccard"] >= _STABLE_JACCARD
+                   else "UNSTABLE — importance is search noise")
+        jaccard_val = stab["mean_jaccard"]
+        logger.info(
+            f"\nstability: top-{stab['topn']} families agree across seeds at Jaccard {jaccard_val:.2f} ({verdict})"
+        )
+        logger.info(f"peak-acc range {min(peaks):.3f}-{max(peaks):.3f} (optimistic; not a generalisation estimate)")
 
-    logger.info(f"\n=== importance (consensus over {len(cfg.tpe_seeds)} seeds) ===")
-    for f in sorted(families, key=lambda f: cons_imp[f], reverse=True):
-        logger.info(f"  {f:<14} importance {cons_imp[f]:.3f}  ·  mean top-trial weight {cons_topw[f]:.2f} "
-              f"(±{topw_sd[f]:.2f})")
-    verdict = ("STABLE — trust the ranking" if stab["mean_jaccard"] >= _STABLE_JACCARD
-               else "UNSTABLE — importance is search noise")
-    logger.info(f"\nstability: top-{stab['topn']} families agree across seeds at Jaccard {stab['mean_jaccard']:.2f} "
-          f"({verdict})")
-    logger.info(f"peak-acc range {min(peaks):.3f}-{max(peaks):.3f} (optimistic; not a generalisation estimate)")
-
-    (out / "importance.json").write_text(json.dumps({
-        "dataset": str(cfg.dataset), "n_trials": int(cfg.n_trials), "tpe_seeds": list(cfg.tpe_seeds),
-        "consensus_importance": cons_imp, "consensus_top_weight": cons_topw, "top_weight_sd": topw_sd,
-        "stability": stab, "peak_acc_per_seed": peaks, "best_params_per_seed": bests,
-    }, indent=2))
-    logger.info(f"-> {out}/importance.json "
-                f"(reproducible artifact — the README importance table is generated from this)")
+        (out / "importance.json").write_text(json.dumps({
+            "dataset": str(cfg.dataset), "n_trials": int(cfg.n_trials), "tpe_seeds": list(cfg.tpe_seeds),
+            "consensus_importance": cons_imp, "consensus_top_weight": cons_topw, "top_weight_sd": topw_sd,
+            "stability": stab, "peak_acc_per_seed": peaks, "best_params_per_seed": bests,
+        }, indent=2))
+        logger.info(f"-> {out}/importance.json "
+                    f"(reproducible artifact — the README importance table is generated from this)")
 
 
 if __name__ == "__main__":
-    main()
+    OptunaSearch.main()

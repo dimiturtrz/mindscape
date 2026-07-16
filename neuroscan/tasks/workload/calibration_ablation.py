@@ -42,29 +42,29 @@ _SEED = 0
 class CalibrationAblation:
     """Per-subject calibration ablation helpers — the free helpers folded in as staticmethods."""
 
-    @staticmethod
-    def _lda():
+    @classmethod
+    def _lda(cls):
         return LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")
 
-    @staticmethod
-    def _cv_raw_or_transductive(F, y, g, subs, zt):
+    @classmethod
+    def _cv_raw_or_transductive(cls, F, y, g, subs, zt):
         accs = []
         for train_subj, test_subj in GroupKFold(_K).split(subs, groups=subs):
             train_mask, test_mask = np.isin(g, subs[train_subj]), np.isin(g, subs[test_subj])
             feats = SubjectNorm.zscore_per_subject(F, g) if zt else F
-            clf = CalibrationAblation._lda().fit(feats[train_mask], y[train_mask])
+            clf = cls._lda().fit(feats[train_mask], y[train_mask])
             accs.append(metrics.Metrics.accuracy(y[test_mask], clf.predict(feats[test_mask])))
         return float(np.mean(accs))
 
-    @staticmethod
-    def _cv_calib_half(F, y, g, subs, rng):
+    @classmethod
+    def _cv_calib_half(cls, F, y, g, subs, rng):
         """Leakage-free per-subject calibration: train z-scored on train subjects; for each test subject, fit stats on
         a random half of its blocks and score the other half."""
         accs = []
         for train_subj, test_subj in GroupKFold(_K).split(subs, groups=subs):
             Ftr = SubjectNorm.zscore_per_subject(F, g)            # train side: per-subject z (train subjects only used)
             train_mask = np.isin(g, subs[train_subj])
-            clf = CalibrationAblation._lda().fit(Ftr[train_mask], y[train_mask])
+            clf = cls._lda().fit(Ftr[train_mask], y[train_mask])
             yt, yp = [], []
             for s in subs[test_subj]:
                 idx = np.where(g == s)[0]
@@ -77,60 +77,60 @@ class CalibrationAblation:
             accs.append(metrics.Metrics.accuracy(np.array(yt), np.array(yp)))
         return float(np.mean(accs))
 
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        rng = np.random.default_rng(_SEED)
+        me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
+        mf = store.Store.load("shin2017_nback", FnirsCfg())
+        subs = np.array(sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list())))
+        qe = me.filter(me["subject"].is_in([str(s) for s in subs]))
+        qf = mf.filter(mf["subject"].is_in([str(s) for s in subs]))
+        Xe, y = store.Store.gather(qe)
+        Xf, yf = store.Store.gather(qf)
+        if not np.array_equal(y, yf):
+            raise ValueError("EEG/fNIRS blocks misaligned")
+        ge = qe["subject"].to_numpy()
+        Fe, Ff = BandPower.band_powers(Xe, _EEG_CFG.resample), Amplitude.amplitude_features(Xf)
 
-def main():
-    Cli.setup_logging()
-    rng = np.random.default_rng(_SEED)
-    me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
-    mf = store.Store.load("shin2017_nback", FnirsCfg())
-    subs = np.array(sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list())))
-    qe = me.filter(me["subject"].is_in([str(s) for s in subs]))
-    qf = mf.filter(mf["subject"].is_in([str(s) for s in subs]))
-    Xe, y = store.Store.gather(qe)
-    Xf, yf = store.Store.gather(qf)
-    if not np.array_equal(y, yf):
-        raise ValueError("EEG/fNIRS blocks misaligned")
-    ge = qe["subject"].to_numpy()
-    Fe, Ff = BandPower.band_powers(Xe, _EEG_CFG.resample), Amplitude.amplitude_features(Xf)
+        out = {
+            "eeg_raw": cls._cv_raw_or_transductive(Fe, y, ge, subs, zt=False),
+            "eeg_ztrans": cls._cv_raw_or_transductive(Fe, y, ge, subs, zt=True),
+            "eeg_zcalib": cls._cv_calib_half(Fe, y, ge, subs, rng),
+            "fnirs_raw": cls._cv_raw_or_transductive(Ff, y, ge, subs, zt=False),
+            "fnirs_ztrans": cls._cv_raw_or_transductive(Ff, y, ge, subs, zt=True),
+        }
+        # fusion picture on the z-scored (transductive) features: EEG becomes the strong modality; oracle grows
+        Fez, Ffz = SubjectNorm.zscore_per_subject(Fe, ge), SubjectNorm.zscore_per_subject(Ff, ge)
+        CE, CF, late_hits = [], [], []
+        for train_subj, test_subj in GroupKFold(_K).split(subs, groups=subs):
+            train_mask, test_mask = np.isin(ge, subs[train_subj]), np.isin(ge, subs[test_subj])
+            pe = cls._lda().fit(Fez[train_mask], y[train_mask]).predict_proba(Fez[test_mask])
+            pf = cls._lda().fit(Ffz[train_mask], y[train_mask]).predict_proba(Ffz[test_mask])
+            CE.append(pe.argmax(1) == y[test_mask])
+            CF.append(pf.argmax(1) == y[test_mask])
+            late_hits.append(((pe + pf) / 2).argmax(1) == y[test_mask])
+        ce, cf, late = np.concatenate(CE), np.concatenate(CF), np.concatenate(late_hits)
+        out.update({
+            "eeg_z_best": float(ce.mean()), "fnirs_z": float(cf.mean()),
+            "late_z": float(late.mean()), "oracle_z": float((ce | cf).mean()),
+            "err_corr_z": float(np.corrcoef(ce.astype(float), cf.astype(float))[0, 1]),
+        })
 
-    out = {
-        "eeg_raw": CalibrationAblation._cv_raw_or_transductive(Fe, y, ge, subs, zt=False),
-        "eeg_ztrans": CalibrationAblation._cv_raw_or_transductive(Fe, y, ge, subs, zt=True),
-        "eeg_zcalib": CalibrationAblation._cv_calib_half(Fe, y, ge, subs, rng),
-        "fnirs_raw": CalibrationAblation._cv_raw_or_transductive(Ff, y, ge, subs, zt=False),
-        "fnirs_ztrans": CalibrationAblation._cv_raw_or_transductive(Ff, y, ge, subs, zt=True),
-    }
-    # fusion picture on the z-scored (transductive) features: EEG becomes the strong modality; oracle grows
-    Fez, Ffz = SubjectNorm.zscore_per_subject(Fe, ge), SubjectNorm.zscore_per_subject(Ff, ge)
-    CE, CF, late_hits = [], [], []
-    for train_subj, test_subj in GroupKFold(_K).split(subs, groups=subs):
-        train_mask, test_mask = np.isin(ge, subs[train_subj]), np.isin(ge, subs[test_subj])
-        pe = CalibrationAblation._lda().fit(Fez[train_mask], y[train_mask]).predict_proba(Fez[test_mask])
-        pf = CalibrationAblation._lda().fit(Ffz[train_mask], y[train_mask]).predict_proba(Ffz[test_mask])
-        CE.append(pe.argmax(1) == y[test_mask])
-        CF.append(pf.argmax(1) == y[test_mask])
-        late_hits.append(((pe + pf) / 2).argmax(1) == y[test_mask])
-    ce, cf, late = np.concatenate(CE), np.concatenate(CF), np.concatenate(late_hits)
-    out.update({
-        "eeg_z_best": float(ce.mean()), "fnirs_z": float(cf.mean()),
-        "late_z": float(late.mean()), "oracle_z": float((ce | cf).mean()),
-        "err_corr_z": float(np.corrcoef(ce.astype(float), cf.astype(float))[0, 1]),
-    })
+        for k, v in out.items():
+            logger.info(f"  {k:14s} {v:.3f}")
+        logger.info(f"\n  EEG transfer: raw {out['eeg_raw']:.3f} -> calib-half {out['eeg_zcalib']:.3f} (unbiased) "
+              f"/ transductive {out['eeg_ztrans']:.3f} (upper bound)")
 
-    for k, v in out.items():
-        logger.info(f"  {k:14s} {v:.3f}")
-    logger.info(f"\n  EEG transfer: raw {out['eeg_raw']:.3f} -> calib-half {out['eeg_zcalib']:.3f} (unbiased) "
-          f"/ transductive {out['eeg_ztrans']:.3f} (upper bound)")
-
-    run_dir = Path("runs") / "calibration_ablation_shin2017_nback_eeg"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    # record under the harness-schema key so results.record picks it up as one row of fields
-    (run_dir / "aggregate.json").write_text(json.dumps(
-        {"method": "calibration_ablation", "regime": "cross_subject_kfold", "n_classes": 3,
-         "fold_mean": {"acc": out["eeg_zcalib"]}, "per_role_mean": out}, indent=2))
-    results.Results.record(run_dir)
-    logger.info(f"-> recorded {run_dir.name}")
+        run_dir = Path("runs") / "calibration_ablation_shin2017_nback_eeg"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        # record under the harness-schema key so results.record picks it up as one row of fields
+        (run_dir / "aggregate.json").write_text(json.dumps(
+            {"method": "calibration_ablation", "regime": "cross_subject_kfold", "n_classes": 3,
+             "fold_mean": {"acc": out["eeg_zcalib"]}, "per_role_mean": out}, indent=2))
+        results.Results.record(run_dir)
+        logger.info(f"-> recorded {run_dir.name}")
 
 
 if __name__ == "__main__":
-    main()
+    CalibrationAblation.main()

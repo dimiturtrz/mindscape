@@ -49,8 +49,8 @@ _FNIRS_CFG = FnirsCfg()
 class FusionGate:
     """Gated-fusion helpers — the free helpers folded in as staticmethods."""
 
-    @staticmethod
-    def _load_features():
+    @classmethod
+    def _load_features(cls):
         """Return per-block EEG band-power + fNIRS mean/slope/peak features, the label, and the subject id —
         block-aligned across the two modalities (hard guard on the label sequence)."""
         me = store.Store.load(_EEG, _EEG_CFG)
@@ -67,66 +67,66 @@ class FusionGate:
         Ff = Amplitude.amplitude_features(Xf).astype(np.float32)               # [n, ch*3]
         return Fe, Ff, ye.astype(np.int64), groups
 
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        ap = argparse.ArgumentParser(description=__doc__)
+        ap.add_argument("--k", type=int, default=5)
+        ap.add_argument("--out", default=None)
+        ap.add_argument("--no-record", action="store_true")
+        args = ap.parse_args()
 
-def main():
-    Cli.setup_logging()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--k", type=int, default=5)
-    ap.add_argument("--out", default=None)
-    ap.add_argument("--no-record", action="store_true")
-    args = ap.parse_args()
+        Fe, Ff, y, groups = cls._load_features()
+        Fe, Ff = SubjectNorm.zscore_per_subject(Fe, groups), SubjectNorm.zscore_per_subject(Ff, groups)
+        subs = np.array(sorted(set(groups)))
+        n_classes = int(y.max()) + 1
+        logger.info(f"gated fusion: {len(y)} blocks · {len(subs)} subj · EEG {Fe.shape[1]}d · fNIRS {Ff.shape[1]}d · "
+              f"chance {1/n_classes:.3f}")
 
-    Fe, Ff, y, groups = FusionGate._load_features()
-    Fe, Ff = SubjectNorm.zscore_per_subject(Fe, groups), SubjectNorm.zscore_per_subject(Ff, groups)
-    subs = np.array(sorted(set(groups)))
-    n_classes = int(y.max()) + 1
-    logger.info(f"gated fusion: {len(y)} blocks · {len(subs)} subjects · EEG {Fe.shape[1]}d · fNIRS {Ff.shape[1]}d · "
-          f"chance {1/n_classes:.3f}")
+        rows, P, A, Y = [], [], [], []
+        outer = GroupKFold(n_splits=args.k)
+        for i, (tr, te) in enumerate(outer.split(subs, groups=subs)):
+            tr_subs, te_subs = subs[tr], subs[te]
+            # inner val: hold out one GroupKFold slice of the TRAIN subjects for early stopping
+            itr, iva = next(GroupKFold(n_splits=4).split(tr_subs, groups=tr_subs))
+            va_subs = tr_subs[iva]
+            fit_subs = tr_subs[itr]
+            m_fit = np.isin(groups, fit_subs)
+            m_va = np.isin(groups, va_subs)
+            m_te = np.isin(groups, te_subs)
 
-    rows, P, A, Y = [], [], [], []
-    outer = GroupKFold(n_splits=args.k)
-    for i, (tr, te) in enumerate(outer.split(subs, groups=subs)):
-        tr_subs, te_subs = subs[tr], subs[te]
-        # inner val: hold out one GroupKFold slice of the TRAIN subjects for early stopping
-        itr, iva = next(GroupKFold(n_splits=4).split(tr_subs, groups=tr_subs))
-        va_subs = tr_subs[iva]
-        fit_subs = tr_subs[itr]
-        m_fit = np.isin(groups, fit_subs)
-        m_va = np.isin(groups, va_subs)
-        m_te = np.isin(groups, te_subs)
+            clf = GatedFusion(GateConfig(eeg_dim=Fe.shape[1], fnirs_dim=Ff.shape[1], n_classes=n_classes))
+            clf.fit(FusionData(Fe[m_fit], Ff[m_fit], y[m_fit]), FusionData(Fe[m_va], Ff[m_va], y[m_va]))
+            p, a = clf.predict(Fe[m_te], Ff[m_te])
+            P.append(p)
+            A.append(a)
+            Y.append(y[m_te])
+            acc = metrics.Metrics.accuracy(y[m_te], p.argmax(1))
+            rows.append({"fold": str(i), "n": int(m_te.sum()), "gate_acc": acc,
+                         "alpha_mean": float(a.mean())})
+            logger.info(f"  fold{i}: gate {acc:.3f} | ᾱ(eeg-weight) {a.mean():.2f} (n={int(m_te.sum())})")
 
-        clf = GatedFusion(GateConfig(eeg_dim=Fe.shape[1], fnirs_dim=Ff.shape[1], n_classes=n_classes))
-        clf.fit(FusionData(Fe[m_fit], Ff[m_fit], y[m_fit]), FusionData(Fe[m_va], Ff[m_va], y[m_va]))
-        p, a = clf.predict(Fe[m_te], Ff[m_te])
-        P.append(p)
-        A.append(a)
-        Y.append(y[m_te])
-        acc = metrics.Metrics.accuracy(y[m_te], p.argmax(1))
-        rows.append({"fold": str(i), "n": int(m_te.sum()), "gate_acc": acc,
-                     "alpha_mean": float(a.mean())})
-        logger.info(f"  fold{i}: gate {acc:.3f} | ᾱ(eeg-weight) {a.mean():.2f} (n={int(m_te.sum())})")
+        y_all, P_all = np.concatenate(Y), np.concatenate(P)
+        gate = float((P_all.argmax(1) == y_all).mean())
+        fold_mean = float(np.mean([r["gate_acc"] for r in rows]))
+        std = float(np.std([r["gate_acc"] for r in rows]))
+        logger.info("\n=== gated fusion · 5-fold GroupKFold · shin n-back ===")
+        logger.info(f"  gate pooled {gate:.3f} | fold-mean {fold_mean:.3f} ± {std:.3f}")
+        logger.info(f"  NOTE: this ~{fold_mean:.2f} is NOT a fusion win — it ties z-scored-EEG-alone (~0.581) and "
+              "z-concat-LDA (~0.578).")
+        logger.info("  The lift over raw fNIRS (0.474) is per-subject z-scoring rescuing EEG (0.407->0.581), NOT the "
+              "gate; the gate captures no oracle headroom (see run_fusion + the ablation).")
 
-    y_all, P_all = np.concatenate(Y), np.concatenate(P)
-    gate = float((P_all.argmax(1) == y_all).mean())
-    fold_mean = float(np.mean([r["gate_acc"] for r in rows]))
-    std = float(np.std([r["gate_acc"] for r in rows]))
-    logger.info("\n=== gated fusion · 5-fold GroupKFold · shin n-back ===")
-    logger.info(f"  gate pooled {gate:.3f} | fold-mean {fold_mean:.3f} ± {std:.3f}")
-    logger.info(f"  NOTE: this ~{fold_mean:.2f} is NOT a fusion win — it ties z-scored-EEG-alone (~0.581) and "
-          "z-concat-LDA (~0.578).")
-    logger.info("  The lift over raw fNIRS (0.474) is per-subject z-scoring rescuing EEG (0.407->0.581), NOT the "
-          "gate; the gate captures no oracle headroom (see run_fusion + the ablation).")
-
-    run_dir = Path(args.out) if args.out else Path("runs") / "fusion_gate_cross_subject_kfold_shin2017_nback"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    res = {"method": "fusion_gate", "regime": "cross_subject_kfold", "n_classes": n_classes,
-           "fold_mean": {"acc": fold_mean}, "per_role_mean": {"gate": fold_mean},
-           "pooled_acc": gate, "acc_std": std, "per_fold": rows}
-    (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
-    if not args.no_record:
-        results.Results.record(run_dir)
-    logger.info(f"-> {run_dir}/aggregate.json")
+        run_dir = Path(args.out) if args.out else Path("runs") / "fusion_gate_cross_subject_kfold_shin2017_nback"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        res = {"method": "fusion_gate", "regime": "cross_subject_kfold", "n_classes": n_classes,
+               "fold_mean": {"acc": fold_mean}, "per_role_mean": {"gate": fold_mean},
+               "pooled_acc": gate, "acc_std": std, "per_fold": rows}
+        (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
+        if not args.no_record:
+            results.Results.record(run_dir)
+        logger.info(f"-> {run_dir}/aggregate.json")
 
 
 if __name__ == "__main__":
-    main()
+    FusionGate.main()

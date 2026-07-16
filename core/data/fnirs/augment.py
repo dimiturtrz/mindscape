@@ -35,8 +35,8 @@ class Augment:
     """Domain-randomization augmentation for fNIRS cross-subject robustness (bd jdh) — the free helper folded
     in as a staticmethod (public name kept)."""
 
-    @staticmethod
-    def domain_randomize(hbo: Float[np.ndarray, "*batch ch t"], hbr: Float[np.ndarray, "*batch ch t"], fs: float,
+    @classmethod
+    def domain_randomize(cls, hbo: Float[np.ndarray, "*batch ch t"], hbr: Float[np.ndarray, "*batch ch t"], fs: float,
                          cfg: AugConfig | None = None,
                          seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
         """Randomize the nuisance axes of paired (HbO, HbR) for cross-subject robustness (bd jdh). Accepts a
@@ -58,7 +58,7 @@ class Augment:
 
         gain = rng.lognormal(0.0, gain_sigma, (n, ch, 1))
         sys_cfg = SynthConfig(systemic_amp=systemic_amp)
-        systemic = Synthetic._systemic(n * ch, t, fs, sys_cfg, rng).reshape(n, ch, t)   # common-mode, per channel
+        systemic = Synthetic.systemic(n * ch, t, fs, sys_cfg, rng).reshape(n, ch, t)   # common-mode, per channel
         shifts = rng.integers(-int(max_shift_s * fs), int(max_shift_s * fs) + 1, n)
 
         out_o = np.empty_like(o)

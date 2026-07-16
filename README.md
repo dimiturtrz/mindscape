@@ -313,6 +313,20 @@ preview at [`/architecture/preview/`](https://dimiturtrz.github.io/mindscape/arc
 by the repo's own `pages.yml`. `nox -s archmap` regenerates `docs/architecture/graph.json` (committed +
 diffable — the architecture-erosion record; the `index.html` viewer is gitignored, rebuilt on demand).
 
+## Local hooks
+
+The same gates CI enforces are bound to git events via pre-commit. Install **both** stages:
+
+```bash
+pre-commit install                        # commit stage — fast static gates (ruff/vulture/arch-fitness/…)
+pre-commit install --hook-type pre-push   # push stage — fast unit suite (tests/unit)
+```
+
+The pre-push hook runs `pytest tests/unit` so a change that lints clean but breaks a test **contract** (a
+signature change a mirror test still calls the old way) is caught before the push, not after CI goes red. It
+is deliberately push-only (not every commit) and unit-only (no integration/e2e); the coverage floor stays a
+CI job. The default `pre-commit install` does **not** wire pre-push — run the second line once per clone.
+
 ## References
 - **BCI Competition IV-2a** — Tangermann et al., *Review of the BCI Competition IV*, Front. Neurosci. 2012.
 - **Shin 2017 (hybrid EEG+fNIRS n-back)** — Shin et al., *Open Access Dataset for EEG+NIRS Single-Trial Classification*, IEEE TNSRE 2017 (data: TU Berlin DepositOnce, DOI 10.14279/depositonce-5830.2). CBSI: Cui et al., *A quantitative comparison of NIRS and fMRI*, NeuroImage 2011.

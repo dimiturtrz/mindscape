@@ -26,72 +26,72 @@ class DescriptorBank:
     """fNIRS descriptor bank — the wide per-channel temporal-feature family set (free helpers folded in as
     staticmethods, public names kept). `FNIRS_FEATURE_FNS` maps family name -> the staticmethod."""
 
-    @staticmethod
-    def _slope(X: np.ndarray, tc: np.ndarray, tc_ss: float) -> np.ndarray:
+    @classmethod
+    def _slope(cls, X: np.ndarray, tc: np.ndarray, tc_ss: float) -> np.ndarray:
         """OLS slope of each channel over the (centred) time axis — the response's trend."""
         return (X * tc).sum(axis=2) / tc_ss
 
-    @staticmethod
-    def _f_mean(X):    return X.mean(axis=2)                                    # response amplitude
-    @staticmethod
-    def _f_var(X):     return X.var(axis=2)                                     # response variability
-    @staticmethod
-    def _f_min(X):     return X.min(axis=2)
-    @staticmethod
-    def _f_max(X):     return X.max(axis=2)
-    @staticmethod
-    def _f_range(X):   return X.max(axis=2) - X.min(axis=2)
-    @staticmethod
-    def _f_auc(X):     return np.trapezoid(X, axis=2)                           # area under the response (trapezoid)
-    @staticmethod
-    def _f_final(X):   return X[:, :, -max(1, X.shape[2] // 10):].mean(axis=2)  # plateau (last ~10% of window)
+    @classmethod
+    def f_mean(cls, X):    return X.mean(axis=2)                                    # response amplitude
+    @classmethod
+    def f_var(cls, X):     return X.var(axis=2)                                     # response variability
+    @classmethod
+    def f_min(cls, X):     return X.min(axis=2)
+    @classmethod
+    def f_max(cls, X):     return X.max(axis=2)
+    @classmethod
+    def f_range(cls, X):   return X.max(axis=2) - X.min(axis=2)
+    @classmethod
+    def f_auc(cls, X):     return np.trapezoid(X, axis=2)                 # area under the response (trapezoid)
+    @classmethod
+    def f_final(cls, X):   return X[:, :, -max(1, X.shape[2] // 10):].mean(axis=2)  # plateau (last ~10% of window)
 
-    @staticmethod
-    def _f_peak(X):
+    @classmethod
+    def f_peak(cls, X):
         idx = np.abs(X).argmax(axis=2)                                          # signed extreme (max |value|)
         return np.take_along_axis(X, idx[:, :, None], axis=2)[:, :, 0]
 
-    @staticmethod
-    def _f_time_to_peak(X):
+    @classmethod
+    def f_time_to_peak(cls, X):
         return np.abs(X).argmax(axis=2).astype(np.float32) / X.shape[2]         # latency of the extreme, in [0,1)
 
-    @staticmethod
-    def _f_skew(X):
+    @classmethod
+    def f_skew(cls, X):
         return np.nan_to_num(skew(X, axis=2)).astype(np.float32)               # asymmetry (flat channel -> 0)
 
-    @staticmethod
-    def _f_kurtosis(X):
+    @classmethod
+    def f_kurtosis(cls, X):
         return np.nan_to_num(kurtosis(X, axis=2)).astype(np.float32)          # peakedness (flat channel -> 0)
 
-    @staticmethod
-    def _f_zero_crossings(X):
+    @classmethod
+    def f_zero_crossings(cls, X):
         return (np.diff(np.signbit(X), axis=2).sum(axis=2)).astype(np.float32)  # # sign changes over time
 
-    @staticmethod
-    def _f_slope(X):
-        tc, tc_ss = Amplitude._time_axis(X.shape[2])
-        return DescriptorBank._slope(X, tc, tc_ss)
+    @classmethod
+    def f_slope(cls, X):
+        tc, tc_ss = Amplitude.time_axis(X.shape[2])
+        return cls._slope(X, tc, tc_ss)
 
-    @staticmethod
-    def _f_early_slope(X):
+    @classmethod
+    def f_early_slope(cls, X):
         h = X.shape[2] // 2                                                     # first-half rise
-        tc, tc_ss = Amplitude._time_axis(h)
-        return DescriptorBank._slope(X[:, :, :h], tc, tc_ss)
+        tc, tc_ss = Amplitude.time_axis(h)
+        return cls._slope(X[:, :, :h], tc, tc_ss)
 
-    @staticmethod
-    def _f_late_slope(X):
+    @classmethod
+    def f_late_slope(cls, X):
         h = X.shape[2] // 2                                                     # second-half plateau/decay
         Xl = X[:, :, h:]
-        tc, tc_ss = Amplitude._time_axis(Xl.shape[2])
-        return DescriptorBank._slope(Xl, tc, tc_ss)
+        tc, tc_ss = Amplitude.time_axis(Xl.shape[2])
+        return cls._slope(Xl, tc, tc_ss)
 
-    @staticmethod
-    def family_names() -> list[str]:
+    @classmethod
+    def family_names(cls) -> list[str]:
         """The descriptor families, in column order."""
         return list(FNIRS_FEATURE_FNS)
 
-    @staticmethod
-    def extract_bank(X: Float[np.ndarray, "n ch t"]) -> tuple[np.ndarray, np.ndarray]:
+    @classmethod
+    def extract_bank(cls, X: Float[np.ndarray, "n ch t"]) -> tuple[np.ndarray, np.ndarray]:
         """Extract every family and concatenate: `X[n,ch,t]` -> `(F[n, ch*K], fam[ch*K])`. `fam[j]` is the
         family name of column j, so a per-family weight maps to its channels via `fam == name`. f64 for a
         stable scaler downstream (the study standardises then weights)."""
@@ -106,12 +106,12 @@ class DescriptorBank:
 
 # name -> fn(X[n,ch,t]) -> [n,ch]. Order fixed (dict is insertion-ordered) so columns are deterministic.
 FNIRS_FEATURE_FNS = {
-    "mean": DescriptorBank._f_mean, "slope": DescriptorBank._f_slope, "peak": DescriptorBank._f_peak,
-    "variance": DescriptorBank._f_var, "skew": DescriptorBank._f_skew, "kurtosis": DescriptorBank._f_kurtosis,
-    "auc": DescriptorBank._f_auc, "time_to_peak": DescriptorBank._f_time_to_peak, "min": DescriptorBank._f_min,
-    "max": DescriptorBank._f_max, "range": DescriptorBank._f_range, "final": DescriptorBank._f_final,
-    "early_slope": DescriptorBank._f_early_slope, "late_slope": DescriptorBank._f_late_slope,
-    "zero_crossings": DescriptorBank._f_zero_crossings,
+    "mean": DescriptorBank.f_mean, "slope": DescriptorBank.f_slope, "peak": DescriptorBank.f_peak,
+    "variance": DescriptorBank.f_var, "skew": DescriptorBank.f_skew, "kurtosis": DescriptorBank.f_kurtosis,
+    "auc": DescriptorBank.f_auc, "time_to_peak": DescriptorBank.f_time_to_peak, "min": DescriptorBank.f_min,
+    "max": DescriptorBank.f_max, "range": DescriptorBank.f_range, "final": DescriptorBank.f_final,
+    "early_slope": DescriptorBank.f_early_slope, "late_slope": DescriptorBank.f_late_slope,
+    "zero_crossings": DescriptorBank.f_zero_crossings,
 }
 
 

@@ -48,8 +48,8 @@ class Recipes:
     """The fixed-recipe fNIRS confirmation helpers (free functions folded in as staticmethods, public names
     kept)."""
 
-    @staticmethod
-    def _cv(F, fam, y, groups, families):
+    @classmethod
+    def _cv(cls, F, fam, y, groups, families):
         Fr = F[:, np.isin(fam, families)]
         accs, kaps = [], []
         for tr, te in Cv.grouped_folds(Fr, y, groups, _SEEDS, _K):
@@ -60,8 +60,8 @@ class Recipes:
             kaps.append(metrics.Metrics.kappa(y[te], pred))
         return float(np.mean(accs)), float(np.std(accs)), float(np.mean(kaps))
 
-    @staticmethod
-    def _record(key, acc, kappa, n_classes):
+    @classmethod
+    def _record(cls, key, acc, kappa, n_classes):
         """Write a harness-schema aggregate for this recipe and merge it into results.json (marker-backing)."""
         run = f"fnirs_recipe_{key}_{_DATASET}"
         run_dir = REPO / "runs" / run
@@ -72,30 +72,30 @@ class Recipes:
         }, indent=2))
         return results.Results.record(run_dir)
 
-
-def main():
-    Cli.setup_logging()
-    meta = store.Store.load(_DATASET, FnirsCfg())
-    X, y = store.Store.gather(meta)
-    groups = meta["subject"].to_numpy()
-    F, fam = DescriptorBank.extract_bank(X)
-    n_classes = int(y.max()) + 1
-    chance = 1.0 / n_classes
-    logger.info(f"fNIRS feature recipes · Shin n-back · {len(y)} blocks · {meta['subject'].n_unique()} subjects · "
-          f"{len(_SEEDS)}x{_K}-fold GroupKFold · chance {chance:.3f}\n")
-    logger.info(f"  {'recipe':<22}{'acc':>7} {'±sd':>6} {'kappa':>7}  #fam")
-    accs = {}
-    for key, (label, fams) in _RECIPES.items():
-        acc, sd, kap = Recipes._cv(F, fam, y, groups, fams)
-        accs[key] = acc
-        Recipes._record(key, acc, kap, n_classes)
-        logger.info(f"  {label:<22}{acc:>7.3f} {sd:>6.3f} {kap:>7.3f}  {len(fams)}")
-    verdict = ("slope alone matches/beats the triple" if accs["slope_only"] >= accs["amplitude"] - 0.01
-               else "triple beats slope alone")
-    logger.info(f"\n  slope-only vs amplitude-baseline: {accs['slope_only'] - accs['amplitude']:+.3f}  "
-          f"({verdict})")
-    logger.info("  recorded to results.json — run `sync_numbers` to push into the README")
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        meta = store.Store.load(_DATASET, FnirsCfg())
+        X, y = store.Store.gather(meta)
+        groups = meta["subject"].to_numpy()
+        F, fam = DescriptorBank.extract_bank(X)
+        n_classes = int(y.max()) + 1
+        chance = 1.0 / n_classes
+        logger.info(f"fNIRS feature recipes · Shin n-back · {len(y)} blocks · {meta['subject'].n_unique()} subjects · "
+              f"{len(_SEEDS)}x{_K}-fold GroupKFold · chance {chance:.3f}\n")
+        logger.info(f"  {'recipe':<22}{'acc':>7} {'±sd':>6} {'kappa':>7}  #fam")
+        accs = {}
+        for key, (label, fams) in _RECIPES.items():
+            acc, sd, kap = cls._cv(F, fam, y, groups, fams)
+            accs[key] = acc
+            cls._record(key, acc, kap, n_classes)
+            logger.info(f"  {label:<22}{acc:>7.3f} {sd:>6.3f} {kap:>7.3f}  {len(fams)}")
+        verdict = ("slope alone matches/beats the triple" if accs["slope_only"] >= accs["amplitude"] - 0.01
+                   else "triple beats slope alone")
+        logger.info(f"\n  slope-only vs amplitude-baseline: {accs['slope_only'] - accs['amplitude']:+.3f}  "
+              f"({verdict})")
+        logger.info("  recorded to results.json — run `sync_numbers` to push into the README")
 
 
 if __name__ == "__main__":
-    main()
+    Recipes.main()
