@@ -11,4 +11,5 @@ jscpd_paths: core neuroscan
 lint_paths: core neuroscan
 packages: core,neuroscan
 project_name: mindscape
+repo_url: https://github.com/dimiturtrz/mindscape
 
