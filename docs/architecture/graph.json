@@ -772,6 +772,11 @@
     },
     {
       "source": "neuroscan.tasks.visual.train_nice",
+      "target": "core.features.eeg.montage",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.train_nice",
       "target": "neuroscan.evaluation.invariants",
       "weight": 1
     },
