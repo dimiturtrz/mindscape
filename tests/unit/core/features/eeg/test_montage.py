@@ -27,3 +27,29 @@ def testto_unit_disk_centers_and_scales():
     out = EegMontage.to_unit_disk(raw)
     assert np.allclose(out.mean(0), 0.0, atol=1e-6)        # centred on the mean
     assert np.hypot(out[:, 0], out[:, 1]).max() <= 1.0 + 1e-6
+
+
+def test_channel_laplacian_is_valid_graph_laplacian():
+    pos = EegMontage.eeg_positions(["Cz", "Fz", "Pz", "Oz", "C3", "C4"])
+    lap = EegMontage.channel_laplacian(pos, sigma=0.3)
+    assert lap.shape == (len(pos), len(pos))
+    assert np.allclose(lap, lap.T, atol=1e-6)              # symmetric (undirected graph)
+    assert np.allclose(lap.sum(1), 0.0, atol=1e-5)         # row sums zero: L = D − A, constant is the null vector
+    eig = np.linalg.eigvalsh(lap)
+    assert eig.min() >= -1e-5                              # positive-semidefinite (a real Laplacian)
+
+
+def test_channel_laplacian_penalizes_neighbor_difference():
+    pos = EegMontage.eeg_positions(["Cz", "Fz", "Pz", "Oz", "C3", "C4"])
+    lap = EegMontage.channel_laplacian(pos, sigma=0.3)
+    f_const = np.ones(len(pos))
+    f_rough = np.arange(len(pos), dtype=float)
+    assert abs(f_const @ lap @ f_const) < 1e-5            # smooth (constant) signal: zero penalty
+    assert f_rough @ lap @ f_rough > 0.0                  # a signal varying across neighbours pays a positive cost
+
+
+def test_channel_laplacian_narrower_sigma_fewer_edges():
+    pos = EegMontage.eeg_positions(["Cz", "Fz", "Pz", "Oz", "C3", "C4"])
+    deg_wide = np.diag(EegMontage.channel_laplacian(pos, sigma=0.5)).sum()
+    deg_narrow = np.diag(EegMontage.channel_laplacian(pos, sigma=0.15)).sum()
+    assert deg_narrow < deg_wide                          # tighter RBF -> weaker/fewer edges -> lower total degree

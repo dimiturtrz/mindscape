@@ -34,6 +34,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.covariance import Covariance
+from core.features.eeg.montage import EegMontage
 from neuroscan.evaluation.invariants import Invariants
 from neuroscan.evaluation.metrics import Metrics
 from neuroscan.models.encoders import NORMALIZE_CHOICES, EncoderRegistry, EncoderSpec
@@ -93,6 +94,10 @@ class TrainConfig(BaseModel):
     sampling: str = "uniform"    # "uniform" | "stratified" (round-robin) | "balanced" (strict, bd 2j2)
     concepts_per_batch: int = 64  # sampling="balanced": concepts × samples = effective batch (64×8=512)
     samples_per_concept: int = 8  # strict equal per-concept representation each batch (bd 2j2)
+    geo_lambda: float = 0.0       # >0 = graph-Laplacian spatial-smoothness prior on the NICE spatial conv (bd 1x0):
+                                  # penalize weight differences between neighbouring electrodes = montage adjacency
+                                  # as a small-data prior. Only bites for encoders exposing geo_penalty (NICE).
+    geo_sigma: float = 0.2        # RBF neighbourhood width (unit-disk radii) for the channel graph (matches nm5 topo)
     hard_beta: float = 0.0        # >0 = online hard-negative weighting in the InfoNCE loss (bd fww)
     soft_tau: float = 0.0         # >0 = concept-aware soft InfoNCE targets from CLIP-target sim (bd lbd) —
                                   # same-concept pairs become partial positives, not false negatives
@@ -119,6 +124,18 @@ class RetrievalSet:
 
 
 @dataclass
+class _StepCtx:
+    """The mutable training components a single epoch/step needs, bundled so `_run_epoch` takes few args: the
+    encoder + its optimizer + learned logit-scale, plus the optional subject-adversary (bd 36g) and geo-prior
+    Laplacian (bd 1x0). None for either aux term = that term is off."""
+    encoder: object
+    optimizer: object
+    logit_scale: object
+    discriminator: object | None
+    geo_lap: object | None
+
+
+@dataclass
 class _FitArrays:
     """The fit-split arrays + their positions, bundled so the per-epoch batch builder takes few args."""
     eeg: np.ndarray
@@ -137,6 +154,7 @@ class TrainData:
     targets: np.ndarray
     concept: np.ndarray
     subject: np.ndarray | None = None
+    positions: np.ndarray | None = None   # [C,2] unit-disk channel positions for the geo-prior (bd 1x0); None = off
 
 
 class TrainNice:
@@ -274,6 +292,41 @@ class TrainNice:
         return encoder, logit_scale, discriminator, optimizer, scheduler
 
     @staticmethod
+    def _geo_laplacian(encoder, data: TrainData, cfg: TrainConfig, device: str):
+        """Channel graph-Laplacian tensor for the spatial-smoothness prior (bd 1x0), or None when the prior is off
+        (geo_lambda=0), no montage positions travelled with the data, or the encoder has no spatial conv to
+        smooth (foundation backbones). Built once per fit; the penalty rides the training loop."""
+        if not (cfg.geo_lambda > 0 and data.positions is not None and hasattr(encoder, "geo_penalty")):
+            return None
+        logger.info(f"geo-prior: graph-Laplacian smoothness lambda={cfg.geo_lambda} sigma={cfg.geo_sigma}")
+        return torch.tensor(EegMontage.channel_laplacian(data.positions, cfg.geo_sigma), device=device)
+
+    @staticmethod
+    def _run_epoch(tr: _StepCtx, steps, lam: float, cfg: TrainConfig, device: str) -> tuple[float, int]:
+        """One training epoch over `steps`; returns (summed batch loss, n_batches). Keeps the per-step loss
+        assembly in one place — InfoNCE (bd, CLIP loss) + optional subject-adversary term (GRL, bd 36g) +
+        optional graph-Laplacian spatial-smoothness prior (bd 1x0) — with the mutable components carried by `tr`."""
+        tr.encoder.train()
+        total_loss, n_batches = 0.0, 0
+        for eeg_batch, target_batch, subj_batch in steps:
+            eeg_batch = eeg_batch.to(device)
+            target_batch = torch.nn.functional.normalize(target_batch.to(device), dim=-1)
+            tr.optimizer.zero_grad()
+            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda" and cfg.amp)):
+                z = tr.encoder(eeg_batch)
+                loss = Nice.clip_infonce(z, target_batch, tr.logit_scale.exp().clamp(max=100),
+                                    hard_beta=cfg.hard_beta, soft_tau=cfg.soft_tau)
+                if tr.discriminator is not None:               # push encoder to be subject-invariant (GRL, bd 36g)
+                    loss = loss + cfg.adv_weight * F.cross_entropy(tr.discriminator(z, lam), subj_batch.to(device))
+                if tr.geo_lap is not None:                     # montage-adjacency smoothness prior (bd 1x0)
+                    loss = loss + cfg.geo_lambda * tr.encoder.geo_penalty(tr.geo_lap)
+            loss.backward()                                    # bf16 autocast needs no GradScaler (unlike fp16)
+            tr.optimizer.step()
+            total_loss += loss.item()
+            n_batches += 1
+        return total_loss, n_batches
+
+    @staticmethod
     def _dann_lambda(progress: float, max_lambda: float, gamma: float = 10.0) -> float:
         """DANN gradient-reversal schedule (Ganin & Lempitsky 2015): ramp 0 -> `max_lambda` as
         `2/(1+exp(-gamma·p)) - 1` over training progress `p ∈ [0,1]`, so the adversary engages gradually once the
@@ -308,29 +361,17 @@ class TrainNice:
             neighbor_groups = TrainNice._concept_neighbor_groups(
                 train_targets[fit_indices], train_concept[fit_indices], cfg.concepts_per_batch)
 
+        tr = _StepCtx(encoder, optimizer, logit_scale, discriminator,
+                      TrainNice._geo_laplacian(encoder, data, cfg, device))   # spatial-smoothness prior (bd 1x0)
+
         fit_data = _FitArrays(train_eeg, train_targets, train_concept, fit_indices, subject)
         best_val, best_state, best_epoch, since_improved, run_start = -1.0, None, -1, 0, time.perf_counter()
         for epoch in range(cfg.epochs):
             lam = (TrainNice._dann_lambda(epoch / max(1, cfg.epochs - 1), cfg.adv_lambda)
                    if cfg.adv_lambda_ramp else cfg.adv_lambda)
             steps = TrainNice._epoch_steps(fit_data, neighbor_groups, cfg, rng, epoch_n)
-            encoder.train()
-            total_loss, n_batches, epoch_start = 0.0, 0, time.perf_counter()
-            for eeg_batch, target_batch, subj_batch in steps:
-                eeg_batch = eeg_batch.to(device)
-                target_batch = torch.nn.functional.normalize(target_batch.to(device), dim=-1)
-                optimizer.zero_grad()
-                with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda" and cfg.amp)):
-                    z = encoder(eeg_batch)
-                    loss = Nice.clip_infonce(z, target_batch, logit_scale.exp().clamp(max=100),
-                                        hard_beta=cfg.hard_beta, soft_tau=cfg.soft_tau)
-                    if discriminator is not None:              # push encoder to be subject-invariant (GRL, bd 36g)
-                        subj_logits = discriminator(z, lam)
-                        loss = loss + cfg.adv_weight * F.cross_entropy(subj_logits, subj_batch.to(device))
-                loss.backward()                                # bf16 autocast needs no GradScaler (unlike fp16)
-                optimizer.step()
-                total_loss += loss.item()
-                n_batches += 1
+            epoch_start = time.perf_counter()
+            total_loss, n_batches = TrainNice._run_epoch(tr, steps, lam, cfg, device)
             scheduler.step()                               # per-epoch LR warmup ramp (no-op when warmup_epochs=0)
 
             train_s = time.perf_counter() - epoch_start
@@ -395,8 +436,9 @@ class TrainNice:
         tags = {"task": "perception-nice", "train": train_subjects, "test": test_subject}
         with Tracking.run("mindscape-perception", f"{cfg.model}_{regime}_test{test_subject}_s{cfg.seed}",
                           params=params, tags=tags):
+            positions = EegMontage.eeg_positions(things.ThingsEeg2.channels()) if cfg.geo_lambda > 0 else None
             encoder, stats = TrainNice.train_encoder(
-                TrainData(train_eeg, train_targets, train_concept, subj_idx), cfg, device)
+                TrainData(train_eeg, train_targets, train_concept, subj_idx, positions), cfg, device)
             test = TrainNice.evaluate(encoder, RetrievalSet(test_eeg, test_concept, test_bank), device)
             single, concept = test["single_trial"], test["concept_avg"]
             Tracking.metrics({"test_single_top1": single[1], "test_single_top5": single[5],
@@ -425,6 +467,9 @@ def main():
     ap.add_argument("--normalize", default=None, choices=NORMALIZE_CHOICES,
                     help="input-normalization chain (bd 4aoz): auto = the per-encoder canonical chain")
     ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument("--geo-lambda", dest="geo_lambda", type=float, default=None,
+                    help="graph-Laplacian spatial-smoothness prior weight (bd 1x0); 0 = off")
+    ap.add_argument("--geo-sigma", dest="geo_sigma", type=float, default=None, help="geo-prior RBF width (unit-disk)")
     ap.add_argument("--patience", type=int, default=None)
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
