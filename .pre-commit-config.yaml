@@ -71,8 +71,24 @@ repos:
         pass_filenames: false
         always_run: true
       - id: magic-literals
-        name: magic-literals — enforced ratchet ([tool.magic_literals] ceiling)
+        name: magic-literals — advisory (recurring literal / repeated key-set report)
         entry: uv run --extra devtools python -m devtools.magic_literals core neuroscan
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: complexity
+        name: complexity — advisory (radon CC ranking; ruff C901 is the fixed gate)
+        entry: uv run --extra devtools python -m devtools.complexity core neuroscan
+        language: system
+        pass_filenames: false
+        always_run: true
+      # Architecture diagrams — REGEN on commit (the formatter pattern, like ruff-format/isort hooks):
+      # rewrites docs/architecture/ from the current import graph. If the structure moved, the diagrams
+      # change -> pre-commit reports the modified files and fails the commit; `git add` them and re-commit.
+      # Doc-gen, not enforcement (import-linter is the directional gate). Manual regen: `nox -s archmap`.
+      - id: archmap
+        name: architecture diagrams — regenerate docs/architecture/ (commit the diff)
+        entry: uv run --extra devtools python -m devtools.archmap core neuroscan
         language: system
         pass_filenames: false
         always_run: true

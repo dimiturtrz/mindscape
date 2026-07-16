@@ -28,6 +28,8 @@ dependencies = [
     "pillow",                # image IO for the CLIP target computation (clip_targets.py)
     "jaxtyping",   # Float[Tensor,"B C H W"] shape/dtype annotations — inert at runtime without a checker (no prod cost)
     "beartype",    # the runtime checker jaxtyping delegates to for live @shapecheck boundaries (see AGENTS.md)
+    "joblib",      # fold-parallel in the eval harness (neuroscan/evaluation/harness.py) — used directly, not just via sklearn
+    "matplotlib",  # the fusion viewer figures (neuroviz/fusion/viz.py) — used directly, not just via mne
 ]
 
 [project.optional-dependencies]
@@ -38,7 +40,7 @@ data = ["osfclient", "openneuro-py"]   # dataset fetch (Stage-3 EEG->image: OSF 
 # update is a one-line `devtools_ref` bump on `copier update`, no source diff in your PRs. Imports as
 # `devtools` (`python -m devtools.graph …`); grimp/networkx arrive transitively. ast-grep/jscpd configs are
 # located from the install via `python -m devtools.config`. Pin lives in .copier-answers.yml (devtools_ref).
-devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.2.0#subdirectory=sdlc-devtools"]
+devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.5.0#subdirectory=sdlc-devtools"]
 source = ["nibabel"]   # EEG->cortex source localization: MNE fsaverage forward/inverse (bd 728; core.features.eeg.source)
 all = ["pytest", "onnx", "onnxruntime"]
 
@@ -53,6 +55,30 @@ include = ["core*", "neuroscan*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "--import-mode=importlib"
+
+# Dependency hygiene (deptry, ENFORCED): imported-but-undeclared (DEP001) / declared-but-unused (DEP002) /
+# transitive (DEP003) imports. noxfile.py imports the `nox` runner (invoked via uvx, deliberately not a
+# project dep) so it's excluded from the scan.
+[tool.deptry]
+extend_exclude = ["noxfile.py"]
+
+# deptry does not scan tests/ (its default exclude), so DEP002 (declared-but-unused) fires for anything
+# only exercised by the test suite or by tooling. PERMANENT ignores (never imported in scanned source by
+# design): the test-runner deps `pytest`/`pytest-cov`, and `sdlc-devtools` (the analyzers, invoked as a CLI
+# `python -m devtools.*`). STARTERS: the runtime deps the scaffold ships for you to build on
+# (numpy/jaxtyping/beartype/pydantic) — they read as unused until you import them.
+[tool.deptry.per_rule_ignores]
+# >>> LOCAL-SLOT: deptry-unused — PRUNE a starter once you wire it (keep pytest/pytest-cov/sdlc-devtools)
+# DEP002 (declared-but-unused): test/tooling deps deptry can't see (pytest/pytest-cov/sdlc-devtools), the
+# scaffold starters (numpy/jaxtyping/beartype/pydantic), and the OPTIONAL-EXTRA deps whose only consumers are
+# coverage-omitted shells or lazy imports deptry doesn't scan — onnx/onnxscript (export/ ONNX path,
+# core/export_onnx.py), osfclient/openneuro-py (data/ dataset fetch), nibabel (source/ fsaverage forward).
+DEP002 = ["pytest", "pytest-cov", "sdlc-devtools", "numpy", "jaxtyping", "beartype", "pydantic",
+          "onnx", "onnxscript", "osfclient", "openneuro-py", "nibabel"]
+# DEP001 (imported-but-undeclared): the external git-repo checkouts under external/ (gitignored, checked out
+# not vendored — CLAUDE.md), never pip deps: EEGPT (`EEGPT_mcae`/`models`, foundation.py) + `benchnirs`.
+DEP001 = ["EEGPT_mcae", "models", "benchnirs"]
+# <<< LOCAL-SLOT: deptry-unused
 
 [tool.ruff]
 line-length = 120
@@ -214,24 +240,10 @@ test_layout = "mirror"   # every logic module needs a unit test: "mirror" = test
                          # (strict, one home); "flat" = test_<name>.py anywhere under tests/; "off" = no check
 # <<< LOCAL-SLOT: arch-thresholds
 
-# magic-literals ENFORCED ratchet (devtools/magic_literals.py) — the recurring-string / repeated-key-set
-# floor is frozen as a ceiling; a NEW magic literal pushes the count over and fails the merge (migrate it
-# to a StrEnum/constant, or raise the ceiling in the same commit with a reason). The MECHANISM is a base
-# gate (all repos run it enforced); the NUMBERS are a per-repo FACT (each repo's legitimate non-enum-able
-# floor differs — column names, framework vocab, path segments). A fresh repo ships 0/0 and ratchets up.
-[tool.magic_literals]
-# >>> LOCAL-SLOT: magic-ceilings — this repo's frozen literal floor (raise only with a documented reason).
-# The floor is DataFrame-schema + metric-key vocab — column names ({run,session,subject,dataset,epoch,
-# label,label_id,file}) and metric keys ({acc,ece,kappa,fold,n}) recurring across the store/eval/results
-# layer. The magic-literals design names exactly these ("column names, framework vocab") as the legitimate
-# non-enum-able floor; frozen as the ratchet baseline (a NEW literal must migrate to a StrEnum or bump this
-# with a reason). Ratchets down as the schema vocab consolidates.
-# 33 -> 34 (bd 4aoz): the normalization-choice vocab ('auto'/'zscore'/'mvnn'/'scale') — the
-# EncoderRegistry.normalization override + the --normalize CLI choices — is the config surface for the chain.
-# A small closed enum of chain names, kept as strings for JSON-config + argparse choices, not sprinkled magic.
-max_strings = 34
-max_key_sets = 10
-# <<< LOCAL-SLOT: magic-ceilings
+# magic-literals + complexity are ADVISORY explorers (devtools/magic_literals.py, devtools/complexity.py) —
+# ranked reports, no gate, no config. The FIXED complexity gate is ruff C901 (CC>10). There is no honest
+# universal magic-literal ceiling (0 too strict, N arbitrary), so it stays a report. If a repo later needs
+# to enforce a budget, add a legislated config knob at that point — a knob is added on real need, not now.
 
 # Shape-contract gate (devtools/shape_contracts.py) — a public array/tensor boundary must carry a
 # jaxtyping shape, not a bare `np.ndarray`/`Tensor`. The universal `ndarray`/`Tensor` are builtin; a
