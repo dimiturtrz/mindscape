@@ -30,20 +30,19 @@ def test_crop_trainer_cpu_smoke(monkeypatch):
     assert np.allclose(p.sum(1), 1.0, atol=1e-4)
 
 
-def test_resolve_registers_every_models_class():
-    """Every `cls` string in MODELS resolves through the explicit registry to an nn.Module subclass —
-    no MODELS entry points at an unregistered braindecode class."""
+def test_every_models_cls_is_an_nn_module():
+    """Each MODELS entry's `cls` is a braindecode nn.Module class (not a name to look up) — a non-net entry
+    would fail here rather than at fit time."""
     import torch
 
     from neuroscan.models import decoders
 
     for spec in decoders.MODELS.values():
-        cls = decoders.BraindecodeClf.resolve(spec["cls"])
-        assert issubclass(cls, torch.nn.Module)
+        assert issubclass(spec["cls"], torch.nn.Module)
 
 
-def test_resolve_unknown_class_raises_listing_registry():
+def test_make_unknown_method_raises_listing_methods():
     from neuroscan.models import decoders
 
-    with pytest.raises(KeyError, match="unregistered braindecode class"):
-        decoders.BraindecodeClf.resolve("NotANet")
+    with pytest.raises(KeyError, match="unknown decoder"):
+        decoders.BraindecodeClf.make("not_a_method")
