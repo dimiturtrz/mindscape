@@ -131,7 +131,18 @@ class BraindecodeClf:
         Xva, yva = BraindecodeClf._take(Xs, y, vi, cl, self.n_test_crops)     # vi is None when no val -> (None, None)
         return Xtr, ytr, Xva, yva
 
+    @staticmethod
+    def _enable_fast_matmul(device: str) -> None:
+        """TF32 for the residual fp32 matmuls (bd 62ak: ~-22% step, the win is in backward) — parity-safe since the
+        loop already runs bf16 autocast, so TF32's 10-bit mantissa is more precise than the bf16 already in use."""
+        if device != "cuda":
+            return
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+
     def fit(self, X, y):
+        BraindecodeClf._enable_fast_matmul(self.device)
         Xs = self.std.fit(X)(X)
         Xtr, ytr, Xva, yva = self._make_train_val(Xs, y)
         xt = torch.tensor(Xtr, device=self.device)

@@ -238,10 +238,23 @@ class TrainNice:
                           batch_size=cfg.batch, shuffle=True, drop_last=True)
 
     @staticmethod
+    def _enable_fast_matmul(device: str) -> None:
+        """TF32 for the residual fp32 matmuls (`high` precision). Measured −22% step time (bd 62ak: the win is in
+        backward, 25.8→17.3 ms) — parity-safe since training already runs bf16 autocast, and TF32's 10-bit mantissa
+        is MORE precise than the bf16 already in use. cudnn.benchmark is deliberately NOT set: measured neutral/worse
+        for the small NICE convs, and variable end-of-epoch batch shapes would re-trigger its autotune."""
+        if device != "cuda":
+            return
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+
+    @staticmethod
     def _build_optim(spec: EncoderSpec, n_subjects: int, cfg: TrainConfig, device: str):
         """Encoder (by `cfg.model`, from the registry) + logit-scale + (optional) subject discriminator under one
         AdamW, plus a linear LR-warmup scheduler (opt-in, bd 07m: scales every group equally so the discriminative
         backbone/head ratio survives the ramp; warmup_epochs=0 -> a no-op constant-1.0 schedule)."""
+        TrainNice._enable_fast_matmul(device)               # every training path builds an optimizer here (bd 62ak)
         encoder = EncoderRegistry.build_encoder(cfg.model, spec).to(device)
         logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
         # per-encoder optimizer groups if the encoder defines them (foundation: discriminative backbone/head LR),
