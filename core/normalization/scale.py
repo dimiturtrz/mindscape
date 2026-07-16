@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import numpy as np
-from jaxtyping import Float
+from jaxtyping import Float, Int
 
 from core.normalization.normalization import Normalizer
 
@@ -11,10 +11,11 @@ class Scale(Normalizer):
     """Multiply every sample by a constant `factor` — **amplitude-preserving**: relative channel amplitudes and
     waveform shape are untouched, only the overall scale changes. This is how a pretrained backbone is fed the
     scale it saw in pretraining rather than a z-score that flattens per-channel amplitude. CBraMod, for
-    instance, was pretrained on microvolts ÷ 100. Stateless — nothing to fit."""
+    instance, was pretrained on microvolts ÷ 100. Stateless — nothing to fit, `groups` ignored."""
 
     def __init__(self, factor: float):
         self.factor = factor
 
-    def apply(self, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch t"]:
+    def apply(self, X: Float[np.ndarray, "n ch t"],
+              groups: Int[np.ndarray, "n"] | None = None) -> Float[np.ndarray, "n ch t"]:
         return (X * self.factor).astype(np.float32)

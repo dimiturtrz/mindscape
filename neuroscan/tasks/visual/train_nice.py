@@ -356,10 +356,21 @@ class TrainNice:
 
         train_eeg, train_concept, train_targets, train_subj, train_cond = TrainNice._load_split(
             train_subjects, "training", cfg)
-        test_eeg, test_concept, _, _, _ = TrainNice._load_split([test_subject], "test", cfg)
-        chain = EncoderRegistry.normalization(cfg.model, cfg.normalize, train_subj, train_cond)  # fit on TRAIN only
-        chain.fit(train_eeg)
-        train_eeg, test_eeg = chain.apply(train_eeg), chain.apply(test_eeg)   # train-fit whitener -> both (no eval fit)
+        test_eeg, test_concept, _, test_subj, _ = TrainNice._load_split([test_subject], "test", cfg)
+        # Per-subject normalization is fit on CALIBRATION epochs, leak-free: every subject's OWN training-image
+        # trials — for the held-out test subject, its training trials, DISJOINT from the scored test-image
+        # trials it is evaluated on. The encoder still trains only on `train_eeg`; this bundle only fits the
+        # whitener. Stateless chains (z-score/scale) ignore the fit data, so one bundle drives every chain.
+        fit_eeg, fit_subj, fit_cond = train_eeg, train_subj, train_cond
+        if test_subject not in train_subjects:
+            calib_eeg, _, _, calib_subj, calib_cond = TrainNice._load_split([test_subject], "training", cfg)
+            fit_eeg = np.concatenate([train_eeg, calib_eeg])
+            fit_subj = np.concatenate([train_subj, calib_subj])
+            fit_cond = np.concatenate([train_cond, calib_cond])
+        chain = EncoderRegistry.normalization(cfg.model, cfg.normalize, fit_subj, fit_cond)
+        chain.fit(fit_eeg)
+        train_eeg = chain.apply(train_eeg, train_subj)   # each subject whitened by its own calibration whitener
+        test_eeg = chain.apply(test_eeg, test_subj)      # test subject's whitener never saw these scored trials
         subj_map = {s: i for i, s in enumerate(sorted(set(train_subjects)))}
         subj_idx = np.array([subj_map[int(s)] for s in train_subj], dtype=np.int64) if cfg.adversarial else None
         test_bank = clip_targets.ClipTargets.concept_prototypes("test")
