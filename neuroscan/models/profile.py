@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import logging
 
-import braindecode.models as M
 import torch
 
-from neuroscan.models.decoders import MODELS
+from neuroscan.models.decoders import MODELS, BraindecodeClf
 from neuroscan.tasks.cli import Cli
 
 logger = logging.getLogger(__name__)
@@ -24,7 +23,7 @@ N_CHANS, N_TIMES, N_CLASSES = 22, 1125, 4
 class Profile:
     @staticmethod
     def profile(cls: str, n_chans=N_CHANS, n_times=N_TIMES, n_classes=N_CLASSES) -> dict:
-        net = getattr(M, cls)(n_chans=n_chans, n_outputs=n_classes, n_times=n_times).eval()
+        net = BraindecodeClf.resolve(cls)(n_chans=n_chans, n_outputs=n_classes, n_times=n_times).eval()
         params = sum(p.numel() for p in net.parameters() if p.requires_grad)
         dummy = torch.zeros(1, n_chans, n_times)
         flops = None

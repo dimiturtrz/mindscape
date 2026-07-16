@@ -16,9 +16,9 @@ import copy
 import logging
 from dataclasses import dataclass
 
-import braindecode.models as bd_models
 import numpy as np
 import torch
+from braindecode.models import ATCNet, Deep4Net, EEGConformer, EEGNetv4, ShallowFBCSPNet
 from pydantic import BaseModel
 
 # standardizers + crops live in transforms.py (independently testable); re-exported under the legacy
@@ -44,6 +44,17 @@ MODELS: dict[str, dict] = {
 }
 DEFAULTS = {"n_train_crops": 16, "n_test_crops": 8, "log_every": 100, "val_frac": 0.2,
             "crop_frac": 0.5, "standardize": "ems"}
+
+# Explicit class registry — the `cls` strings in MODELS resolve here, not via getattr on the braindecode
+# namespace. A validated map (KeyError lists the registered set) instead of an untyped string zoo: adding a
+# net is one import + one line, and a typo fails loud at build time, not with an opaque AttributeError.
+_BD_CLASSES: dict[str, type[torch.nn.Module]] = {
+    "EEGNetv4": EEGNetv4,
+    "ShallowFBCSPNet": ShallowFBCSPNet,
+    "Deep4Net": Deep4Net,
+    "ATCNet": ATCNet,
+    "EEGConformer": EEGConformer,
+}
 
 _MIN_TRIALS_FOR_VAL = 8   # need more than this many trials before carving a held-out val split for early stopping
 
@@ -91,6 +102,15 @@ class BraindecodeClf:
     runs nets and baselines through one path."""
 
     @staticmethod
+    def resolve(cls_name: str) -> type[torch.nn.Module]:
+        """Map a MODELS `cls` string to its braindecode class via the explicit registry — a validated lookup
+        that fails loud (listing the registered set) instead of getattr's opaque AttributeError."""
+        try:
+            return _BD_CLASSES[cls_name]
+        except KeyError:
+            raise KeyError(f"unregistered braindecode class {cls_name!r}; have {sorted(_BD_CLASSES)}") from None
+
+    @staticmethod
     def _take(Xs, y, idx, cl, n_crops):
         """Gather (X, y) for a set of trial indices — cropping into `cl`-length windows when cl is set.
         idx=None (no validation split) returns (None, None), so the caller needs no use_val branch."""
@@ -111,7 +131,7 @@ class BraindecodeClf:
         self.seed = config.seed
         self.std = _standardizer(config.standardize)
         torch.manual_seed(config.seed)                   # vary net init across seeds (seed-averaging)
-        net_cls = getattr(bd_models, arch.cls)   # FIXME(mindscape-i4q5): string->class zoo lookup -> validated registry
+        net_cls = BraindecodeClf.resolve(arch.cls)
         # net consumes crop_len samples when cropping, else the full trial
         self.net = net_cls(n_chans=arch.n_chans, n_outputs=arch.n_classes, n_times=arch.n_times).to(self.device)
 

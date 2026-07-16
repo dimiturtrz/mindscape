@@ -68,10 +68,16 @@ bd close <id>         # Complete work
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd dolt push
+   bd dolt push        # full push; also heals a stale per-write auto-push (see below)
    git push
    git status  # MUST show "up to date with origin"
    ```
+   > **Dolt auto-push `git ref not found: refs/dolt/remotes/.../data/<uuid>` (bd nhi):** bd's per-write
+   > auto-push is INCREMENTAL, keyed on `.beads/push-state.json` (gitignored). If that data ref is GC'd from
+   > the local dolt store the delta can't resolve and every `bd close/create/update` prints the error. It is
+   > cosmetic — the git-tracked `.beads/issues.jsonl` is the source of truth and is never at risk. Heal:
+   > `bd dolt push` (full push, above) OR `rm .beads/push-state.json` — the next write re-establishes a fresh
+   > full push. Upstream bd fragility, not a mindscape-source bug.
 5. **Clean up** - Clear stashes, prune remote branches
 6. **Verify** - All changes committed AND pushed
 7. **Hand off** - Provide context for next session
