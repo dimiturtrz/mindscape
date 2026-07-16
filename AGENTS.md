@@ -194,12 +194,13 @@ matplotlib were promoted transitive→direct), not by widening the ignore.
 
 ### Architecture diagrams — archmap (advisory doc-gen, sdlc-scaffold)
 
-`devtools.archmap core neuroscan` regenerates `docs/architecture/` — one tiered edge-counted mermaid doc per
-package nesting level (box = a package's direct sub-packages, arrow weight = count of module→module imports
-crossing the pair, `Drill:` links descend a tier). **Committed**, so architecture erosion shows up as a diagram
-diff in review. CI runs `--check` **advisory** (warns on stale, never blocks); regenerate with `nox -s archmap`
-and commit the diff. Placement is purely structural (package nesting, no threshold); each doc shows ONE tier —
-2-level nesting in a single diagram would be a scaffold feature (fix upstream, not a mindscape edit).
+`devtools.archmap core neuroscan` regenerates `docs/architecture/` — a committed, diffable **`graph.json`**
+(nodes + weighted module→module import edges; arrow weight = count of imports crossing the pair — the
+architecture-erosion record) plus a self-contained interactive **cytoscape `index.html`** viewer (gitignored,
+~700KB vendored libs, regenerated locally / by the Pages workflow) that **folds/expands packages to any depth**
+and focuses a module's neighbourhood. **Commit the `graph.json` diff**; the pre-commit hook regenerates it, CI
+runs `--check` **advisory** (warns on stale, never blocks). Regenerate with `nox -s archmap`. (v1.6.0's
+any-depth viewer supersedes the old one-tier mermaid `.md` tree and the earlier 2-level-nesting request.)
 
 ### Known-CVE scan — pip-audit (nightly, sdlc-scaffold)
 

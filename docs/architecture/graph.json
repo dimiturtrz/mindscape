@@ -1,0 +1,2074 @@
+{
+  "edges": [
+    {
+      "source": "core.data.eeg.base",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.eeg.bnci2014_001",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.eeg.braindecode_pre",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.eeg.registry",
+      "target": "core.data.registry",
+      "weight": 1
+    },
+    {
+      "source": "core.data.eeg.shin2017_nback_eeg",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.eeg.shin2017_nback_eeg",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.eeg.shin2017_nback_eeg",
+      "target": "core.data.signal",
+      "weight": 1
+    },
+    {
+      "source": "core.data.eeg.things_eeg1",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.eeg.things_eeg1",
+      "target": "core.data.signal",
+      "weight": 1
+    },
+    {
+      "source": "core.data.eeg.things_eeg2",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.eeg.things_eeg2",
+      "target": "core.data.signal",
+      "weight": 1
+    },
+    {
+      "source": "core.data.fnirs.augment",
+      "target": "core.data.fnirs.synthetic",
+      "weight": 1
+    },
+    {
+      "source": "core.data.fnirs.base",
+      "target": "core.data.fnirs.clean",
+      "weight": 1
+    },
+    {
+      "source": "core.data.fnirs.base",
+      "target": "core.data.signal",
+      "weight": 1
+    },
+    {
+      "source": "core.data.fnirs.registry",
+      "target": "core.data.registry",
+      "weight": 1
+    },
+    {
+      "source": "core.data.fnirs.shin2017",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.fnirs.shin2017",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.fnirs.shin2017",
+      "target": "core.data.fnirs.clean",
+      "weight": 1
+    },
+    {
+      "source": "core.data.fnirs.shin2017",
+      "target": "core.data.signal",
+      "weight": 1
+    },
+    {
+      "source": "core.data.registry",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.registry",
+      "target": "core.data.eeg.bnci2014_001",
+      "weight": 1
+    },
+    {
+      "source": "core.data.registry",
+      "target": "core.data.eeg.shin2017_nback_eeg",
+      "weight": 1
+    },
+    {
+      "source": "core.data.registry",
+      "target": "core.data.fnirs.shin2017",
+      "weight": 1
+    },
+    {
+      "source": "core.data.store",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.data.store",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "core.data.store",
+      "target": "core.data.registry",
+      "weight": 1
+    },
+    {
+      "source": "core.features",
+      "target": "core.features.eeg.bandpower",
+      "weight": 1
+    },
+    {
+      "source": "core.features",
+      "target": "core.features.eeg.covariance",
+      "weight": 1
+    },
+    {
+      "source": "core.features",
+      "target": "core.features.fnirs.amplitude",
+      "weight": 1
+    },
+    {
+      "source": "core.features",
+      "target": "core.features.fnirs.bank",
+      "weight": 1
+    },
+    {
+      "source": "core.features.eeg.source",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fnirs.bank",
+      "target": "core.features.fnirs.amplitude",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fnirs.montage",
+      "target": "core.features.eeg.montage",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion",
+      "target": "core.features.eeg.csd",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion",
+      "target": "core.features.eeg.montage",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion",
+      "target": "core.features.fnirs.chromophore",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion",
+      "target": "core.features.fnirs.montage",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion",
+      "target": "core.features.fusion.camera",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion",
+      "target": "core.features.fusion.coupling",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion",
+      "target": "core.features.fusion.series",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion.camera",
+      "target": "core.features.fusion.series",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion.joint_forward",
+      "target": "core.data.fnirs.synthetic",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion.joint_forward",
+      "target": "core.features.eeg.source",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion.series",
+      "target": "core.features.fnirs.chromophore",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion.series",
+      "target": "core.features.fusion.coupling",
+      "weight": 1
+    },
+    {
+      "source": "core.features.fusion.source_prior",
+      "target": "core.features.eeg.source",
+      "weight": 1
+    },
+    {
+      "source": "core.normalization.mvnn",
+      "target": "core.normalization.normalization",
+      "weight": 1
+    },
+    {
+      "source": "core.normalization.scale",
+      "target": "core.normalization.normalization",
+      "weight": 1
+    },
+    {
+      "source": "core.normalization.zscore",
+      "target": "core.normalization.normalization",
+      "weight": 1
+    },
+    {
+      "source": "core.reference",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.calibrate",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.calibrate",
+      "target": "core.data.splits",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.calibrate",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.calibrate",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.calibrate",
+      "target": "neuroscan.models.decoders",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.calibrate",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.calibrate",
+      "target": "neuroscan.tracking",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.harness",
+      "target": "core.data.splits",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.harness",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.harness",
+      "target": "neuroscan.evaluation.diagnostics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.harness",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.harness",
+      "target": "neuroscan.tracking",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.modelcard",
+      "target": "core.reference",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.results",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.results",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.sync_numbers",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.evaluation.sync_numbers",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models",
+      "target": "neuroscan.models.decoders",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.decoders",
+      "target": "neuroscan.models.transforms",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.eegnet",
+      "target": "neuroscan.models.decoders",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.encoders",
+      "target": "core.normalization.mvnn",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.encoders",
+      "target": "core.normalization.normalization",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.encoders",
+      "target": "core.normalization.scale",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.encoders",
+      "target": "core.normalization.zscore",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.encoders",
+      "target": "neuroscan.models.encoder_spec",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.encoders",
+      "target": "neuroscan.models.foundation",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.encoders",
+      "target": "neuroscan.models.nice",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.foundation",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.foundation",
+      "target": "neuroscan.models.composite",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.foundation",
+      "target": "neuroscan.models.encoder_spec",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.foundation",
+      "target": "neuroscan.models.lora",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.profile",
+      "target": "neuroscan.models.decoders",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.models.profile",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.align",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.align",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.align",
+      "target": "core.data.splits",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.align",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.align",
+      "target": "core.features",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.align",
+      "target": "core.reference",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.align",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.align",
+      "target": "neuroscan.evaluation.results",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.align",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.align",
+      "target": "neuroscan.tracking",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.quantize",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.quantize",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.quantize",
+      "target": "core.export_onnx",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.quantize",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.quantize",
+      "target": "neuroscan.models.decoders",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.quantize",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.quantize",
+      "target": "neuroscan.tracking",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.reproduce_atcnet",
+      "target": "core.data.eeg.braindecode_pre",
+      "weight": 2
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.reproduce_atcnet",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.reproduce_atcnet",
+      "target": "neuroscan.models.decoders",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.reproduce_atcnet",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.motor_imagery.reproduce_atcnet",
+      "target": "neuroscan.tracking",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.reproduce_all",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.reproduce_all",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.reproduce_all",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.reproduce_all",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.reproduce_all",
+      "target": "neuroscan.evaluation.harness",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.reproduce_all",
+      "target": "neuroscan.evaluation.results",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.reproduce_all",
+      "target": "neuroscan.models",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.reproduce_all",
+      "target": "neuroscan.models.decoders",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.reproduce_all",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.run",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.run",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.run",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.run",
+      "target": "core.reference",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.run",
+      "target": "neuroscan.evaluation.harness",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.run",
+      "target": "neuroscan.evaluation.modelcard",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.run",
+      "target": "neuroscan.evaluation.results",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.run",
+      "target": "neuroscan.models",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.run",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.clip_targets",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.clip_targets",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.cross_dataset_eval",
+      "target": "core.data.eeg.things_eeg1",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.cross_dataset_eval",
+      "target": "core.data.eeg.things_eeg2",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.cross_dataset_eval",
+      "target": "core.normalization.zscore",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.cross_dataset_eval",
+      "target": "neuroscan.evaluation.cross_dataset",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.cross_dataset_eval",
+      "target": "neuroscan.evaluation.retrieval",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.cross_dataset_eval",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.cross_dataset_eval",
+      "target": "neuroscan.tasks.visual.clip_targets",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.cross_dataset_eval",
+      "target": "neuroscan.tasks.visual.train_nice",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.frozen_head",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.frozen_head",
+      "target": "core.data.eeg.things_eeg2",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.frozen_head",
+      "target": "core.features.eeg.montage",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.frozen_head",
+      "target": "neuroscan.models.composite",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.frozen_head",
+      "target": "neuroscan.models.encoders",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.frozen_head",
+      "target": "neuroscan.models.foundation",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.frozen_head",
+      "target": "neuroscan.models.nice",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.frozen_head",
+      "target": "neuroscan.tasks.visual.clip_targets",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.frozen_head",
+      "target": "neuroscan.tracking",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.loso_eval",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.loso_eval",
+      "target": "neuroscan.tasks.visual.train_nice",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.paired_delta",
+      "target": "neuroscan.evaluation.invariants",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.paired_delta",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.paired_delta",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.retrieval_audit",
+      "target": "core.data.eeg.things_eeg2",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.retrieval_audit",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.retrieval_audit",
+      "target": "neuroscan.tasks.visual.train_nice",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.seed_parity",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.seed_parity",
+      "target": "neuroscan.tasks.visual.train_nice",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.train_nice",
+      "target": "core.data.eeg.things_eeg2",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.train_nice",
+      "target": "core.features.eeg.covariance",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.train_nice",
+      "target": "neuroscan.evaluation.invariants",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.train_nice",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.train_nice",
+      "target": "neuroscan.models.encoders",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.train_nice",
+      "target": "neuroscan.models.nice",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.train_nice",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.train_nice",
+      "target": "neuroscan.tasks.visual.clip_targets",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.train_nice",
+      "target": "neuroscan.tasks.visual.sampling",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.train_nice",
+      "target": "neuroscan.tracking",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload._eval",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.augment_probe",
+      "target": "core.data.fnirs.augment",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.augment_probe",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.augment_probe",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.augment_probe",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.augment_probe",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.calibration_ablation",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.calibration_ablation",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.calibration_ablation",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.calibration_ablation",
+      "target": "core.features",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.calibration_ablation",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.calibration_ablation",
+      "target": "neuroscan.evaluation.results",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.calibration_ablation",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.coupling_probe",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.coupling_probe",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.coupling_probe",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.coupling_probe",
+      "target": "core.features.fusion",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.coupling_probe",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.differentiable",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.differentiable",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.differentiable",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.differentiable",
+      "target": "core.features",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.differentiable",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.differentiable",
+      "target": "neuroscan.tasks.workload.feature_importance._cv",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.optuna_search",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.optuna_search",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.optuna_search",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.optuna_search",
+      "target": "core.features",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.optuna_search",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.optuna_search",
+      "target": "neuroscan.tasks.workload.feature_importance._cv",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.recipes",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.recipes",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.recipes",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.recipes",
+      "target": "core.features",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.recipes",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.recipes",
+      "target": "neuroscan.evaluation.results",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.recipes",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.feature_importance.recipes",
+      "target": "neuroscan.tasks.workload.feature_importance._cv",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fnirs_clean_ablation",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fnirs_clean_ablation",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fnirs_clean_ablation",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fnirs_clean_ablation",
+      "target": "neuroscan.tasks.workload._eval",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fnirs_glm_eval",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fnirs_glm_eval",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fnirs_glm_eval",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fnirs_glm_eval",
+      "target": "neuroscan.tasks.workload._eval",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fnirs_windowed_eval",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fnirs_windowed_eval",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fnirs_windowed_eval",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fnirs_windowed_eval",
+      "target": "neuroscan.tasks.workload._eval",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_camera_eval",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_camera_eval",
+      "target": "core.data.eeg.shin2017_nback_eeg",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_camera_eval",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_camera_eval",
+      "target": "core.data.fnirs.shin2017",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_camera_eval",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_camera_eval",
+      "target": "core.features.fusion",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_camera_eval",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_camera_eval",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_gate",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_gate",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_gate",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_gate",
+      "target": "core.features",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_gate",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_gate",
+      "target": "neuroscan.evaluation.results",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_gate",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_riemann_eval",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_riemann_eval",
+      "target": "core.data.eeg.shin2017_nback_eeg",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_riemann_eval",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_riemann_eval",
+      "target": "core.data.fnirs.shin2017",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_riemann_eval",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_riemann_eval",
+      "target": "core.features.fusion",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_riemann_eval",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.fusion_riemann_eval",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.repro_benchnirs",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.riemann",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fnirs",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fnirs",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fnirs",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fnirs",
+      "target": "neuroscan.evaluation.harness",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fnirs",
+      "target": "neuroscan.evaluation.results",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fnirs",
+      "target": "neuroscan.models",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fnirs",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fusion",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fusion",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fusion",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fusion",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fusion",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fusion",
+      "target": "neuroscan.models",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.run_fusion",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_decode",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_decode",
+      "target": "core.data.eeg.shin2017_nback_eeg",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_decode",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_decode",
+      "target": "core.features.eeg.source",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_decode",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_decode",
+      "target": "neuroscan.tasks.workload.riemann",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_prior_decode",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_prior_decode",
+      "target": "core.data.eeg.shin2017_nback_eeg",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_prior_decode",
+      "target": "core.data.fnirs.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_prior_decode",
+      "target": "core.data.fnirs.shin2017",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_prior_decode",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_prior_decode",
+      "target": "core.features.eeg.montage",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_prior_decode",
+      "target": "core.features.eeg.source",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_prior_decode",
+      "target": "core.features.fnirs.montage",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_prior_decode",
+      "target": "core.features.fusion.source_prior",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_prior_decode",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.source_prior_decode",
+      "target": "neuroscan.tasks.workload.riemann",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.validate_coupling",
+      "target": "core.data.fnirs.synthetic",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.validate_coupling",
+      "target": "core.features.fnirs.chromophore",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.validate_coupling",
+      "target": "core.features.fusion.coupling",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.workload_confusion",
+      "target": "core.data.eeg.base",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.workload_confusion",
+      "target": "core.data.store",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.workload_confusion",
+      "target": "neuroscan.evaluation.metrics",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.workload.workload_confusion",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tracking",
+      "target": "core.config",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tracking",
+      "target": "neuroscan.evaluation.results",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tracking",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    }
+  ],
+  "nodes": [
+    {
+      "descendants": 46,
+      "id": "core",
+      "label": "core",
+      "parent": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.config",
+      "label": "config",
+      "parent": "core"
+    },
+    {
+      "descendants": 19,
+      "id": "core.data",
+      "label": "data",
+      "parent": "core"
+    },
+    {
+      "descendants": 7,
+      "id": "core.data.eeg",
+      "label": "eeg",
+      "parent": "core.data"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.eeg.base",
+      "label": "base",
+      "parent": "core.data.eeg"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.eeg.bnci2014_001",
+      "label": "bnci2014_001",
+      "parent": "core.data.eeg"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.eeg.braindecode_pre",
+      "label": "braindecode_pre",
+      "parent": "core.data.eeg"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.eeg.registry",
+      "label": "registry",
+      "parent": "core.data.eeg"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.eeg.shin2017_nback_eeg",
+      "label": "shin2017_nback_eeg",
+      "parent": "core.data.eeg"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.eeg.things_eeg1",
+      "label": "things_eeg1",
+      "parent": "core.data.eeg"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.eeg.things_eeg2",
+      "label": "things_eeg2",
+      "parent": "core.data.eeg"
+    },
+    {
+      "descendants": 6,
+      "id": "core.data.fnirs",
+      "label": "fnirs",
+      "parent": "core.data"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.fnirs.augment",
+      "label": "augment",
+      "parent": "core.data.fnirs"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.fnirs.base",
+      "label": "base",
+      "parent": "core.data.fnirs"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.fnirs.clean",
+      "label": "clean",
+      "parent": "core.data.fnirs"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.fnirs.registry",
+      "label": "registry",
+      "parent": "core.data.fnirs"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.fnirs.shin2017",
+      "label": "shin2017",
+      "parent": "core.data.fnirs"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.fnirs.synthetic",
+      "label": "synthetic",
+      "parent": "core.data.fnirs"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.registry",
+      "label": "registry",
+      "parent": "core.data"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.signal",
+      "label": "signal",
+      "parent": "core.data"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.splits",
+      "label": "splits",
+      "parent": "core.data"
+    },
+    {
+      "descendants": 0,
+      "id": "core.data.store",
+      "label": "store",
+      "parent": "core.data"
+    },
+    {
+      "descendants": 0,
+      "id": "core.export_onnx",
+      "label": "export_onnx",
+      "parent": "core"
+    },
+    {
+      "descendants": 17,
+      "id": "core.features",
+      "label": "features",
+      "parent": "core"
+    },
+    {
+      "descendants": 5,
+      "id": "core.features.eeg",
+      "label": "eeg",
+      "parent": "core.features"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.eeg.bandpower",
+      "label": "bandpower",
+      "parent": "core.features.eeg"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.eeg.covariance",
+      "label": "covariance",
+      "parent": "core.features.eeg"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.eeg.csd",
+      "label": "csd",
+      "parent": "core.features.eeg"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.eeg.montage",
+      "label": "montage",
+      "parent": "core.features.eeg"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.eeg.source",
+      "label": "source",
+      "parent": "core.features.eeg"
+    },
+    {
+      "descendants": 4,
+      "id": "core.features.fnirs",
+      "label": "fnirs",
+      "parent": "core.features"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.fnirs.amplitude",
+      "label": "amplitude",
+      "parent": "core.features.fnirs"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.fnirs.bank",
+      "label": "bank",
+      "parent": "core.features.fnirs"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.fnirs.chromophore",
+      "label": "chromophore",
+      "parent": "core.features.fnirs"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.fnirs.montage",
+      "label": "montage",
+      "parent": "core.features.fnirs"
+    },
+    {
+      "descendants": 5,
+      "id": "core.features.fusion",
+      "label": "fusion",
+      "parent": "core.features"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.fusion.camera",
+      "label": "camera",
+      "parent": "core.features.fusion"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.fusion.coupling",
+      "label": "coupling",
+      "parent": "core.features.fusion"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.fusion.joint_forward",
+      "label": "joint_forward",
+      "parent": "core.features.fusion"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.fusion.series",
+      "label": "series",
+      "parent": "core.features.fusion"
+    },
+    {
+      "descendants": 0,
+      "id": "core.features.fusion.source_prior",
+      "label": "source_prior",
+      "parent": "core.features.fusion"
+    },
+    {
+      "descendants": 4,
+      "id": "core.normalization",
+      "label": "normalization",
+      "parent": "core"
+    },
+    {
+      "descendants": 0,
+      "id": "core.normalization.mvnn",
+      "label": "mvnn",
+      "parent": "core.normalization"
+    },
+    {
+      "descendants": 0,
+      "id": "core.normalization.normalization",
+      "label": "normalization",
+      "parent": "core.normalization"
+    },
+    {
+      "descendants": 0,
+      "id": "core.normalization.scale",
+      "label": "scale",
+      "parent": "core.normalization"
+    },
+    {
+      "descendants": 0,
+      "id": "core.normalization.zscore",
+      "label": "zscore",
+      "parent": "core.normalization"
+    },
+    {
+      "descendants": 0,
+      "id": "core.reference",
+      "label": "reference",
+      "parent": "core"
+    },
+    {
+      "descendants": 65,
+      "id": "neuroscan",
+      "label": "neuroscan",
+      "parent": null
+    },
+    {
+      "descendants": 10,
+      "id": "neuroscan.evaluation",
+      "label": "evaluation",
+      "parent": "neuroscan"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.evaluation.calibrate",
+      "label": "calibrate",
+      "parent": "neuroscan.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.evaluation.cross_dataset",
+      "label": "cross_dataset",
+      "parent": "neuroscan.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.evaluation.diagnostics",
+      "label": "diagnostics",
+      "parent": "neuroscan.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.evaluation.harness",
+      "label": "harness",
+      "parent": "neuroscan.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.evaluation.invariants",
+      "label": "invariants",
+      "parent": "neuroscan.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.evaluation.metrics",
+      "label": "metrics",
+      "parent": "neuroscan.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.evaluation.modelcard",
+      "label": "modelcard",
+      "parent": "neuroscan.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.evaluation.results",
+      "label": "results",
+      "parent": "neuroscan.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.evaluation.retrieval",
+      "label": "retrieval",
+      "parent": "neuroscan.evaluation"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.evaluation.sync_numbers",
+      "label": "sync_numbers",
+      "parent": "neuroscan.evaluation"
+    },
+    {
+      "descendants": 10,
+      "id": "neuroscan.models",
+      "label": "models",
+      "parent": "neuroscan"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.models.composite",
+      "label": "composite",
+      "parent": "neuroscan.models"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.models.decoders",
+      "label": "decoders",
+      "parent": "neuroscan.models"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.models.eegnet",
+      "label": "eegnet",
+      "parent": "neuroscan.models"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.models.encoder_spec",
+      "label": "encoder_spec",
+      "parent": "neuroscan.models"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.models.encoders",
+      "label": "encoders",
+      "parent": "neuroscan.models"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.models.foundation",
+      "label": "foundation",
+      "parent": "neuroscan.models"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.models.lora",
+      "label": "lora",
+      "parent": "neuroscan.models"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.models.nice",
+      "label": "nice",
+      "parent": "neuroscan.models"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.models.profile",
+      "label": "profile",
+      "parent": "neuroscan.models"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.models.transforms",
+      "label": "transforms",
+      "parent": "neuroscan.models"
+    },
+    {
+      "descendants": 41,
+      "id": "neuroscan.tasks",
+      "label": "tasks",
+      "parent": "neuroscan"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.cli",
+      "label": "cli",
+      "parent": "neuroscan.tasks"
+    },
+    {
+      "descendants": 3,
+      "id": "neuroscan.tasks.motor_imagery",
+      "label": "motor_imagery",
+      "parent": "neuroscan.tasks"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.motor_imagery.align",
+      "label": "align",
+      "parent": "neuroscan.tasks.motor_imagery"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.motor_imagery.quantize",
+      "label": "quantize",
+      "parent": "neuroscan.tasks.motor_imagery"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.motor_imagery.reproduce_atcnet",
+      "label": "reproduce_atcnet",
+      "parent": "neuroscan.tasks.motor_imagery"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.reproduce_all",
+      "label": "reproduce_all",
+      "parent": "neuroscan.tasks"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.run",
+      "label": "run",
+      "parent": "neuroscan.tasks"
+    },
+    {
+      "descendants": 9,
+      "id": "neuroscan.tasks.visual",
+      "label": "visual",
+      "parent": "neuroscan.tasks"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.visual.clip_targets",
+      "label": "clip_targets",
+      "parent": "neuroscan.tasks.visual"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.visual.cross_dataset_eval",
+      "label": "cross_dataset_eval",
+      "parent": "neuroscan.tasks.visual"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.visual.frozen_head",
+      "label": "frozen_head",
+      "parent": "neuroscan.tasks.visual"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.visual.loso_eval",
+      "label": "loso_eval",
+      "parent": "neuroscan.tasks.visual"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.visual.paired_delta",
+      "label": "paired_delta",
+      "parent": "neuroscan.tasks.visual"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.visual.retrieval_audit",
+      "label": "retrieval_audit",
+      "parent": "neuroscan.tasks.visual"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.visual.sampling",
+      "label": "sampling",
+      "parent": "neuroscan.tasks.visual"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.visual.seed_parity",
+      "label": "seed_parity",
+      "parent": "neuroscan.tasks.visual"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.visual.train_nice",
+      "label": "train_nice",
+      "parent": "neuroscan.tasks.visual"
+    },
+    {
+      "descendants": 23,
+      "id": "neuroscan.tasks.workload",
+      "label": "workload",
+      "parent": "neuroscan.tasks"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload._eval",
+      "label": "_eval",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.augment_probe",
+      "label": "augment_probe",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.calibration_ablation",
+      "label": "calibration_ablation",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.coupling_probe",
+      "label": "coupling_probe",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 4,
+      "id": "neuroscan.tasks.workload.feature_importance",
+      "label": "feature_importance",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.feature_importance._cv",
+      "label": "_cv",
+      "parent": "neuroscan.tasks.workload.feature_importance"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.feature_importance.differentiable",
+      "label": "differentiable",
+      "parent": "neuroscan.tasks.workload.feature_importance"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.feature_importance.optuna_search",
+      "label": "optuna_search",
+      "parent": "neuroscan.tasks.workload.feature_importance"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.feature_importance.recipes",
+      "label": "recipes",
+      "parent": "neuroscan.tasks.workload.feature_importance"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.fnirs_clean_ablation",
+      "label": "fnirs_clean_ablation",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.fnirs_glm_eval",
+      "label": "fnirs_glm_eval",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.fnirs_windowed_eval",
+      "label": "fnirs_windowed_eval",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.fusion_camera_eval",
+      "label": "fusion_camera_eval",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.fusion_gate",
+      "label": "fusion_gate",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.fusion_riemann_eval",
+      "label": "fusion_riemann_eval",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.repro_benchnirs",
+      "label": "repro_benchnirs",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.riemann",
+      "label": "riemann",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.run_fnirs",
+      "label": "run_fnirs",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.run_fusion",
+      "label": "run_fusion",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.source_decode",
+      "label": "source_decode",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.source_prior_decode",
+      "label": "source_prior_decode",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.validate_coupling",
+      "label": "validate_coupling",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.workload.workload_confusion",
+      "label": "workload_confusion",
+      "parent": "neuroscan.tasks.workload"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tracking",
+      "label": "tracking",
+      "parent": "neuroscan"
+    }
+  ]
+}
