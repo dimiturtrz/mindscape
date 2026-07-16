@@ -25,7 +25,7 @@ dependencies = [
     "onnxscript>=0.7.1",
     "mlflow>=3.14.0",        # experiment tracking (neuroscan/tracking.py); MINDSCAPE_NO_MLFLOW = off-switch
     "open-clip-torch",       # CLIP image embeddings — the EEG->image retrieval target (Stage-3 NICE baseline)
-    "pillow",                # image IO for the CLIP target computation (clip_targets.py)
+    "pillow>=12.3.0",        # image IO for the CLIP target computation (clip_targets.py); >=12.3.0 clears 8 PYSEC-2026 CVEs (bd 8gqg)
     "jaxtyping",   # Float[Tensor,"B C H W"] shape/dtype annotations — inert at runtime without a checker (no prod cost)
     "beartype",    # the runtime checker jaxtyping delegates to for live @shapecheck boundaries (see AGENTS.md)
     "joblib",      # fold-parallel in the eval harness (neuroscan/evaluation/harness.py) — used directly, not just via sklearn
@@ -50,6 +50,19 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["core*", "neuroscan*"]
+
+# Resolver constraints (bd 8gqg). torch/torchvision/cuda-toolkit are pinned to the current working versions
+# so an unrelated `uv lock` (e.g. the pillow CVE bump) does NOT silently drift the ML stack off the moving
+# cu130 index — a real torch upgrade is a deliberate change gated on `nox test` + a matched re-measure, bumped
+# here on purpose, not as a side effect. NOTE: the setuptools 81.0.0 CVE (PYSEC-2026-3447, fixed in 83.0.0)
+# is BLOCKED here — torch==2.12.1+cu130 requires setuptools<82, so setuptools>=83 is unsatisfiable until the
+# torch upgrade. Deferred to that task (bd 8gqg follow-up); setuptools is build-time, not a runtime surface.
+[tool.uv]
+constraint-dependencies = [
+    "torch==2.12.1+cu130",
+    "torchvision==0.27.1",
+    "cuda-toolkit==13.0.2",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

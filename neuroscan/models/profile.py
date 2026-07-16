@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 
-import braindecode.models as M
 import torch
 
 from neuroscan.models.decoders import MODELS
@@ -23,8 +22,8 @@ N_CHANS, N_TIMES, N_CLASSES = 22, 1125, 4
 
 class Profile:
     @staticmethod
-    def profile(cls: str, n_chans=N_CHANS, n_times=N_TIMES, n_classes=N_CLASSES) -> dict:
-        net = getattr(M, cls)(n_chans=n_chans, n_outputs=n_classes, n_times=n_times).eval()
+    def profile(cls: type[torch.nn.Module], n_chans=N_CHANS, n_times=N_TIMES, n_classes=N_CLASSES) -> dict:
+        net = cls(n_chans=n_chans, n_outputs=n_classes, n_times=n_times).eval()
         params = sum(p.numel() for p in net.parameters() if p.requires_grad)
         dummy = torch.zeros(1, n_chans, n_times)
         flops = None
@@ -34,8 +33,8 @@ class Profile:
             flops = int(FlopCountAnalysis(net, dummy).unsupported_ops_warnings(enabled=False)
                         .uncalled_modules_warnings(enabled=False).total())
         except Exception as e:  # noqa: BLE001
-            logger.info(f"  ({cls}: FLOPs unavailable: {e})")
-        return {"model": cls, "params": int(params), "flops": flops}
+            logger.info(f"  ({cls.__name__}: FLOPs unavailable: {e})")
+        return {"model": cls.__name__, "params": int(params), "flops": flops}
 
     @staticmethod
     def _fmt(n):

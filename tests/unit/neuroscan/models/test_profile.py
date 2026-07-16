@@ -5,8 +5,10 @@ pytest.importorskip("braindecode")
 
 
 def test_profile_reports_params():
+    from braindecode.models import EEGNetv4
+
     from neuroscan.models import profile
-    r = profile.Profile.profile("EEGNetv4")
+    r = profile.Profile.profile(EEGNetv4)          # takes the class, labels by cls.__name__
     assert r["model"] == "EEGNetv4"
     assert r["params"] > 0
     # FLOPs is None if fvcore absent, else a positive count

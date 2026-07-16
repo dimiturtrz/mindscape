@@ -16,9 +16,9 @@ import copy
 import logging
 from dataclasses import dataclass
 
-import braindecode.models as bd_models
 import numpy as np
 import torch
+from braindecode.models import ATCNet, Deep4Net, EEGConformer, EEGNetv4, ShallowFBCSPNet
 from pydantic import BaseModel
 
 # standardizers + crops live in transforms.py (independently testable); re-exported under the legacy
@@ -30,16 +30,18 @@ from neuroscan.models.transforms import Transforms
 # Per-model recipe. `standardize`: "ems" = exponential-moving standardization (braindecode-canonical 2a
 # preprocessing); `crop_frac`: None = feed the FULL trial (for nets with their OWN internal window
 # augmentation — ATCNet, EEGConformer); 0.5 = external 2s sliding-window crops (for nets without it).
+# `cls` is the braindecode class itself (imported above), not a name to look up — a typo is an import error
+# at module load, and `make()` validates the method key, so no separate string→class registry is needed.
 MODELS: dict[str, dict] = {
-    "eegnet":        {"cls": "EEGNetv4",        "epochs": 750, "lr": 1e-3,   "batch": 128,
+    "eegnet":        {"cls": EEGNetv4,        "epochs": 750, "lr": 1e-3,   "batch": 128,
                       "patience": 80, "crop_frac": 0.5,  "standardize": "ems"},
-    "shallow_fbcsp": {"cls": "ShallowFBCSPNet", "epochs": 750, "lr": 6.5e-4, "batch": 128,
+    "shallow_fbcsp": {"cls": ShallowFBCSPNet, "epochs": 750, "lr": 6.5e-4, "batch": 128,
                       "patience": 80, "crop_frac": 0.5,  "standardize": "ems"},
-    "deep4":         {"cls": "Deep4Net",        "epochs": 750, "lr": 1e-3,   "batch": 128,
+    "deep4":         {"cls": Deep4Net,        "epochs": 750, "lr": 1e-3,   "batch": 128,
                       "patience": 80, "crop_frac": 0.5,  "standardize": "ems"},
-    "atcnet":        {"cls": "ATCNet",          "epochs": 750, "lr": 1e-3,   "batch": 128,
+    "atcnet":        {"cls": ATCNet,          "epochs": 750, "lr": 1e-3,   "batch": 128,
                       "patience": 80, "crop_frac": None, "standardize": "ems"},
-    "eegconformer":  {"cls": "EEGConformer",    "epochs": 750, "lr": 1e-3,   "batch": 128,
+    "eegconformer":  {"cls": EEGConformer,    "epochs": 750, "lr": 1e-3,   "batch": 128,
                       "patience": 80, "crop_frac": None, "standardize": "ems"},
 }
 DEFAULTS = {"n_train_crops": 16, "n_test_crops": 8, "log_every": 100, "val_frac": 0.2,
@@ -56,9 +58,9 @@ _standardizer = Transforms.standardizer
 
 @dataclass
 class Arch:
-    """The braindecode model class name + the data-derived input/output shape (channels, time samples the net
+    """The braindecode model class + the data-derived input/output shape (channels, time samples the net
     consumes, class count)."""
-    cls: str
+    cls: type[torch.nn.Module]
     n_chans: int
     n_times: int
     n_classes: int
@@ -111,9 +113,8 @@ class BraindecodeClf:
         self.seed = config.seed
         self.std = _standardizer(config.standardize)
         torch.manual_seed(config.seed)                   # vary net init across seeds (seed-averaging)
-        net_cls = getattr(bd_models, arch.cls)   # FIXME(mindscape-i4q5): string->class zoo lookup -> validated registry
         # net consumes crop_len samples when cropping, else the full trial
-        self.net = net_cls(n_chans=arch.n_chans, n_outputs=arch.n_classes, n_times=arch.n_times).to(self.device)
+        self.net = arch.cls(n_chans=arch.n_chans, n_outputs=arch.n_classes, n_times=arch.n_times).to(self.device)
 
     def _make_train_val(self, Xs, y):
         """Trial-level train/val split (val carved from held-out TRIALS, no crop leakage), then crop."""

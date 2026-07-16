@@ -28,3 +28,21 @@ def test_crop_trainer_cpu_smoke(monkeypatch):
     p = score(clf, X)
     assert p.shape == (n, 4)                      # per-trial, crops averaged back
     assert np.allclose(p.sum(1), 1.0, atol=1e-4)
+
+
+def test_every_models_cls_is_an_nn_module():
+    """Each MODELS entry's `cls` is a braindecode nn.Module class (not a name to look up) — a non-net entry
+    would fail here rather than at fit time."""
+    import torch
+
+    from neuroscan.models import decoders
+
+    for spec in decoders.MODELS.values():
+        assert issubclass(spec["cls"], torch.nn.Module)
+
+
+def test_make_unknown_method_raises_listing_methods():
+    from neuroscan.models import decoders
+
+    with pytest.raises(KeyError, match="unknown decoder"):
+        decoders.BraindecodeClf.make("not_a_method")
