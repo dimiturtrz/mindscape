@@ -147,7 +147,7 @@ ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer"
 # >>> LOCAL-SLOT: vulture-ignore-names — this repo's documented dead-code false positives.
 # Framework-implicit: torch nn.Module.forward (via __call__), ORT SessionOptions.intra_op_num_threads,
 # CBraMod.proj_out (Identity-set to expose backbone features). Referenced, not dead.
-ignore_names = ["model_config", "forward", "intra_op_num_threads", "proj_out"]
+ignore_names = ["model_config", "forward", "intra_op_num_threads", "proj_out", "allow_tf32"]
 # <<< LOCAL-SLOT: vulture-ignore-names
 # >>> LOCAL-SLOT: vulture-scan — edit freely, the template will not overwrite intent here
 paths = ["core", "neuroscan", "baselines"]
