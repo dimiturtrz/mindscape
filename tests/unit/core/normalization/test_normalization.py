@@ -13,7 +13,7 @@ class _MulK(Normalizer):
     def __init__(self, k):
         self.k = k
 
-    def apply(self, X):
+    def apply(self, X, groups=None):
         return X * self.k
 
 
@@ -28,7 +28,7 @@ class _AddK(Normalizer):
         self._ready = self.k
         return self
 
-    def apply(self, X):
+    def apply(self, X, groups=None):
         return X + self._ready
 
 

@@ -56,17 +56,19 @@ class EncoderRegistry:
     def normalization(model: str, override: str = _AUTO, groups: Int[np.ndarray, "n"] | None = None,
                       conditions: Int[np.ndarray, "n"] | None = None) -> CompositeNormalization:
         """The input-normalization chain an encoder expects, as directly-constructed objects (no registry).
-        `override=_AUTO` picks the per-encoder canonical: NICE (and the default) get the official THINGS-EEG2
-        MVNN whitening (which needs `groups`=subject + `conditions`=image per trial); CBraMod + EEGPT get a
-        per-channel z-score. NOTE (bd 7mi4): CBraMod's pretraining scale is microvolts/100 (the `scale` link),
-        and feeding that amplitude-preserving input was the pfad hypothesis — but on the frozen probe it
-        REGRESSED the geometry heads (topo 1.75->1.21) vs z-score, so z-score is the evidenced default. `scale`
-        stays a named override to test the amplitude input under fine-tuning (the open question)."""
+        `override=_AUTO` is **per-channel z-score for every encoder** — the current evidenced default. Two named
+        overrides: `mvnn` (official THINGS-EEG2 per-subject noise whitening — each subject's `Σ^{-1/2}` fit on
+        its OWN calibration/training-image trials, applied to that subject; leak-free and unbatched-real. Clean
+        it is ≈ z-score on NICE single-top1 (1.66 vs 1.60, within single-seed noise; the b40j +0.35 was a
+        transductive LEAK, mild ranking edge + concept-avg cost) — kept as a correct, documented override, NOT
+        the default) and `scale` (CBraMod's pretraining microvolts/100; REGRESSED the frozen geometry heads vs
+        z-score, bd 7mi4). `mvnn` needs `groups`=subject + `conditions`=image aligned with the CALIBRATION
+        epochs it is fit on."""
         if override == "scale":
             return CompositeNormalization([Scale(_CBRAMOD_SCALE)])
-        if override == "mvnn" or (override == _AUTO and not model.startswith(("cbramod", "eegpt"))):
+        if override == "mvnn":
             return CompositeNormalization([Mvnn(groups, conditions)])
-        return CompositeNormalization([ZScore()])   # explicit 'zscore', or the CBraMod/EEGPT canonical
+        return CompositeNormalization([ZScore()])   # _AUTO for every encoder + explicit 'zscore'
 
     @staticmethod
     def _build_nice(spec: EncoderSpec) -> nn.Module:

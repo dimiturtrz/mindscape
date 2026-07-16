@@ -8,29 +8,34 @@ to another (calibration → deployment). A `CompositeNormalization` is itself a 
 of normalizer objects and fit/applied in order — constructed directly (`CompositeNormalization([Scale(1e4)])`),
 no registry.
 
-The interface is deliberately data-only: `fit(X)`/`apply(X)` take just the epochs. A link that needs extra
-structure to fit (MVNN's per-subject, within-condition noise) takes that structure in its **own constructor**,
-so it never leaks into the general interface.
+The fit STRUCTURE (MVNN's per-subject, within-condition grouping of the FIT epochs) lives in a link's **own
+constructor**, aligned with the fit data. `apply` additionally takes an optional `groups` (subject id per row
+of the APPLIED epochs): a per-subject whitener is a *different matrix per subject*, so selecting the right one
+at apply intrinsically needs each row's identity — the fit-data grouping can't stand in for a held-out set the
+constructor never saw. Stateless links (z-score, scale) ignore `groups`, so the common path stays data-only.
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
 import numpy as np
-from jaxtyping import Float
+from jaxtyping import Float, Int
 
 
 class Normalizer(ABC):
     """One normalization step. `fit(X)` learns state (no-op for stateless links, so they need not override it);
-    `apply(X)` returns the transformed epochs, same shape `[n, ch, t]`."""
+    `apply(X, groups)` returns the transformed epochs, same shape `[n, ch, t]`. `groups` (subject id per row)
+    is used only by per-subject links (MVNN) to pick each row's whitener; stateless links ignore it."""
 
     def fit(self, X: Float[np.ndarray, "n ch t"]) -> Normalizer:
         """Learn any state from `X`; stateless links keep this no-op. Returns self."""
         return self
 
     @abstractmethod
-    def apply(self, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch t"]:
-        """Transform the epochs using the fitted state (or none, for a stateless link)."""
+    def apply(self, X: Float[np.ndarray, "n ch t"],
+              groups: Int[np.ndarray, "n"] | None = None) -> Float[np.ndarray, "n ch t"]:
+        """Transform the epochs using the fitted state (or none, for a stateless link). `groups` = subject id
+        per row for per-subject links; `None` for the stateless links that don't need it."""
 
 
 class CompositeNormalization(Normalizer):
@@ -40,16 +45,19 @@ class CompositeNormalization(Normalizer):
     def __init__(self, links: list[Normalizer]):
         self.links = links
 
-    def fit(self, X: Float[np.ndarray, "n ch t"]) -> CompositeNormalization:
+    def fit(self, X: Float[np.ndarray, "n ch t"],
+            groups: Int[np.ndarray, "n"] | None = None) -> CompositeNormalization:
         """Fit each link on the running output of the ones before it (only transforming when a later link still
-        needs the intermediate) — the standard pipeline fit."""
+        needs the intermediate) — the standard pipeline fit. `groups` (the fit epochs' subject ids) is threaded
+        to the intermediate `apply` so a per-subject link mid-chain whitens the fit data by its own grouping."""
         for i, link in enumerate(self.links):
             link.fit(X)
             if i < len(self.links) - 1:
-                X = link.apply(X)
+                X = link.apply(X, groups)
         return self
 
-    def apply(self, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch t"]:
+    def apply(self, X: Float[np.ndarray, "n ch t"],
+              groups: Int[np.ndarray, "n"] | None = None) -> Float[np.ndarray, "n ch t"]:
         for link in self.links:
-            X = link.apply(X)
+            X = link.apply(X, groups)
         return X

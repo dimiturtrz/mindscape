@@ -154,13 +154,40 @@ exceeds 1% (currently 0.7% after the runner boilerplate was DRY-extracted into `
 it ratchets **down** as dup settles. Genuinely-distinct-but-similar-shaped runners are left un-merged (don't
 over-couple to chase the number).
 
-### Magic literals — enforced ratchet (sdlc-scaffold)
+### Magic literals & complexity — advisory explorers (sdlc-scaffold)
 
-`devtools.magic_literals` — recurring string vocab + repeated dict schemas (StrEnum / record candidates),
-the non-comparison axis ruff `PLR2004` can't see. **Blocks** over the `[tool.magic_literals]` ceiling — a
-per-repo FACT frozen at mindscape's DataFrame-schema + metric-key floor (`max_strings=33`, `max_key_sets=10`:
-column names like `{run,session,subject}`, metric keys `{acc,ece,kappa}`). A NEW literal migrates to a
-StrEnum/constant or bumps the ceiling with a documented reason; ratchets **down** as the schema vocab settles.
+`devtools.magic_literals` (recurring string vocab + repeated dict schemas → StrEnum / record candidates, the
+non-comparison axis ruff `PLR2004` can't see) and `devtools.complexity` (radon cyclomatic ranking) run
+**advisory** — ranked reports, no gate, no config. The **fixed** complexity gate stays ruff `C901` (CC>10).
+There is no honest universal magic-literal ceiling (0 too strict, N arbitrary), so it stays a report — the old
+enforced `[tool.magic_literals]` ratchet was **retired** in the v1.5.0 scaffold update; if a repo later needs a
+budget, a config knob is added on real need, not pre-emptively.
+
+### Dependency hygiene — deptry gate (sdlc-scaffold)
+
+`deptry` (`uv run --with deptry==0.25.1 deptry .`, CI + `nox`) — imported-but-undeclared (DEP001),
+declared-but-unused (DEP002), transitive-imported (DEP003). **Blocks the merge.** Config in `[tool.deptry]`:
+`noxfile.py` excluded (imports the `nox` runner, deliberately not a project dep); per-rule ignores in the
+`deptry-unused` LOCAL-SLOT — DEP002 the test/tooling deps + the optional-extra deps whose only consumers are
+coverage-omitted shells (onnx/onnxscript/osfclient/openneuro-py/nibabel), DEP001 the `external/` git-repo
+checkouts (EEGPT_mcae/models/benchnirs, never pip deps). Fix a real hit by **declaring** the dep (as joblib +
+matplotlib were promoted transitive→direct), not by widening the ignore.
+
+### Architecture diagrams — archmap (advisory doc-gen, sdlc-scaffold)
+
+`devtools.archmap core neuroscan` regenerates `docs/architecture/` — one tiered edge-counted mermaid doc per
+package nesting level (box = a package's direct sub-packages, arrow weight = count of module→module imports
+crossing the pair, `Drill:` links descend a tier). **Committed**, so architecture erosion shows up as a diagram
+diff in review. CI runs `--check` **advisory** (warns on stale, never blocks); regenerate with `nox -s archmap`
+and commit the diff. Placement is purely structural (package nesting, no threshold); each doc shows ONE tier —
+2-level nesting in a single diagram would be a scaffold feature (fix upstream, not a mindscape edit).
+
+### Known-CVE scan — pip-audit (nightly, sdlc-scaffold)
+
+`.github/workflows/audit.yml` — `pip-audit --skip-editable` over the resolved dep closure against the PyPA
+advisory DB. **Nightly + manual dispatch, NOT a per-PR gate** (advisories change under you — a new CVE can land
+with no code change on your side), so it goes red on a schedule and notifies rather than blocking a merge.
+`--skip-editable` drops the git/local installs (sdlc-devtools) that carry no PyPI release to look up.
 
 ### Shape contracts — advisory (sdlc-scaffold)
 
@@ -172,8 +199,10 @@ tree is boundary-clean, then the scaffold graduates it to `--assert` (sdlc-scaff
 ### Local gate runners — nox + pre-commit (bd kvo/dno)
 
 `nox` (`noxfile.py`, `devtools` extra) reproduces the CI gate suite locally from one command: `nox` runs
-`lint` (ruff+vulture+import-linter+ast-grep) + `test` (pytest+coverage floor) + `fitness` (graph.py --assert);
-`nox -s dup` adds advisory jscpd. Sessions shell the SAME pinned tools CI uses, so local == CI.
+`lint` (ruff check + ruff format --check + vulture + import-linter + arch-fitness `graph.py --assert` +
+ast-grep + jscpd — all folded into one session as of scaffold v1.5.0) + `test` (pytest) + `cov`
+(pytest+coverage; **enforced floor 80**, 95 advisory-warn). `nox -s archmap` regenerates the arch diagrams,
+`nox -s audit` runs the pip-audit CVE scan. Sessions shell the SAME pinned tools CI uses, so local == CI.
 `.pre-commit-config.yaml` runs the fast static gates (all but test/coverage) before each commit — enable with
 `pre-commit install` (keep it separate from the beads `.beads/hooks/pre-commit`), or one-shot `pre-commit run
 --all-files`.
