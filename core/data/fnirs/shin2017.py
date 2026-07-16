@@ -41,12 +41,12 @@ class Shin2017NirsAdapter:
             if (subj_dir / f"cnt_{self.task}.mat").exists()
         ]
 
-    def _subject_dir(self, sub: int):
+    def subject_dir(self, sub: int):
         return Config.raw_dir() / "shin2017" / f"VP{sub:03d}-NIRS"
 
     def _load_continuous(self, sub: int):
         """Return (cont [72, T] HbO|HbR, fs, onsets[samples], canonical_labels[n]) for one subject."""
-        subj_dir = self._subject_dir(sub)
+        subj_dir = self.subject_dir(sub)
         cnt = sio.loadmat(subj_dir / f"cnt_{self.task}.mat",
                           struct_as_record=False, squeeze_me=True)[f"cnt_{self.task}"]
         mrk = sio.loadmat(subj_dir / f"mrk_{self.task}.mat",

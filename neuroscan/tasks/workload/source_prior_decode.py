@@ -50,8 +50,8 @@ _WIN = 0.01                 # min Δacc over the controls to call the fNIRS prio
 class SourcePriorDecode:
     """fNIRS-informed source-space fusion decode helpers (bd 4so) — the free helpers folded in as staticmethods."""
 
-    @staticmethod
-    def _fnirs_prior(x_fnirs: np.ndarray, subject_dir, src2d: np.ndarray) -> np.ndarray:
+    @classmethod
+    def _fnirs_prior(cls, x_fnirs: np.ndarray, subject_dir, src2d: np.ndarray) -> np.ndarray:
         """Per-source prior `w [n_src]` from a subject's fNIRS: per-channel HbO response magnitude (std over time,
         mean over epochs — unsupervised) RBF-interpolated from the optode disk onto the source-space vertices."""
         act = np.asarray(x_fnirs[:, :36, :], dtype=np.float64).std(axis=-1).mean(axis=0)   # [36] HbO channels
@@ -63,8 +63,8 @@ class SourcePriorDecode:
         a_src = a_src / (a_src.max() + 1e-12)
         return _PRIOR_FLOOR + (1.0 - _PRIOR_FLOOR) * a_src
 
-    @staticmethod
-    def _build():
+    @classmethod
+    def _build(cls):
         """Per-subject covariances for the four arms + labels/groups, over the EEG∩fNIRS subjects."""
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
         mf = store.Store.load("shin2017_nback", FnirsCfg())
@@ -72,7 +72,7 @@ class SourcePriorDecode:
         ch_e = eegmod.Shin2017NbackEegAdapter.adapter().channels()
         g, agg = SourcePrior.prior_leadfield(ch_e, _SFREQ)
         src = Source(ch_e, _SFREQ)
-        src2d = EegMontage._to_unit_disk(src.source_positions()[:, :2])       # source flatmap
+        src2d = EegMontage.to_unit_disk(src.source_positions()[:, :2])       # source flatmap
         arms = {"sensor": [], "dSPM": [], "uniform": [], "fNIRS": []}
         ys, gs = [], []
         for s in subs:
@@ -80,7 +80,7 @@ class SourcePriorDecode:
             xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
             if not np.array_equal(ye, yf):
                 raise ValueError(f"subject {s} EEG/fNIRS misaligned")
-            w = SourcePriorDecode._fnirs_prior(xf, fnmod.Shin2017NirsAdapter.adapter()._subject_dir(int(s)), src2d)
+            w = cls._fnirs_prior(xf, fnmod.Shin2017NirsAdapter.adapter().subject_dir(int(s)), src2d)
             arms["sensor"].append(Riemann.cov(xe))
             arms["dSPM"].append(Riemann.cov(src.to_parcels(xe)))
             arms["uniform"].append(Riemann.cov(SourcePrior.parcels_from_leadfield(xe, g, agg, None)))
@@ -90,23 +90,23 @@ class SourcePriorDecode:
             logger.info(f"  subject {s}: {len(ye)} blocks · prior w∈[{w.min():.2f},{w.max():.2f}]")
         return ({k: np.concatenate(v) for k, v in arms.items()}, np.concatenate(ys), np.concatenate(gs))
 
-
-def main():
-    Cli.setup_logging()
-    arms, y, g = SourcePriorDecode._build()
-    logger.info(f"\n{len(y)} blocks · {len(set(g.tolist()))} subj · chance {1 / (y.max() + 1):.3f} "
-          f"· {len(_SEEDS)}x{_K}-fold re-centered tangent")
-    res = {name: Riemann.cross_subject_decode(c, y, g, _SEEDS, _K) for name, c in arms.items()}
-    for name in ("sensor", "dSPM", "uniform", "fNIRS"):
-        a, sd = res[name]
-        logger.info(f"  {name:14s} acc {a:.3f} ± {sd:.3f}")
-    d_uni = res["fNIRS"][0] - res["uniform"][0]
-    d_dspm = res["fNIRS"][0] - res["dSPM"][0]
-    cashes = d_uni > _WIN and d_dspm > _WIN
-    verdict = ("fNIRS PRIOR CASHES structure" if cashes else
-               "fair null (prior regularizes, doesn't inform the discriminant)")
-    logger.info(f"  Δ fNIRS − uniform: {d_uni:+.3f} · Δ fNIRS − dSPM: {d_dspm:+.3f}  ->  {verdict}")
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        arms, y, g = cls._build()
+        logger.info(f"\n{len(y)} blocks · {len(set(g.tolist()))} subj · chance {1 / (y.max() + 1):.3f} "
+              f"· {len(_SEEDS)}x{_K}-fold re-centered tangent")
+        res = {name: Riemann.cross_subject_decode(c, y, g, _SEEDS, _K) for name, c in arms.items()}
+        for name in ("sensor", "dSPM", "uniform", "fNIRS"):
+            a, sd = res[name]
+            logger.info(f"  {name:14s} acc {a:.3f} ± {sd:.3f}")
+        d_uni = res["fNIRS"][0] - res["uniform"][0]
+        d_dspm = res["fNIRS"][0] - res["dSPM"][0]
+        cashes = d_uni > _WIN and d_dspm > _WIN
+        verdict = ("fNIRS PRIOR CASHES structure" if cashes else
+                   "fair null (prior regularizes, doesn't inform the discriminant)")
+        logger.info(f"  Δ fNIRS − uniform: {d_uni:+.3f} · Δ fNIRS − dSPM: {d_dspm:+.3f}  ->  {verdict}")
 
 
 if __name__ == "__main__":
-    main()
+    SourcePriorDecode.main()

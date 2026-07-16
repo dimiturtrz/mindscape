@@ -32,8 +32,8 @@ _SENSOR_REF = 0.580        # EEG-sensor re-centered Riemann cross-subject refere
 class SourceDecode:
     """Source-space decode probe helpers (bd 728) — the free helpers folded in as staticmethods."""
 
-    @staticmethod
-    def _build():
+    @classmethod
+    def _build(cls):
         """Per-subject sensor + source covariances for the workload EEG blocks."""
         meta = store.Store.load("shin2017_nback_eeg", _CFG)
         ch = eegmod.Shin2017NbackEegAdapter.adapter().channels()
@@ -50,19 +50,19 @@ class SourceDecode:
         return (np.concatenate(c_sensor), np.concatenate(c_source),
                 np.concatenate(ys), np.concatenate(gs))
 
-
-def main():
-    Cli.setup_logging()
-    c_sensor, c_source, y, g = SourceDecode._build()
-    logger.info(f"\n{c_sensor.shape[0]} blocks · {len(set(g.tolist()))} subj · chance {1 / (y.max() + 1):.3f} "
-          f"· {len(_SEEDS)}x{_K}-fold re-centered tangent")
-    a_sen, s_sen = Riemann.cross_subject_decode(c_sensor, y, g, _SEEDS, _K)
-    a_src, s_src = Riemann.cross_subject_decode(c_source, y, g, _SEEDS, _K)
-    logger.info(f"  sensor  (28 ch)      acc {a_sen:.3f} ± {s_sen:.3f}")
-    logger.info(f"  source  (68 parcels) acc {a_src:.3f} ± {s_src:.3f}")
-    verdict = "source CASHES structure" if a_src > a_sen + 0.01 else "fair null (source adds no decodable info)"
-    logger.info(f"  Δ source − sensor: {a_src - a_sen:+.3f}  ->  {verdict}")
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        c_sensor, c_source, y, g = cls._build()
+        logger.info(f"\n{c_sensor.shape[0]} blocks · {len(set(g.tolist()))} subj · chance {1 / (y.max() + 1):.3f} "
+              f"· {len(_SEEDS)}x{_K}-fold re-centered tangent")
+        a_sen, s_sen = Riemann.cross_subject_decode(c_sensor, y, g, _SEEDS, _K)
+        a_src, s_src = Riemann.cross_subject_decode(c_source, y, g, _SEEDS, _K)
+        logger.info(f"  sensor  (28 ch)      acc {a_sen:.3f} ± {s_sen:.3f}")
+        logger.info(f"  source  (68 parcels) acc {a_src:.3f} ± {s_src:.3f}")
+        verdict = "source CASHES structure" if a_src > a_sen + 0.01 else "fair null (source adds no decodable info)"
+        logger.info(f"  Δ source − sensor: {a_src - a_sen:+.3f}  ->  {verdict}")
 
 
 if __name__ == "__main__":
-    main()
+    SourceDecode.main()

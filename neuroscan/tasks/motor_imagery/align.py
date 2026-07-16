@@ -66,21 +66,21 @@ class AlignConfig(BaseModel):
 
 
 class Align:
-    @staticmethod
-    def _covariances(X, augment, order, lag, estimator="oas"):
+    @classmethod
+    def _covariances(cls, X, augment, order, lag, estimator="oas"):
         if augment:
             X = Covariance.time_delay_embed(X.astype(np.float64), order, lag)
         return Covariances(estimator=estimator).transform(X.astype(np.float64))
 
-    @staticmethod
-    def _zero_shot_fold(s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
+    @classmethod
+    def _zero_shot_fold(cls, s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
         """Zero-shot: delegate the alignment + classifier to the transfer method, score ALL target."""
         probs = transfer.zero_shot_predict(train, transfer.Domain(test.cov),
                                            scale=(cfg.method == "recenter_scale"))
-        return Align._row(s, test.labels, probs)
+        return cls._row(s, test.labels, probs)
 
-    @staticmethod
-    def _calibrated_fold(s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
+    @classmethod
+    def _calibrated_fold(cls, s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
         """Calibrated: carve a stratified `calib_frac` of the held-out subject as the *only* labelled target data
         (the rest is the disjoint test set), hand it to the transfer method, score the disjoint remainder. Test
         labels never enter the fit — the split is the runner's leakage-free guarantee, the method just consumes it."""
@@ -94,91 +94,91 @@ class Align:
                "acc": metrics.Metrics.accuracy(yev, pred), "kappa": metrics.Metrics.kappa(yev, pred), "ece": 0.0}
         return row, None, yev
 
-    @staticmethod
-    def _row(s, yte, probs):
+    @classmethod
+    def _row(cls, s, yte, probs):
         pred = probs.argmax(1)
         row = {"fold": str(s), "n": len(yte), "acc": metrics.Metrics.accuracy(yte, pred),
                "kappa": metrics.Metrics.kappa(yte, pred), "ece": metrics.Metrics.ece_from_probs(probs, yte)}
         return row, probs, yte
 
-    @staticmethod
-    def _run_fold(s, tr, te, cfg: AlignConfig):
+    @classmethod
+    def _run_fold(cls, s, tr, te, cfg: AlignConfig):
         """One LOSO fold — module-level so joblib ships it to a worker (folds are independent)."""
         Xtr, ytr = store.Store.gather(tr)
         Xte, yte = store.Store.gather(te)
-        train = transfer.Domain(Align._covariances(Xtr, cfg.augment, cfg.order, cfg.lag), ytr, tr["subject"].to_numpy())
-        test = transfer.Domain(Align._covariances(Xte, cfg.augment, cfg.order, cfg.lag), yte)
+        train = transfer.Domain(cls._covariances(Xtr, cfg.augment, cfg.order, cfg.lag), ytr, tr["subject"].to_numpy())
+        test = transfer.Domain(cls._covariances(Xte, cfg.augment, cfg.order, cfg.lag), yte)
         if cfg.method in _ZERO_SHOT:
-            return Align._zero_shot_fold(s, train, test, cfg)
-        return Align._calibrated_fold(s, train, test, cfg)
+            return cls._zero_shot_fold(s, train, test, cfg)
+        return cls._calibrated_fold(s, train, test, cfg)
 
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        ap = argparse.ArgumentParser(description=__doc__)
+        ap.add_argument("--exp", default="mi_align_recenter",
+                        help="named transfer experiment in experiments.yaml (task: align)")
+        ap.add_argument("--set", dest="overrides", action="append", default=[], metavar="key=val",
+                        help="ad-hoc override, e.g. --set method=mdwm --set params.mdwm_lambda=1.0")
+        ap.add_argument("--jobs", type=int, default=-1, help="parallel LOSO folds (joblib; -1 = all cores)")
+        ap.add_argument("--out", default=None)
+        ap.add_argument("--no-record", action="store_true", help="skip updating the committed results.json snapshot")
+        args = ap.parse_args()
 
-def main():
-    Cli.setup_logging()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--exp", default="mi_align_recenter",
-                    help="named transfer experiment in experiments.yaml (task: align)")
-    ap.add_argument("--set", dest="overrides", action="append", default=[], metavar="key=val",
-                    help="ad-hoc override, e.g. --set method=mdwm --set params.mdwm_lambda=1.0")
-    ap.add_argument("--jobs", type=int, default=-1, help="parallel LOSO folds (joblib; -1 = all cores)")
-    ap.add_argument("--out", default=None)
-    ap.add_argument("--no-record", action="store_true", help="skip updating the committed results.json snapshot")
-    args = ap.parse_args()
+        exp = config.load_experiment(args.exp, args.overrides)
+        dataset, method = exp.dataset, exp.method
+        p = exp.params
+        calib_frac = p.get("calib_frac", 0.5)
+        augment = p.get("augment", False)
+        fold_cfg = AlignConfig(method=method, calib_frac=calib_frac, seed=p.get("seed", 0),
+                               mdwm_lambda=p.get("mdwm_lambda", 0.5), augment=augment,
+                               order=p.get("order", 4), lag=p.get("lag", 8))
 
-    exp = config.load_experiment(args.exp, args.overrides)
-    dataset, method = exp.dataset, exp.method
-    p = exp.params
-    calib_frac = p.get("calib_frac", 0.5)
-    augment = p.get("augment", False)
-    fold_cfg = AlignConfig(method=method, calib_frac=calib_frac, seed=p.get("seed", 0),
-                           mdwm_lambda=p.get("mdwm_lambda", 0.5), augment=augment,
-                           order=p.get("order", 4), lag=p.get("lag", 8))
+        cfg = EpochCfg(**exp.recipe)
+        meta = store.Store.load(dataset, cfg)
+        cov = "acm" if augment else "ts"
+        regime = "calibrated" if method in _CALIBRATED else "zero_shot"
+        name = f"riemann_{method}_{cov}"                # …_ts / …_acm always (keeps riemann_recenter_ts markers)
+        logger.info(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · recipe {cfg.key()} · "
+              f"{method} ({regime}, cov={cov})" + (f" · calib {calib_frac:.0%}" if regime == "calibrated" else ""))
 
-    cfg = EpochCfg(**exp.recipe)
-    meta = store.Store.load(dataset, cfg)
-    cov = "acm" if augment else "ts"
-    regime = "calibrated" if method in _CALIBRATED else "zero_shot"
-    name = f"riemann_{method}_{cov}"                # …_ts / …_acm always (keeps riemann_recenter_ts markers)
-    logger.info(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · recipe {cfg.key()} · "
-          f"{method} ({regime}, cov={cov})" + (f" · calib {calib_frac:.0%}" if regime == "calibrated" else ""))
+        folds = list(splits.Splits.leave_one_subject_out(meta))
+        logger.info(f"\n=== {name} · cross_subject · {dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
+        out_folds = Parallel(n_jobs=args.jobs)(
+            delayed(cls._run_fold)(s, tr, te, fold_cfg) for s, tr, te in folds)
 
-    folds = list(splits.Splits.leave_one_subject_out(meta))
-    logger.info(f"\n=== {name} · cross_subject · {dataset} ({len(folds)} folds, jobs={args.jobs}) ===")
-    out_folds = Parallel(n_jobs=args.jobs)(
-        delayed(Align._run_fold)(s, tr, te, fold_cfg) for s, tr, te in folds)
+        rows, P, Y = [], [], []
+        for row, probs, yte in sorted(out_folds, key=lambda r: r[0]["fold"]):
+            rows.append(row)
+            Y.append(yte)
+            if probs is not None:
+                P.append(probs)
+            cal = f" calib={row['n_calib']}" if "n_calib" in row else ""
+            logger.info(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  (n={row['n']}{cal})")
 
-    rows, P, Y = [], [], []
-    for row, probs, yte in sorted(out_folds, key=lambda r: r[0]["fold"]):
-        rows.append(row)
-        Y.append(yte)
-        if probs is not None:
-            P.append(probs)
-        cal = f" calib={row['n_calib']}" if "n_calib" in row else ""
-        logger.info(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  (n={row['n']}{cal})")
+        acc = float(np.mean([r["acc"] for r in rows]))
+        kap = float(np.mean([r["kappa"] for r in rows]))
+        logger.info(f"  {'MEAN':>6}  acc {acc:.3f}  kappa {kap:.3f}   [{regime}]")
+        logger.info("  vs reference: " + Reference.compare(acc, dataset, "cross_subject", "riemann"))
+        logger.info("  (un-recentered riemann LOSO ~0.36; recenter ~0.50 — read the ladder against those)")
 
-    acc = float(np.mean([r["acc"] for r in rows]))
-    kap = float(np.mean([r["kappa"] for r in rows]))
-    logger.info(f"  {'MEAN':>6}  acc {acc:.3f}  kappa {kap:.3f}   [{regime}]")
-    logger.info("  vs reference: " + Reference.compare(acc, dataset, "cross_subject", "riemann"))
-    logger.info("  (un-recentered riemann LOSO ~0.36; recenter ~0.50 — read the ladder against those)")
-
-    out = Path(args.out) if args.out else Path("runs") / f"{name}_{dataset}"
-    out.mkdir(parents=True, exist_ok=True)
-    res = {"method": name, "regime": "cross_subject", "transfer_regime": regime,
-           "calib_frac": calib_frac if regime == "calibrated" else None,
-           "acc_mean": acc, "kappa_mean": kap, "per_fold": rows}
-    (out / "aggregate.json").write_text(json.dumps(res, indent=2))
-    with tracking.Tracking.run("mindscape", f"{name}_cross",
-                      params={"exp": args.exp, "method": name, "transfer_regime": regime,
-                              "augment": augment, "calib_frac": calib_frac},
-                      tags={"kind": "transfer", "regime": "cross_subject"}, run_dir=out):
-        tracking.Tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
-        tracking.Tracking.per_group("acc_subject", {r["fold"]: r["acc"] for r in rows})
-        tracking.Tracking.artifact(out / "aggregate.json")
-    if not args.no_record and results.Results.record(out):
-        logger.info(f"   recorded -> results.json ({out.name})")
-    logger.info(f"-> {out}/aggregate.json")
+        out = Path(args.out) if args.out else Path("runs") / f"{name}_{dataset}"
+        out.mkdir(parents=True, exist_ok=True)
+        res = {"method": name, "regime": "cross_subject", "transfer_regime": regime,
+               "calib_frac": calib_frac if regime == "calibrated" else None,
+               "acc_mean": acc, "kappa_mean": kap, "per_fold": rows}
+        (out / "aggregate.json").write_text(json.dumps(res, indent=2))
+        with tracking.Tracking.run("mindscape", f"{name}_cross",
+                          params={"exp": args.exp, "method": name, "transfer_regime": regime,
+                                  "augment": augment, "calib_frac": calib_frac},
+                          tags={"kind": "transfer", "regime": "cross_subject"}, run_dir=out):
+            tracking.Tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
+            tracking.Tracking.per_group("acc_subject", {r["fold"]: r["acc"] for r in rows})
+            tracking.Tracking.artifact(out / "aggregate.json")
+        if not args.no_record and results.Results.record(out):
+            logger.info(f"   recorded -> results.json ({out.name})")
+        logger.info(f"-> {out}/aggregate.json")
 
 
 if __name__ == "__main__":
-    main()
+    Align.main()

@@ -133,13 +133,11 @@ ignore-names = ["X*", "Y*", "A", "B", "C*", "D", "F*", "G", "H", "L", "M", "P*",
 "tests/**" = ["S101", "PLR2004", "FBT", "SLF001", "N801", "N802", "N803", "N806", "N812", "PLR0913"]
 # >>> LOCAL-SLOT: per-file-ignores — repo-specific file carve-outs (e.g. a best-effort telemetry shell
 # that must never raise). Add lines here; copier update won't overwrite this region.
-# SLF001 re-enforced house-wide at scaffold v1.12 (8ex reopened), but mindscape's MANDATED op-namespace idiom
-# (the ast-grep py-top-level-function gate forces every helper onto its owning class as a staticmethod, 269
-# free funcs -> 0) STRUCTURALLY calls `Cls._helper` from same-class methods and module `main()`s — 102 hits
-# that are the mandated pattern, not encapsulation breaks. Carve SLF001 back out tree-wide (the 8ex conflict);
-# genuine cross-class private access is rare here and this idiom would drown it anyway.
-"core/**" = ["SLF001"]
-"neuroscan/**" = ["SLF001"]
+# NO SLF001 carve: scaffold v1.12 re-enforced SLF001 house-wide, and the op-namespace tree was migrated to
+# honour it (bd b8i) — @staticmethod op-namespaces are now @classmethod so same-class sibling calls read `cls._x`
+# (allowlisted, not a reach-in); module `main()`s moved into their class as `@classmethod main(cls)`; genuinely
+# shared helpers a sibling module needed were promoted to public API (the real reach-ins SLF001 flagged). The
+# only residual is the documented moabb `_sanitize_path` monkeypatch, `# noqa: SLF001` at its three sites.
 # <<< LOCAL-SLOT: per-file-ignores
 
 [tool.vulture]

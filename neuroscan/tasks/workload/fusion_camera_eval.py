@@ -35,8 +35,8 @@ _FNIRS_BASELINE_ACC = 0.595   # EEG best-single reference (0.580) + margin; beat
 class FusionCameraEval:
     """Brain-camera spatiotemporal fusion eval helpers — the free helpers folded in as staticmethods."""
 
-    @staticmethod
-    def _build_all():
+    @classmethod
+    def _build_all(cls):
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
         # past _TEND so read-forward (τ+lag) fills the tail
         mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=32.0))
@@ -48,37 +48,39 @@ class FusionCameraEval:
             Xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
             if not np.array_equal(ye, yf):
                 raise ValueError(f"subject {s} EEG/fNIRS misaligned")
-            pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter()._subject_dir(int(s)))
+            pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter().subject_dir(int(s)))
             Xs.append(bc.BrainCamera.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=_GRID,
                                       series=bc.SeriesConfig(fps=_FPS, t_end=_TEND)))
             ys.append(ye)
             gs.append(np.array([s] * len(ye)))
         return np.concatenate(Xs), np.concatenate(ys), np.concatenate(gs)
 
-
-def main():
-    Cli.setup_logging()
-    X, y, g = FusionCameraEval._build_all()
-    logger.info(f"brain-camera fusion · {X.shape[0]} blocks · {len(set(g))} subj · tensor {X.shape[1:]} · "
-          f"grid {_GRID} fps {_FPS} lag derived/subj · chance {1/(y.max()+1):.3f}")
-    accs, kaps = [], []
-    for seed in _SEEDS:
-        for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(X, y, g):
-            clf = BrainCameraNet(BrainCameraConfig(n_classes=int(y.max()) + 1, seed=seed)).fit(X[tr], y[tr])
-            pred = clf.predict_proba(X[te]).argmax(1)
-            accs.append(metrics.Metrics.accuracy(y[te], pred))
-            kaps.append(metrics.Metrics.kappa(y[te], pred))
-    a, k = float(np.mean(accs)), float(np.mean(kaps))
-    logger.info(f"\n  brain-camera 3D-CNN · cross-subject {len(_SEEDS)}x{_K}-fold: "
-                f"acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
-    logger.info("  reference (per-subject-z features -> LDA): best-single 0.580 · late 0.587 "
-                "· feature 0.564 · oracle 0.752")
-    logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  "
-                f"{'CASHED something' if a > _FNIRS_BASELINE_ACC else 'null'}")
-    logger.info("  NOTE: not a fair representation test — this is a raw 3D-CNN (no per-subject re-centering) on 702 "
-          "cross-subject samples (overfits); the 0.580 ref had per-subject-z + LDA. Fair test = re-center + a "
-          "readout that doesn't overfit. The null is the METHOD, not proof the representation is empty.")
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        X, y, g = cls._build_all()
+        logger.info(f"brain-camera fusion · {X.shape[0]} blocks · {len(set(g))} subj · tensor {X.shape[1:]} · "
+              f"grid {_GRID} fps {_FPS} lag derived/subj · chance {1/(y.max()+1):.3f}")
+        accs, kaps = [], []
+        for seed in _SEEDS:
+            for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(X, y, g):
+                clf = BrainCameraNet(BrainCameraConfig(n_classes=int(y.max()) + 1, seed=seed)).fit(X[tr], y[tr])
+                pred = clf.predict_proba(X[te]).argmax(1)
+                accs.append(metrics.Metrics.accuracy(y[te], pred))
+                kaps.append(metrics.Metrics.kappa(y[te], pred))
+        a, k = float(np.mean(accs)), float(np.mean(kaps))
+        logger.info(f"\n  brain-camera 3D-CNN · cross-subject {len(_SEEDS)}x{_K}-fold: "
+                    f"acc {a:.3f} ± {np.std(accs):.3f} · κ {k:.3f}")
+        logger.info("  reference (per-subject-z features -> LDA): best-single 0.580 · late 0.587 "
+                    "· feature 0.564 · oracle 0.752")
+        logger.info(f"  Δ vs best-single: {a - 0.580:+.3f}  ->  "
+                    f"{'CASHED something' if a > _FNIRS_BASELINE_ACC else 'null'}")
+        note = ("  NOTE: not a fair representation test — this is a raw 3D-CNN (no per-subject re-centering) "
+                "on 702 cross-subject samples (overfits); the 0.580 ref had per-subject-z + LDA. Fair test = "
+                "re-center + a readout that doesn't overfit. The null is the METHOD, not proof the "
+                "representation is empty.")
+        logger.info(note)
 
 
 if __name__ == "__main__":
-    main()
+    FusionCameraEval.main()

@@ -47,33 +47,33 @@ class RetrievalAudit:
     kept). `run_audit` trains the within- + cross-subject encoders per held-out subject and `summarize`
     assembles the leaky-vs-robust inflation grid."""
 
-    @staticmethod
-    def _concept_names(split_key: str) -> set[str]:
+    @classmethod
+    def _concept_names(cls, split_key: str) -> set[str]:
         """The concept IDENTITIES of a split (folder names minus the split-local 'NNNNN_' index prefix). The
         integer concept index is re-numbered from 0 WITHIN each split, so identity has to be the name, not the
         index — comparing indices would falsely report every test concept as 'seen'."""
-        meta = things.ThingsEeg2._meta()
+        meta = things.ThingsEeg2.meta()
         return {str(name)[6:] if str(name)[:5].isdigit() else str(name)
                 for name in meta[f"{split_key}_img_concepts"]}
 
-    @staticmethod
-    def verify_concept_disjoint() -> dict:
+    @classmethod
+    def verify_concept_disjoint(cls) -> dict:
         """Check the THINGS-EEG2 train/test concept sets don't overlap — the dataset's zero-shot claim, verified
         on concept NAMES rather than assumed. Returns the two set sizes + the overlap (must be 0)."""
-        train_names, test_names = RetrievalAudit._concept_names("train"), RetrievalAudit._concept_names("test")
+        train_names, test_names = cls._concept_names("train"), cls._concept_names("test")
         overlap = train_names & test_names
         if overlap:
             raise ValueError(f"train/test concepts overlap by {len(overlap)} — retrieval is NOT zero-shot")
         return {"n_train_concepts": len(train_names), "n_test_concepts": len(test_names),
                 "concept_overlap": len(overlap)}
 
-    @staticmethod
-    def _cells_from_result(result: dict, regime: str) -> dict:
+    @classmethod
+    def _cells_from_result(cls, result: dict, regime: str) -> dict:
         """Pull the (single-trial, concept-avg) top-1/5 out of one train() result into flat `{regime}_{avg}` keys."""
         return {f"{regime}_single": dict(result["single_trial"]), f"{regime}_avg": dict(result["concept_avg"])}
 
-    @staticmethod
-    def summarize(rows: list[dict], ks: tuple[int, ...] = (1, 5)) -> dict:
+    @classmethod
+    def summarize(cls, rows: list[dict], ks: tuple[int, ...] = (1, 5)) -> dict:
         """Mean each cell over held-out subjects, then the inflation of every leaky cell over the robust one.
 
         `rows` = one dict per held-out subject, each carrying all four `_CELLS` -> {k: acc}. Pure: no data/torch,
@@ -84,14 +84,14 @@ class RetrievalAudit:
                      for cell in _CELLS if cell != _ROBUST}
         return {"n_subjects": len(rows), "grid": grid, "robust_cell": _ROBUST, "inflation_over_robust": inflation}
 
-    @staticmethod
-    def _load_row(path: Path) -> dict:
+    @classmethod
+    def _load_row(cls, path: Path) -> dict:
         """Read a checkpointed subject row, restoring the int top-k keys JSON turned into strings."""
         raw = json.loads(path.read_text())
         return {cell: {int(k): v for k, v in cell_scores.items()} for cell, cell_scores in raw.items()}
 
-    @staticmethod
-    def run_audit(cfg: AuditConfig, ckpt_dir: str = "runs/retrieval_audit_ckpt") -> dict:
+    @classmethod
+    def run_audit(cls, cfg: AuditConfig, ckpt_dir: str = "runs/retrieval_audit_ckpt") -> dict:
         """Train the within- + cross-subject encoder for each held-out subject, assemble the robustness grid.
 
         Checkpoints each subject's row to `ckpt_dir` AS IT COMPLETES and resumes from it (bd 9js) — a stall on the
@@ -106,7 +106,7 @@ class RetrievalAudit:
             row_path = ckpt / f"subject_{test_subject}.json"
             if row_path.exists():
                 logger.info(f"[{i}/{len(cfg.subjects)}] subject {test_subject}: resumed from checkpoint")
-                rows.append(RetrievalAudit._load_row(row_path))
+                rows.append(cls._load_row(row_path))
                 continue
             others = [s for s in pool if s != test_subject]
             if not others:
@@ -114,15 +114,15 @@ class RetrievalAudit:
             logger.info(f"[{i}/{len(cfg.subjects)}] subject {test_subject}: training within + cross ...")
             within = TrainNice.train([test_subject], test_subject, train_cfg)
             cross = TrainNice.train(others, test_subject, train_cfg)
-            row = {**RetrievalAudit._cells_from_result(within, "within"),
-                   **RetrievalAudit._cells_from_result(cross, "cross")}
+            row = {**cls._cells_from_result(within, "within"),
+                   **cls._cells_from_result(cross, "cross")}
             row_path.write_text(json.dumps(row))                       # checkpoint before moving on
             rows.append(row)
             logger.info(f"[{i}/{len(cfg.subjects)}] subject {test_subject}: within-avg-top1 "
                   f"{within['concept_avg'][1]*100:.1f}% -> "
                   f"robust cross-single-top1 {cross['single_trial'][1]*100:.1f}%")
-        return {"disjoint": RetrievalAudit.verify_concept_disjoint(),
-                **RetrievalAudit.summarize(rows), "per_subject": rows}
+        return {"disjoint": cls.verify_concept_disjoint(),
+                **cls.summarize(rows), "per_subject": rows}
 
 
 def main():

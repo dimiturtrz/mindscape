@@ -68,8 +68,8 @@ _FNIRS_CFG = FnirsCfg()
 class RunFusion:
     """Stage-3 EEG+fNIRS fusion helpers — the free helpers folded in as staticmethods."""
 
-    @staticmethod
-    def _gather_aligned(meta_e, meta_f, subs) -> FusionData:
+    @classmethod
+    def _gather_aligned(cls, meta_e, meta_f, subs) -> FusionData:
         """Gather EEG + fNIRS epochs for `subs`, block-aligned, as a FusionData (with per-block subject groups).
         Hard guard that the two label sequences match — catches any silent misalignment before it can fake a
         fusion gain."""
@@ -81,8 +81,8 @@ class RunFusion:
             raise ValueError("EEG/fNIRS blocks misaligned — fusion invalid")
         return FusionData(eeg=eeg, fnirs=fnirs, y=y_eeg, groups=q_e["subject"].to_numpy())
 
-    @staticmethod
-    def _parse_args():
+    @classmethod
+    def _parse_args(cls):
         ap = argparse.ArgumentParser(description=__doc__)
         ap.add_argument("--exp", default="nback_fusion", help="named fusion experiment in experiments.yaml")
         ap.add_argument("--set", dest="overrides", action="append", default=[], metavar="key=val",
@@ -91,8 +91,8 @@ class RunFusion:
         ap.add_argument("--no-record", action="store_true")
         return ap.parse_args()
 
-    @staticmethod
-    def _run_folds(fold_subs, meta_e, meta_f, subs, models: _RunnerModels):
+    @classmethod
+    def _run_folds(cls, fold_subs, meta_e, meta_f, subs, models: _RunnerModels):
         """Run every fold: unimodal + fused predictions per fold. Returns (rows, PooledProbs) — the pooled probs
         hold the concatenated correct-masks and probability stacks used for the oracle + aggregation-sweep."""
         field_names = ("eeg", "fnirs", "stacking", "cal_eeg", "cal_fnirs", "y", "eeg_correct", "fnirs_correct")
@@ -101,8 +101,8 @@ class RunFusion:
         modality_models = ModalityModels(models.eeg_probs, models.fnirs_fit, models.fnirs_score)
         for fold, test_subs in enumerate(fold_subs):
             train_subs = [s for s in map(str, subs) if s not in test_subs]
-            train = RunFusion._gather_aligned(meta_e, meta_f, train_subs)
-            test = RunFusion._gather_aligned(meta_e, meta_f, test_subs)
+            train = cls._gather_aligned(meta_e, meta_f, train_subs)
+            test = cls._gather_aligned(meta_e, meta_f, test_subs)
 
             # unimodal decoders — EEG re-centered by default (per-subject, zero-shot), fNIRS the amplitude LDA
             eeg_probs = models.eeg_probs(train.eeg, train.y, train.groups, test.eeg, test.groups)
@@ -132,8 +132,8 @@ class RunFusion:
 
         return rows, PooledProbs(**{name: np.concatenate(values) for name, values in pooled.items()})
 
-    @staticmethod
-    def _report(regime, n_classes, rows, mean, analysis: _Analysis):
+    @classmethod
+    def _report(cls, regime, n_classes, rows, mean, analysis: _Analysis):
         """Print the per-role means, fusion-vs-unimodal deltas, oracle headroom, and the aggregation sweep."""
         comp, agg = analysis.complementarity, analysis.aggregation
         logger.info(f"\n=== fusion · {regime} · shin n-back ({len(rows)} folds, chance {1/n_classes:.3f}) ===")
@@ -153,76 +153,76 @@ class RunFusion:
               f"fnirs {agg['fnirs_conf_gap']:+.3f}"
               "  <- ~0 => confidence does not predict correctness => output-space fusion cannot select")
 
-    @staticmethod
-    def _subject_folds(subs, k):
+    @classmethod
+    def _subject_folds(cls, subs, k):
         """GroupKFold over the subject list (each subject in one test fold)."""
         subs = list(map(str, subs))
         gkf = GroupKFold(n_splits=k)
         for i, (tr, te) in enumerate(gkf.split(list(range(len(subs))), groups=subs)):
             yield f"fold{i}", [subs[j] for j in tr], None, [subs[j] for j in te]
 
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        args = cls._parse_args()
 
-def main():
-    Cli.setup_logging()
-    args = RunFusion._parse_args()
+        exp = config.load_experiment(args.exp, args.overrides)
+        regime = exp.regime
+        meta_e = store.Store.load(_EEG, _EEG_CFG)
+        meta_f = store.Store.load(_FNIRS, _FNIRS_CFG)
+        subs = sorted(set(meta_e["subject"].unique().to_list()) & set(meta_f["subject"].unique().to_list()))
+        n_classes = int(meta_e["label_id"].max()) + 1
+        recenter = not exp.params.get("plain_eeg", False)
+        logger.info(f"fusion cloud: {len(subs)} paired subjects · {n_classes} classes · chance {1/n_classes:.3f} · "
+              f"EEG {'re-centered' if recenter else 'plain'} Riemann")
 
-    exp = config.load_experiment(args.exp, args.overrides)
-    regime = exp.regime
-    meta_e = store.Store.load(_EEG, _EEG_CFG)
-    meta_f = store.Store.load(_FNIRS, _FNIRS_CFG)
-    subs = sorted(set(meta_e["subject"].unique().to_list()) & set(meta_f["subject"].unique().to_list()))
-    n_classes = int(meta_e["label_id"].max()) + 1
-    recenter = not exp.params.get("plain_eeg", False)
-    logger.info(f"fusion cloud: {len(subs)} paired subjects · {n_classes} classes · chance {1/n_classes:.3f} · "
-          f"EEG {'re-centered' if recenter else 'plain'} Riemann")
+        eeg_fit, eeg_score = models.Methods.get_method("riemann")   # plain-EEG fallback (fusion EEG is Riemann)
+        fn_fit, fn_score = models.Methods.get_method("fnirs_lda")
 
-    eeg_fit, eeg_score = models.Methods.get_method("riemann")        # the plain-EEG fallback (fusion EEG is Riemann)
-    fn_fit, fn_score = models.Methods.get_method("fnirs_lda")
+        def _cov(X):
+            return Covariances("oas").transform(X.astype(np.float64))
 
-    def _cov(X):
-        return Covariances("oas").transform(X.astype(np.float64))
+        def eeg_probs(Xtr, ytr, gtr, Xte, gte):
+            """EEG decoder as a probability fn. Default = zero-shot RE-CENTERED Riemann (recenter each subject —
+            train AND test — to the identity, unsupervised); needs the subject groups, so it can't be a plain
+            get_method decoder. The `nback_fusion_plain` config (params.plain_eeg) falls back to plain Riemann."""
+            if not recenter:
+                return eeg_score(eeg_fit(Xtr, ytr), Xte)
+            return transfer.zero_shot_predict(transfer.Domain(_cov(Xtr), ytr, gtr),
+                                              transfer.Domain(_cov(Xte), groups=gte), scale=False)
 
-    def eeg_probs(Xtr, ytr, gtr, Xte, gte):
-        """EEG decoder as a probability fn. Default = zero-shot RE-CENTERED Riemann (recenter each subject —
-        train AND test — to the identity, unsupervised); needs the subject groups, so it can't be a plain
-        get_method decoder. The `nback_fusion_plain` config (params.plain_eeg) falls back to plain Riemann."""
-        if not recenter:
-            return eeg_score(eeg_fit(Xtr, ytr), Xte)
-        return transfer.zero_shot_predict(transfer.Domain(_cov(Xtr), ytr, gtr),
-                                          transfer.Domain(_cov(Xte), groups=gte), scale=False)
+        def eeg_feats(X, g):
+            """EEG feature vector for feature-level fusion — the re-centered tangent-space rep, so its EEG side
+            matches the strong probs-side EEG (not a crude log-variance)."""
+            return transfer.recentered_tangent_features(_cov(X), g)
 
-    def eeg_feats(X, g):
-        """EEG feature vector for feature-level fusion — the re-centered tangent-space rep, so its EEG side
-        matches the strong probs-side EEG (not a crude log-variance)."""
-        return transfer.recentered_tangent_features(_cov(X), g)
+        # fold generator over the shared subject set (same split drives both modalities)
+        if regime == "cross_subject_kfold":
+            fold_subs = [([str(x) for x in te]) for _, _, _, te in cls._subject_folds(subs, k=5)]
+        else:
+            fold_subs = [[str(s)] for s in subs]
 
-    # fold generator over the shared subject set (same split drives both modalities)
-    if regime == "cross_subject_kfold":
-        fold_subs = [([str(x) for x in te]) for _, _, _, te in RunFusion._subject_folds(subs, k=5)]
-    else:
-        fold_subs = [[str(s)] for s in subs]
+        models_bundle = _RunnerModels(eeg_probs, eeg_feats, fn_fit, fn_score)
+        rows, pooled = cls._run_folds(fold_subs, meta_e, meta_f, subs, models_bundle)
 
-    models_bundle = _RunnerModels(eeg_probs, eeg_feats, fn_fit, fn_score)
-    rows, pooled = RunFusion._run_folds(fold_subs, meta_e, meta_f, subs, models_bundle)
+        mean = {k: float(np.mean([r[k] for r in rows])) for k in ("eeg", "fnirs", "late", "feature")}
+        # complementarity: is fusion fundamentally hopeless, or just naive averaging? The oracle (either
+        # modality correct) is the upper bound ANY fusion could reach; near-zero error correlation means the
+        # two modalities fail on independent blocks, so a per-trial selector has headroom the mean can't touch.
+        comp = combine.complementarity(mean, pooled.eeg_correct, pooled.fnirs_correct)   # oracle + error-independence
+        agg = combine.aggregation_sweep(pooled)                  # every output-space combiner
+        comp["best_aggregator"] = float(max(agg[k] for k in combine.SWEEP_KEYS))
+        comp["oracle_gap_captured"] = comp["best_aggregator"] - comp["best_single"]
+        cls._report(regime, n_classes, rows, mean, _Analysis(comp, agg))
 
-    mean = {k: float(np.mean([r[k] for r in rows])) for k in ("eeg", "fnirs", "late", "feature")}
-    # complementarity: is fusion fundamentally hopeless, or just naive averaging? The oracle (either
-    # modality correct) is the upper bound ANY fusion could reach; near-zero error correlation means the
-    # two modalities fail on independent blocks, so a per-trial selector has headroom the mean can't touch.
-    comp = combine.complementarity(mean, pooled.eeg_correct, pooled.fnirs_correct)   # oracle + error-independence
-    agg = combine.aggregation_sweep(pooled)                  # every output-space combiner
-    comp["best_aggregator"] = float(max(agg[k] for k in combine.SWEEP_KEYS))
-    comp["oracle_gap_captured"] = comp["best_aggregator"] - comp["best_single"]
-    RunFusion._report(regime, n_classes, rows, mean, _Analysis(comp, agg))
-
-    run_dir = Path(args.out) if args.out else Path("runs") / f"fusion_{regime}_shin2017_nback"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    res = {"method": "fusion", "regime": regime, "n_classes": n_classes,
-           "fold_mean": {"acc": mean["late"]}, "per_role_mean": mean,
-           "complementarity": comp, "aggregation": agg, "per_fold": rows}
-    (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
-    logger.info(f"-> {run_dir}/aggregate.json")
+        run_dir = Path(args.out) if args.out else Path("runs") / f"fusion_{regime}_shin2017_nback"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        res = {"method": "fusion", "regime": regime, "n_classes": n_classes,
+               "fold_mean": {"acc": mean["late"]}, "per_role_mean": mean,
+               "complementarity": comp, "aggregation": agg, "per_fold": rows}
+        (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
+        logger.info(f"-> {run_dir}/aggregate.json")
 
 
 if __name__ == "__main__":
-    main()
+    RunFusion.main()

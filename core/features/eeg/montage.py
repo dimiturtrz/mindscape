@@ -16,10 +16,10 @@ class EegMontage:
         Returns `[n_ch, 2]` in the same head-disk convention as `fnirs_positions`."""
         m = mne.channels.make_standard_montage("standard_1005").get_positions()["ch_pos"]
         pos = np.array([m[c][:2] if c in m else (np.nan, np.nan) for c in ch_names], dtype=float)  # x,y (drop z)
-        return EegMontage._to_unit_disk(pos)
+        return EegMontage.to_unit_disk(pos)
 
     @staticmethod
-    def _to_unit_disk(pos: np.ndarray) -> np.ndarray:
+    def to_unit_disk(pos: Float[np.ndarray, "ch 2"]) -> Float[np.ndarray, "ch 2"]:
         """Center + scale a 2D montage so its channels fit the unit disk (radius ≤ 1) — a common head frame."""
         p = pos - np.nanmean(pos, axis=0)
         r = np.nanmax(np.hypot(p[:, 0], p[:, 1]))

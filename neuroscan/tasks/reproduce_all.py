@@ -32,8 +32,8 @@ logger = logging.getLogger(__name__)
 class ReproduceAll:
     """Canonical-decode reproduction helpers — the free helpers folded in as staticmethods."""
 
-    @staticmethod
-    def _canonical_runs():
+    @classmethod
+    def _canonical_runs(cls):
         """The harness runs the README cites, straight from experiments.yaml (task: decode | fnirs) — one source
         of truth. align/fusion carry their own aggregation + entrypoints, so `align` / `run_fusion` regenerate
         those, not this. Returns (name, dataset, method, regime, cfg, test_session) tuples."""
@@ -46,48 +46,49 @@ class ReproduceAll:
             runs.append((name, exp.dataset, exp.method, exp.regime, cfg, exp.test_session))
         return runs
 
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        ap = argparse.ArgumentParser(description=__doc__)
+        ap.add_argument("--cross-only", action="store_true", help="skip within-subject runs")
+        ap.add_argument("--only", default=None,
+                        help="comma-separated experiment names — run only these (still one process, folds parallel)")
+        args = ap.parse_args()
 
-def main():
-    Cli.setup_logging()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--cross-only", action="store_true", help="skip within-subject runs")
-    ap.add_argument("--only", default=None,
-                    help="comma-separated experiment names — run only these (still one process, folds parallel)")
-    args = ap.parse_args()
-
-    only = set(args.only.split(",")) if args.only else None
-    runs = ReproduceAll._canonical_runs()
-    if only:
-        runs = [r for r in runs if r[0] in only]
-        missing = only - {r[0] for r in runs}
-        if missing:
-            raise SystemExit(f"--only names not decode/fnirs experiments: {sorted(missing)}")
-    runs = [r for r in runs if not (args.cross_only and r[3] == "within")]
-    for name, dataset, method, regime, cfg, test_session in runs:
-        meta = store.Store.load(dataset, cfg)
-        n_classes = int(meta["label_id"].max()) + 1
-        tsess = [test_session] if (regime == "within" and test_session) else ()
-        folds = harness.Harness.folds_for(meta, regime, test_sessions=tsess)
-        fit_fn, score_fn = models.Methods.get_method(method, fs=getattr(cfg, "resample", None))
-        n_jobs = 1 if method in MODELS else -1                    # classical baselines parallelize folds; nets don't
-        # backend stays threading (default) — measured to beat guarded loky at fold granularity here (07n)
-        run_dir = Path("runs") / f"{method}_{regime}_{dataset}"
-        run_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"\n=== {name} · {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
-        method_obj = harness.Method(method, fit_fn, score_fn, n_classes, regime)
-        cell_start = time.perf_counter()
-        res = harness.Harness.run(method_obj, folds, n_jobs=n_jobs,
-                          tracking_cfg=harness.TrackConfig(
-                              params={"exp": name, "method": method, "regime": regime, "dataset": dataset},
-                              run_dir=run_dir))
-        elapsed = time.perf_counter() - cell_start
-        (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
-        results.Results.record(run_dir)
-        logger.info(f"  -> acc {res['fold_mean']['acc']:.3f}  kappa {res['fold_mean']['kappa']:.3f}  "
-              f"(chance {1/n_classes:.3f})  [{elapsed:.1f}s, {elapsed/len(folds):.2f}s/fold]")
-    logger.info("\nreproduce_all done — regenerated results.json. Run `align --exp mi_align_recenter` (+ "
-          "`--exp mi_align_recenter_acm`) for recentering, then `sync_numbers` to update the README.")
+        only = set(args.only.split(",")) if args.only else None
+        runs = cls._canonical_runs()
+        if only:
+            runs = [r for r in runs if r[0] in only]
+            missing = only - {r[0] for r in runs}
+            if missing:
+                raise SystemExit(f"--only names not decode/fnirs experiments: {sorted(missing)}")
+        runs = [r for r in runs if not (args.cross_only and r[3] == "within")]
+        for name, dataset, method, regime, cfg, test_session in runs:
+            meta = store.Store.load(dataset, cfg)
+            n_classes = int(meta["label_id"].max()) + 1
+            tsess = [test_session] if (regime == "within" and test_session) else ()
+            folds = harness.Harness.folds_for(meta, regime, test_sessions=tsess)
+            fit_fn, score_fn = models.Methods.get_method(method, fs=getattr(cfg, "resample", None))
+            # classical baselines parallelize folds; nets don't
+            n_jobs = 1 if method in MODELS else -1
+            # backend stays threading (default) — measured to beat guarded loky at fold granularity here (07n)
+            run_dir = Path("runs") / f"{method}_{regime}_{dataset}"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"\n=== {name} · {method} · {regime} · {dataset} ({len(folds)} folds, jobs {n_jobs}) ===")
+            method_obj = harness.Method(method, fit_fn, score_fn, n_classes, regime)
+            cell_start = time.perf_counter()
+            res = harness.Harness.run(method_obj, folds, n_jobs=n_jobs,
+                              tracking_cfg=harness.TrackConfig(
+                                  params={"exp": name, "method": method, "regime": regime, "dataset": dataset},
+                                  run_dir=run_dir))
+            elapsed = time.perf_counter() - cell_start
+            (run_dir / "aggregate.json").write_text(json.dumps(res, indent=2))
+            results.Results.record(run_dir)
+            logger.info(f"  -> acc {res['fold_mean']['acc']:.3f}  kappa {res['fold_mean']['kappa']:.3f}  "
+                  f"(chance {1/n_classes:.3f})  [{elapsed:.1f}s, {elapsed/len(folds):.2f}s/fold]")
+        logger.info("\nreproduce_all done — regenerated results.json. Run `align --exp mi_align_recenter` (+ "
+              "`--exp mi_align_recenter_acm`) for recentering, then `sync_numbers` to update the README.")
 
 
 if __name__ == "__main__":
-    main()
+    ReproduceAll.main()

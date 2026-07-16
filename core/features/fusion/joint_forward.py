@@ -68,8 +68,8 @@ class JointForward:
     `eeg_from_source`, `fnirs_from_source`) take explicit lead field / geometry so they unit-test without the
     fsaverage template; `generate` composes them onto the real template forward (bd 728)."""
 
-    @staticmethod
-    def plant_latent(grid: Grid, cfg: JointConfig | None = None, seed: int = 0) -> SharedLatent:
+    @classmethod
+    def plant_latent(cls, grid: Grid, cfg: JointConfig | None = None, seed: int = 0) -> SharedLatent:
         """Plant `cfg.n_active` random active parcels per trial, each carrying a windowed `burst_hz` oscillation.
         Returns the shared latent `source[n, P, t]` (zero on silent parcels) + the active-parcel indices."""
         cfg = cfg or JointConfig()
@@ -87,8 +87,8 @@ class JointForward:
             source[i, picks] = burst.astype(np.float32)
         return SharedLatent(source=source, active=active)
 
-    @staticmethod
-    def sensitivity(parcel_xyz: Float[np.ndarray, "p 3"], channel_xyz: Float[np.ndarray, "c 3"],
+    @classmethod
+    def sensitivity(cls, parcel_xyz: Float[np.ndarray, "p 3"], channel_xyz: Float[np.ndarray, "c 3"],
                     cfg: JointConfig | None = None) -> Float[np.ndarray, "c p"]:
         """Coarse geometric optical sensitivity `A[C, P]`: project each scalp channel inward toward the head
         centroid by `cortex_depth_m` to a cortical point, then weight parcel→channel by a Gaussian of the
@@ -102,8 +102,8 @@ class JointForward:
         d = np.linalg.norm(cortical_pt[:, None, :] - parcel_xyz[None, :, :], axis=2)   # [C, P]
         return np.exp(-0.5 * (d / cfg.sens_sigma_m) ** 2).astype(np.float32)
 
-    @staticmethod
-    def eeg_from_source(source: Float[np.ndarray, "n p t"], lead_field: Float[np.ndarray, "ch p"],
+    @classmethod
+    def eeg_from_source(cls, source: Float[np.ndarray, "n p t"], lead_field: Float[np.ndarray, "ch p"],
                         cfg: JointConfig | None = None, seed: int = 0) -> Float[np.ndarray, "n ch t"]:
         """Forward-project the SIGNED parcel dipole moment to sensor EEG via a parcel-reduced lead field, plus
         additive sensor noise scaled to the projected-signal std (`eeg_noise`)."""
@@ -113,8 +113,8 @@ class JointForward:
         noise = rng.standard_normal(eeg.shape) * (cfg.eeg_noise * (eeg.std() + 1e-12))
         return (eeg + noise).astype(np.float32)
 
-    @staticmethod
-    def fnirs_from_source(source: Float[np.ndarray, "n p t"], sensitivity: Float[np.ndarray, "c p"],
+    @classmethod
+    def fnirs_from_source(cls, source: Float[np.ndarray, "n p t"], sensitivity: Float[np.ndarray, "c p"],
                           fs: float, cfg: JointConfig | None = None, seed: int = 0
                           ) -> tuple[Float[np.ndarray, "n c t"], Float[np.ndarray, "n c t"]]:
         """Forward-generate paired `(hbo, hbr)[n, C, t]` from the SAME shared latent: the POSITIVE neural
@@ -130,14 +130,14 @@ class JointForward:
         resp = fftconvolve(drive, hrf[None, None, :], axes=2)[..., :length]     # [n, P, t] clean response
         chan = np.einsum("cp,npt->nct", sensitivity, resp)             # spread parcels → optical channels
         n_ch = sensitivity.shape[0]
-        sys_o = Synthetic._systemic(n * n_ch, length, fs, scfg, rng).reshape(n, n_ch, length)
-        sys_r = sys_o + Synthetic._systemic(n * n_ch, length, fs, scfg, rng).reshape(n, n_ch, length) * 0.15
+        sys_o = Synthetic.systemic(n * n_ch, length, fs, scfg, rng).reshape(n, n_ch, length)
+        sys_r = sys_o + Synthetic.systemic(n * n_ch, length, fs, scfg, rng).reshape(n, n_ch, length) * 0.15
         hbo = chan + sys_o + rng.standard_normal(chan.shape) * scfg.noise_std
         hbr = -scfg.hbr_ratio * chan + sys_r + rng.standard_normal(chan.shape) * scfg.noise_std
         return hbo.astype(np.float32), hbr.astype(np.float32)
 
-    @staticmethod
-    def _parcel_lead_field(fwd, labels, src_pos: Float[np.ndarray, "s 3"]
+    @classmethod
+    def _parcel_lead_field(cls, fwd, labels, src_pos: Float[np.ndarray, "s 3"]
                            ) -> tuple[Float[np.ndarray, "ch p"], Float[np.ndarray, "p 3"]]:
         """Reduce the fixed-orientation per-vertex lead field to per-parcel by averaging each label's source
         columns; parcel position = its vertices' mean. Returns `(lead[ch, P], parcel_xyz[P, 3])`."""
@@ -156,8 +156,8 @@ class JointForward:
             parcel_pos.append(src_pos[cols].mean(axis=0))
         return np.stack(lead_cols, axis=1).astype(np.float32), np.stack(parcel_pos).astype(np.float32)
 
-    @staticmethod
-    def generate(montage: tuple[list[str], float], fnirs_xyz: Float[np.ndarray, "c 3"], grid: Grid,
+    @classmethod
+    def generate(cls, montage: tuple[list[str], float], fnirs_xyz: Float[np.ndarray, "c 3"], grid: Grid,
                  cfg: JointConfig | None = None, seed: int = 0) -> dict:  # pragma: no cover — fsaverage template
         """Compose the pure forwards onto the real fsaverage template lead field (bd 728). `montage` = the EEG
         `(ch_names, sfreq)`; `grid` = the trial/time shape (its `n_parcels` is overridden by the actual DK count).
@@ -170,9 +170,9 @@ class JointForward:
         src = Source(ch_names, sfreq, cfg.localize)
         fwd, _ = src.build_forward()
         labels = src.cortical_labels()
-        lead, parcel_xyz = JointForward._parcel_lead_field(fwd, labels, src.source_positions())
-        sens = JointForward.sensitivity(parcel_xyz, np.asarray(fnirs_xyz, dtype=np.float32), cfg)
-        latent = JointForward.plant_latent(grid.model_copy(update={"n_parcels": lead.shape[1]}), cfg, seed)
-        eeg = JointForward.eeg_from_source(latent.source, lead, cfg, seed)
-        hbo, hbr = JointForward.fnirs_from_source(latent.source, sens, grid.sfreq, cfg, seed)
+        lead, parcel_xyz = cls._parcel_lead_field(fwd, labels, src.source_positions())
+        sens = cls.sensitivity(parcel_xyz, np.asarray(fnirs_xyz, dtype=np.float32), cfg)
+        latent = cls.plant_latent(grid.model_copy(update={"n_parcels": lead.shape[1]}), cfg, seed)
+        eeg = cls.eeg_from_source(latent.source, lead, cfg, seed)
+        hbo, hbr = cls.fnirs_from_source(latent.source, sens, grid.sfreq, cfg, seed)
         return {"eeg": eeg, "hbo": hbo, "hbr": hbr, "source": latent.source, "active": latent.active}

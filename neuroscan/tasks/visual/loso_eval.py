@@ -34,15 +34,15 @@ class LosoEval:
     """Leave-one-subject-out retrieval eval — the free helpers folded in as staticmethods (public names kept).
     `_fold` runs one held-out-subject training run; `_summary` reduces folds to mean ± SE."""
 
-    @staticmethod
-    def _fold(model: str, seed: int, test_subject: int, pool: list[int], base: dict) -> dict:
+    @classmethod
+    def _fold(cls, model: str, seed: int, test_subject: int, pool: list[int], base: dict) -> dict:
         """One LOSO fold: train on `pool \\ {test_subject}`, retrieve on the held-out subject."""
         train_subjects = [s for s in pool if s != test_subject]
         cfg = TrainConfig(**{**base, "model": model, "seed": seed})
         return TrainNice.train(train_subjects, test_subject, cfg)
 
-    @staticmethod
-    def _summary(folds: list[dict]) -> dict:
+    @classmethod
+    def _summary(cls, folds: list[dict]) -> dict:
         """Mean ± SE over folds for each reported metric (SE = std / √n_folds — the decision quantity)."""
         out = {}
         n = len(folds)
@@ -51,45 +51,45 @@ class LosoEval:
             out[f"{block}.{k}"] = (float(vals.mean()), float(vals.std() / np.sqrt(max(1, n))))
         return out
 
+    @classmethod
+    def main(cls):
+        Cli.setup_logging()
+        ap = argparse.ArgumentParser(description=__doc__)
+        ap.add_argument("--models", nargs="+", required=True, help="encoder names to compare on the SAME folds")
+        ap.add_argument("--subjects", type=int, nargs="+", required=True, help="LOSO subject pool")
+        ap.add_argument("--seeds", type=int, nargs="+", default=[0])
+        ap.add_argument("--config", default=None, help="JSON of TrainConfig fields (recipe home)")
+        ap.add_argument("--resample", type=float, default=None)
+        ap.add_argument("--lr", type=float, default=None)
+        ap.add_argument("--epochs", type=int, default=None)
+        ap.add_argument("--patience", type=int, default=None)
+        ap.add_argument("--out", default=None)
+        args = ap.parse_args()
 
-def main():
-    Cli.setup_logging()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--models", nargs="+", required=True, help="encoder names to compare on the SAME folds")
-    ap.add_argument("--subjects", type=int, nargs="+", required=True, help="LOSO subject pool")
-    ap.add_argument("--seeds", type=int, nargs="+", default=[0])
-    ap.add_argument("--config", default=None, help="JSON of TrainConfig fields (recipe home)")
-    ap.add_argument("--resample", type=float, default=None)
-    ap.add_argument("--lr", type=float, default=None)
-    ap.add_argument("--epochs", type=int, default=None)
-    ap.add_argument("--patience", type=int, default=None)
-    ap.add_argument("--out", default=None)
-    args = ap.parse_args()
+        base = json.loads(Path(args.config).read_text()) if args.config else {}
+        for k in ("resample", "lr", "epochs", "patience"):
+            if getattr(args, k) is not None:
+                base[k] = getattr(args, k)
 
-    base = json.loads(Path(args.config).read_text()) if args.config else {}
-    for k in ("resample", "lr", "epochs", "patience"):
-        if getattr(args, k) is not None:
-            base[k] = getattr(args, k)
+        logger.info(f"LOSO · pool {args.subjects} · models {args.models} · seeds {args.seeds} "
+                    f"· {len(args.subjects) * len(args.seeds)} folds/model")
+        results = {}
+        for model in args.models:
+            folds = [cls._fold(model, seed, test, args.subjects, base)
+                     for seed in args.seeds for test in args.subjects]
+            results[model] = {"folds": folds, "summary": cls._summary(folds)}
+            logger.info(f"\n=== {model} ===")
+            for key, (mean, se) in results[model]["summary"].items():
+                logger.info(f"  {key:16s} {mean * 100:5.2f}% ± {se * 100:.2f}")
 
-    logger.info(f"LOSO · pool {args.subjects} · models {args.models} · seeds {args.seeds} "
-                f"· {len(args.subjects) * len(args.seeds)} folds/model")
-    results = {}
-    for model in args.models:
-        folds = [LosoEval._fold(model, seed, test, args.subjects, base)
-                 for seed in args.seeds for test in args.subjects]
-        results[model] = {"folds": folds, "summary": LosoEval._summary(folds)}
-        logger.info(f"\n=== {model} ===")
-        for key, (mean, se) in results[model]["summary"].items():
-            logger.info(f"  {key:16s} {mean * 100:5.2f}% ± {se * 100:.2f}")
-
-    if len(args.models) == _N_PAIR:
-        a, b = args.models
-        delta = results[b]["summary"]["single_trial.1"][0] - results[a]["summary"]["single_trial.1"][0]
-        logger.info(f"\nΔ ({b} − {a}) single_trial.1: {delta * 100:+.2f}pp")
-    if args.out:
-        Path(args.out).write_text(json.dumps(results, indent=2))
-        logger.info(f"-> {args.out}")
+        if len(args.models) == _N_PAIR:
+            a, b = args.models
+            delta = results[b]["summary"]["single_trial.1"][0] - results[a]["summary"]["single_trial.1"][0]
+            logger.info(f"\nΔ ({b} − {a}) single_trial.1: {delta * 100:+.2f}pp")
+        if args.out:
+            Path(args.out).write_text(json.dumps(results, indent=2))
+            logger.info(f"-> {args.out}")
 
 
 if __name__ == "__main__":
-    main()
+    LosoEval.main()

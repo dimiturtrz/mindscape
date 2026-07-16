@@ -7,6 +7,7 @@ rasterizes (camera) and the coupling diagnostics consume — one home for the en
 from __future__ import annotations
 
 import numpy as np
+from jaxtyping import Float
 from pydantic import BaseModel
 from scipy.interpolate import interp1d
 from scipy.signal import butter, hilbert, sosfiltfilt
@@ -34,20 +35,22 @@ class Series:
     """The pre-raster cross-modal representation — paired EEG/fNIRS on one lag-aligned time grid (free helpers
     folded in as staticmethods, public names kept)."""
 
-    @staticmethod
-    def _band_env(X: np.ndarray, fs: float, band: tuple[float, float]) -> np.ndarray:
+    @classmethod
+    def band_env(cls, X: Float[np.ndarray, "n ch t"], fs: float,
+                 band: tuple[float, float]) -> Float[np.ndarray, "n ch t"]:
         """Band-power envelope per channel: bandpass → analytic-signal magnitude → `[n, ch, t]`. The slow envelope
         is what carries cognitive-state info, so it (not raw EEG) is the fast-layer feature."""
         sos = butter(4, [band[0], band[1]], btype="band", fs=fs, output="sos")
         return np.abs(hilbert(sosfiltfilt(sos, X, axis=-1), axis=-1))
 
-    @staticmethod
-    def _resample_time(X: np.ndarray, t_src: np.ndarray, t_dst: np.ndarray) -> np.ndarray:
+    @classmethod
+    def resample_time(cls, X: Float[np.ndarray, "n ch t"], t_src: Float[np.ndarray, "t"],
+                      t_dst: Float[np.ndarray, "t2"]) -> Float[np.ndarray, "n ch t2"]:
         """Linear-resample `X[n, ch, t]` from source time axis `t_src` to target `t_dst` (vectorized over axis -1)."""
         return interp1d(t_src, X, axis=-1, bounds_error=False, fill_value=0.0)(t_dst).astype(X.dtype)
 
-    @staticmethod
-    def channel_series(Xe, Xf, config: SeriesConfig | None = None):
+    @classmethod
+    def channel_series(cls, Xe, Xf, config: SeriesConfig | None = None):
         """The pre-raster fused representation — the single source of truth both the decoder tensor and the viz
         consume. Paired EEG/fNIRS -> per-channel activity on ONE lag-aligned time grid:
           eeg    = {theta,alpha,beta} band-power envelopes `[n, ch_e, T]`  (fast electrical STRENGTH),
@@ -62,15 +65,15 @@ class Series:
         ch_f = Xf.shape[1] // 2
         t_dst = np.arange(0, cfg.t_end, 1.0 / cfg.fps)
         te = np.arange(Xe.shape[2]) / cfg.fs_e
-        eeg = {name: Series._resample_time(Series._band_env(Xe, cfg.fs_e, band), te, t_dst)
+        eeg = {name: cls.resample_time(cls.band_env(Xe, cfg.fs_e, band), te, t_dst)
                for name, band in _BANDS.items()}
         tf = cfg.tmin_f + np.arange(Xf.shape[2]) / cfg.fs_f
         if cfg.lag_s is None:
-            neural0 = Chromophore.cbsi_neural(Series._resample_time(Xf[:, :ch_f, :], tf, t_dst),   # zero-lag CBSI
-                                              Series._resample_time(Xf[:, ch_f:, :], tf, t_dst))
+            neural0 = Chromophore.cbsi_neural(cls.resample_time(Xf[:, :ch_f, :], tf, t_dst),   # zero-lag CBSI
+                                              cls.resample_time(Xf[:, ch_f:, :], tf, t_dst))
             lag, decay, beta = Coupling.estimate_coupling(eeg["beta"].mean(1), neural0.mean(1), cfg.fps)  # β ~ +blood
         else:
             lag, decay, beta = float(cfg.lag_s), float("nan"), float("nan")
-        hbo = Series._resample_time(Xf[:, :ch_f, :], tf - lag, t_dst)  # read blood forward (τ+lag) to align to neural
-        hbr = Series._resample_time(Xf[:, ch_f:, :], tf - lag, t_dst)
+        hbo = cls.resample_time(Xf[:, :ch_f, :], tf - lag, t_dst)  # read blood forward (τ+lag) to align to neural
+        hbr = cls.resample_time(Xf[:, ch_f:, :], tf - lag, t_dst)
         return eeg, Chromophore.cbsi_neural(hbo, hbr), t_dst, {"lag": lag, "decay": decay, "beta": beta}

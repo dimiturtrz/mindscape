@@ -80,7 +80,7 @@ class CBraModBackbone(Backbone):
 
     def __init__(self):
         super().__init__()
-        self.module = Foundation._load_backbone()                 # raw CBraMod (consumes pre-patched input)
+        self.module = Foundation.load_cbramod()                 # raw CBraMod (consumes pre-patched input)
         self.patch_points = 200
         self.d_model = 200
 
@@ -103,7 +103,7 @@ class EegptBackbone(Backbone):
 
     def __init__(self, channel_names: list[str], patch_stride: int | None = None):
         super().__init__()
-        module, chan_dict = Foundation._load_eegpt_encoder(self._N_TIME, patch_stride)
+        module, chan_dict = Foundation.load_eegpt_encoder(self._N_TIME, patch_stride)
         self.module = module
         self.d_model = 512
         keep = [i for i, ch in enumerate(channel_names) if ch.upper().strip(".") in chan_dict]
@@ -120,25 +120,25 @@ class Foundation:
     names kept). The builders are registered lazily by `encoders.EncoderRegistry` (one registration home, no
     import-time side effects), so importing this module registers nothing on its own."""
 
-    @staticmethod
-    def load_backbone(name: str = "cbramod", channel_names: list[str] | None = None) -> LoadedBackbone:
+    @classmethod
+    def load_backbone(cls, name: str = "cbramod", channel_names: list[str] | None = None) -> LoadedBackbone:
         """Resolve a frozen backbone by name -> a `LoadedBackbone` whose `module` is a `composite.Backbone`
         ([B,C,T] -> [B,C,S,d], owning its own patching + normalization). The seam the frozen-head loop swaps on:
         a new foundation model is one entry here, not a fork of the runner. `channel_names` feeds a montage
         adapter (EEGPT needs it to map channels to its CHANNEL_DICT; CBraMod ignores it)."""
-        builders = {"cbramod": Foundation._loaded_cbramod,
-                    "eegpt": lambda: Foundation._loaded_eegpt(channel_names, 0.0, "eegpt"),
-                    "eegpt_ov": lambda: Foundation._loaded_eegpt(channel_names, 0.5, "eegpt_ov")}
+        builders = {"cbramod": cls._loaded_cbramod,
+                    "eegpt": lambda: cls._loaded_eegpt(channel_names, 0.0, "eegpt"),
+                    "eegpt_ov": lambda: cls._loaded_eegpt(channel_names, 0.5, "eegpt_ov")}
         if name not in builders:
             raise KeyError(f"unknown backbone {name!r} — registered: {sorted(builders)}")
         return builders[name]()
 
-    @staticmethod
-    def _loaded_cbramod() -> LoadedBackbone:
+    @classmethod
+    def _loaded_cbramod(cls) -> LoadedBackbone:
         return LoadedBackbone(CBraModBackbone(), patch_points=200, d_model=200, sample_rate=200.0, name="cbramod")
 
-    @staticmethod
-    def _loaded_eegpt(channel_names: list[str] | None, overlap: float, name: str) -> LoadedBackbone:
+    @classmethod
+    def _loaded_eegpt(cls, channel_names: list[str] | None, overlap: float, name: str) -> LoadedBackbone:
         """`overlap` = fraction of a patch shared with the next (0.0 = non-overlapping, stride = patch -> N=4 on
         1s; 0.5 = the conventional 50% overlap -> N=7). Stride is DERIVED from the patch size, so it tracks the
         checkpoint's patch if that ever changes. `name` keys the feature cache so the variants never collide."""
@@ -148,8 +148,8 @@ class Foundation:
         return LoadedBackbone(EegptBackbone(channel_names, stride), patch_points=_EEGPT_PATCH, d_model=512,
                               sample_rate=float(_EEGPT_RATE), name=name)
 
-    @staticmethod
-    def _load_eegpt_encoder(n_time: int, patch_stride: int | None = None):
+    @classmethod
+    def load_eegpt_encoder(cls, n_time: int, patch_stride: int | None = None):
         """Build the EEGPT EEGTransformer encoder (its downstream config: patch 64, dim 512, embed_num 4,
         depth 8) sized to our epoch length and load the FROZEN pretrained `target_encoder` weights from the
         checkpoint. Returns (encoder, CHANNEL_DICT). Reaches into the external checkout (see the fetch step)."""
@@ -169,8 +169,8 @@ class Foundation:
         encoder.load_state_dict(enc, strict=True)
         return encoder, CHANNEL_DICT
 
-    @staticmethod
-    def _load_backbone() -> nn.Module:
+    @classmethod
+    def load_cbramod(cls) -> nn.Module:
         """Instantiate CBraMod and load the pretrained weights. The backbone lives in a checked-out external repo
         (not a package), so its path is injected here — the one place that reaches into `external/` — rather than
         importing an uninstalled top-level module. `proj_out` (the pretrain reconstruction head) is dropped so the
@@ -187,34 +187,34 @@ class Foundation:
         backbone.proj_out = nn.Identity()       # expose d_model token features, not the reconstruction output
         return backbone
 
-    @staticmethod
-    def _cbramod_model(spec: EncoderSpec, pool: str, freeze: bool) -> Model:  # noqa: FBT001
+    @classmethod
+    def _cbramod_model(cls, spec: EncoderSpec, pool: str, freeze: bool) -> Model:  # noqa: FBT001
         """`Model(CBraModBackbone, TokenHead)` — the frozen probe / fine-tune / attn-pool as one composite."""
         bb = CBraModBackbone()
         # mean/attn pool -> no n_tok
         head = TokenHead(HeadSpec("cbramod", pool), HeadContext(bb.d_model, None, spec.embed_dim), None)
         return Model(bb, head, freeze_backbone=freeze)
 
-    @staticmethod
-    def _build_cbramod(spec: EncoderSpec) -> Model:
-        return Foundation._cbramod_model(spec, pool="mean", freeze=True)
+    @classmethod
+    def build_cbramod(cls, spec: EncoderSpec) -> Model:
+        return cls._cbramod_model(spec, pool="mean", freeze=True)
 
-    @staticmethod
-    def _build_cbramod_ft(spec: EncoderSpec) -> Model:
-        return Foundation._cbramod_model(spec, pool="mean", freeze=False)
+    @classmethod
+    def build_cbramod_ft(cls, spec: EncoderSpec) -> Model:
+        return cls._cbramod_model(spec, pool="mean", freeze=False)
 
-    @staticmethod
-    def _build_cbramod_ft_attn(spec: EncoderSpec) -> Model:
-        return Foundation._cbramod_model(spec, pool="attn", freeze=False)
+    @classmethod
+    def build_cbramod_ft_attn(cls, spec: EncoderSpec) -> Model:
+        return cls._cbramod_model(spec, pool="attn", freeze=False)
 
-    @staticmethod
-    def _build_cbramod_lora(spec: EncoderSpec) -> Model:
+    @classmethod
+    def build_cbramod_lora(cls, spec: EncoderSpec) -> Model:
         """LoRA fine-tune (bd 29z): a frozen CBraMod with rank-8 adapters injected into its feed-forward linears
         (`linear1`/`linear2`) — the cheap middle between the frozen probe (0.6%, chance) and the full fine-tune
         (2.38%; the fused attention stays frozen — it isn't module-callable, see lora.py). The
         backbone is frozen/eval-locked; `Lora.inject` re-arms only the low-rank A/B, which `Model.param_groups`
         picks up via `requires_grad` as the sole trainable backbone group."""
-        model = Foundation._cbramod_model(spec, pool="mean", freeze=True)
+        model = cls._cbramod_model(spec, pool="mean", freeze=True)
         n_adapted = Lora.inject(model.backbone.module)
         logger.info(f"cbramod_lora: injected rank-8 LoRA into {n_adapted} linear layers")
         return model
