@@ -75,7 +75,8 @@ class JointForward:
         cfg = cfg or JointConfig()
         rng = np.random.default_rng(seed)
         t = np.arange(grid.n_times) / grid.sfreq
-        window = np.hanning(grid.n_times)                              # smooth on/offset — a burst, not a full-length tone
+        # smooth on/offset — a burst, not a full-length tone
+        window = np.hanning(grid.n_times)
         source = np.zeros((grid.n_trials, grid.n_parcels, grid.n_times), dtype=np.float32)
         active = np.empty((grid.n_trials, cfg.n_active), dtype=np.int64)
         for i in range(grid.n_trials):
