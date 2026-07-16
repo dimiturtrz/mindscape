@@ -300,16 +300,18 @@ tests live where the module does. The integration layer covers the chains units 
 → harness end-to-end; decoder → ONNX export → parity) and stays scenario-based.
 
 ## How it's built
-Agent-driven build, human-owned judgment — coding agents scaffold the plumbing; the modeling decisions,
-the measurement correctness, and the evaluation are mine. The architecture (two-layer engine + science,
-split-as-criteria, dataset-adapter registry, calibration-under-shift) is carried from a mature prior ML
-project of mine; see [`docs/STRUCTURE.md`](docs/STRUCTURE.md). The neuroscience and decoding specifics I
-learn as I go. The tooling and quality gates are provisioned by an in-house copier template
-(sdlc-scaffold, version-pinned in `.copier-answers.yml`): the structural analyzers install as a pinned
-`sdlc-devtools` package — not vendored, so an engine update is a one-line pin bump and a template refresh is
-`uvx copier update`. What each gate enforces — the ruff ratchet, arch-fitness + test-mirror, import-linter
-layer contracts, and the magic-literal / shape-contract / duplication ratchets — is documented in
-[`AGENTS.md`](AGENTS.md).
+Agent-driven build, human-owned judgment — the modeling decisions, the measurement correctness, and the
+evaluation are mine; coding agents scaffold the plumbing. Data-structure reasoning and evaluation discipline
+carry over from prior ML work; the neuroscience and decoding specifics I learn as I go ([`learning/`](learning/)).
+
+## Architecture
+Two-layer engine + science (`core` kernel < `neuroscan` trainer), split-as-criteria, dataset-adapter registry,
+calibration-under-shift — carried from a mature prior ML project; see [`docs/STRUCTURE.md`](docs/STRUCTURE.md).
+Interactive import graph of `core` + `neuroscan` is **live** at
+[dimiturtrz.github.io/mindscape/architecture/](https://dimiturtrz.github.io/mindscape/architecture/) (main; dev
+preview at [`/architecture/preview/`](https://dimiturtrz.github.io/mindscape/architecture/preview/)), published
+by the repo's own `pages.yml`. `nox -s archmap` regenerates `docs/architecture/graph.json` (committed +
+diffable — the architecture-erosion record; the `index.html` viewer is gitignored, rebuilt on demand).
 
 ## References
 - **BCI Competition IV-2a** — Tangermann et al., *Review of the BCI Competition IV*, Front. Neurosci. 2012.
