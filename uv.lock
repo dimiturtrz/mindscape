@@ -2103,7 +2103,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "scikit-learn" },
     { name = "scipy" },
-    { name = "sdlc-devtools", marker = "extra == 'devtools'", git = "https://github.com/dimiturtrz/sdlc-scaffold.git?subdirectory=sdlc-devtools&rev=v1.5.0" },
+    { name = "sdlc-devtools", marker = "extra == 'devtools'", git = "https://github.com/dimiturtrz/sdlc-scaffold.git?subdirectory=sdlc-devtools&rev=v1.6.0" },
     { name = "torch", specifier = ">=2.7", index = "https://download.pytorch.org/whl/cu130" },
 ]
 provides-extras = ["dev", "export", "data", "devtools", "source", "all"]
@@ -4171,8 +4171,8 @@ wheels = [
 
 [[package]]
 name = "sdlc-devtools"
-version = "1.5.0"
-source = { git = "https://github.com/dimiturtrz/sdlc-scaffold.git?subdirectory=sdlc-devtools&rev=v1.5.0#06a98757705590b681fd2599e51bcd4162099d04" }
+version = "1.6.0"
+source = { git = "https://github.com/dimiturtrz/sdlc-scaffold.git?subdirectory=sdlc-devtools&rev=v1.6.0#188ca9224fcbc13fdc4db46685c42a21ec9ce9d1" }
 dependencies = [
     { name = "grimp" },
     { name = "networkx" },
