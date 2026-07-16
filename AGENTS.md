@@ -218,8 +218,10 @@ tree is boundary-clean, then the scaffold graduates it to `--assert` (sdlc-scaff
 ### Local gate runners — nox + pre-commit (bd kvo/dno)
 
 `nox` (`noxfile.py`, `devtools` extra) reproduces the CI gate suite locally from one command: `nox` runs
-`lint` (ruff+vulture+import-linter+ast-grep) + `test` (pytest+coverage floor) + `fitness` (graph.py --assert);
-`nox -s dup` adds advisory jscpd. Sessions shell the SAME pinned tools CI uses, so local == CI.
+`lint` (ruff check + ruff format --check + vulture + import-linter + arch-fitness `graph.py --assert` +
+ast-grep + jscpd — all folded into one session as of scaffold v1.5.0) + `test` (pytest) + `cov`
+(pytest+coverage; **enforced floor 80**, 95 advisory-warn). `nox -s archmap` regenerates the arch diagrams,
+`nox -s audit` runs the pip-audit CVE scan. Sessions shell the SAME pinned tools CI uses, so local == CI.
 `.pre-commit-config.yaml` runs the fast static gates (all but test/coverage) before each commit — enable with
 `pre-commit install` (keep it separate from the beads `.beads/hooks/pre-commit`), or one-shot `pre-commit run
 --all-files`.
