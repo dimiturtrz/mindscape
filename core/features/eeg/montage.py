@@ -24,3 +24,16 @@ class EegMontage:
         p = pos - np.nanmean(pos, axis=0)
         r = np.nanmax(np.hypot(p[:, 0], p[:, 1]))
         return p / (r + 1e-9)
+
+    @staticmethod
+    def channel_laplacian(positions: Float[np.ndarray, "ch 2"], sigma: float = 0.2) -> Float[np.ndarray, "ch ch"]:
+        """Graph Laplacian L = D − A over channels — the spatial-smoothness prior substrate (bd 1x0). Edge weight
+        A_ij = exp(−‖p_i − p_j‖² / 2σ²) (Gaussian RBF on the unit-disk montage, zero self-loop), so the quadratic
+        form fᵀLf = ½ Σ_ij A_ij (f_i − f_j)² penalizes differences between neighbouring electrodes. σ is the
+        neighbourhood width in unit-disk radii (matches the frozen-head topo RBF, bd nm5). Off-montage NaN
+        positions are pushed far so they pick up ~zero edge weight — excluded from the prior, not mis-placed."""
+        p = np.nan_to_num(positions, nan=1e6)
+        d2 = ((p[:, None, :] - p[None, :, :]) ** 2).sum(-1)
+        adj = np.exp(-d2 / (2 * sigma ** 2))
+        np.fill_diagonal(adj, 0.0)
+        return (np.diag(adj.sum(1)) - adj).astype(np.float32)

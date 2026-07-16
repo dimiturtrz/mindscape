@@ -67,6 +67,14 @@ class NiceEncoder(nn.Module):
         z = self.proj(x)                                   # [B,D]
         return F.normalize(z, dim=-1)
 
+    def geo_penalty(self, laplacian: Float[torch.Tensor, "ch ch"]) -> Float[torch.Tensor, ""]:
+        """Graph-Laplacian spatial-smoothness penalty on the spatial conv (bd 1x0). The spatial conv mixes the C
+        channels with a per-channel weight; reshaped to W = [C, F·F], tr(Wᵀ L W) = ½ Σ_ij A_ij ‖w_i − w_j‖²
+        pushes neighbouring electrodes toward similar mixing weights — the montage adjacency injected as a
+        small-data prior (knowledge > data). `laplacian` from EegMontage.channel_laplacian, on the same device."""
+        w = self.spatial.weight.reshape(-1, self.spatial.weight.shape[2]).t()   # [C, F·F]
+        return (w * (laplacian @ w)).sum()
+
 
 class Nice:
     @staticmethod
