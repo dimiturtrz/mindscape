@@ -59,9 +59,7 @@ class CouplingProbe:
         me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
         mf = store.Store.load("shin2017_nback", FnirsCfg())
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
-        frames = [(s, (store.Store.gather(me.filter(me["subject"] == s))[0],
-                       store.Store.gather(mf.filter(mf["subject"] == s))[0]))
-                  for s in subs]
+        frames = [(s, store.Store.gather_aligned(me, mf, s)[:2]) for s in subs]
         drives, resps, _ = cls._global_series(frames)
         D, R = np.concatenate(drives), np.concatenate(resps)
         logger.info(f"pooled n={D.shape[0]} blocks · {len(subs)} subjects")

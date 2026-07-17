@@ -9,25 +9,33 @@ frames/waveforms) so one web app renders both modalities.
 """
 from __future__ import annotations
 
-import argparse
-import json
+import logging
 from pathlib import Path
 
 import numpy as np
+import polars as pl
+import scipy.io as sio
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
+from baselines.fnirs import features as ff
+from core.config import Config
+from core.data import store
+from core.data.fnirs.base import FnirsCfg
+from core.data.fnirs.shin2017 import Shin2017NirsAdapter
+from core.features import Amplitude
+from neuroviz.manifest import Manifest
+from neuroviz.viewdata import Decode, ViewData
+
+logger = logging.getLogger(__name__)
+
+_BINARY = 2                      # binary-LR special case: one coef row covers the two classes
 N_FRAMES = 200                   # animation frames ≈ native 10 Hz over the 22 s window (~30 fps at 3× speed)
 CLASS_NAMES = {0: "0-back", 1: "2-back", 2: "3-back"}
 
 
 def _subject_epochs(subject: int):
     """(X [n,72,t] HbO|HbR, y, ch_names[36], pos2d[36,2], fs) for one subject via the adapter + montage."""
-    import scipy.io as sio
-
-    from core.config import Config
-    from core.data.fnirs.base import FnirsCfg
-    from core.data.fnirs.shin2017 import adapter
-
-    X, y, _ = adapter("nback").get_data([subject], FnirsCfg(tmax=20.0))
+    X, y, _ = Shin2017NirsAdapter.adapter("nback").get_data([subject], FnirsCfg(tmax=20.0))
     d = Config.raw_dir() / "shin2017" / f"VP{subject:03d}-NIRS"
     mnt = sio.loadmat(d / "mnt_nback.mat", struct_as_record=False, squeeze_me=True)["mnt_nback"]
     names = [str(c) for c in np.asarray(mnt.clab)][:36]
@@ -53,16 +61,13 @@ def _frames(X, y, chan_slice, n_frames=N_FRAMES):
 
 def _lda_patterns(X, y):
     """Per-class LDA weight on the HbO MEAN feature (what the decoder reads), one value per channel."""
-    from core.features import Amplitude
-    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-
     lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto").fit(Amplitude.amplitude_features(X), y)
     coef = np.atleast_2d(lda.coef_)                         # [n_class, 216] (mean|slope|peak × 72)
     classes = sorted(np.unique(y).tolist())
-    if coef.shape[0] == 1 and len(classes) == 2:
+    if coef.shape[0] == 1 and len(classes) == _BINARY:
         coef = np.vstack([-coef[0], coef[0]])
     out = {}
-    for c, row in zip(classes, coef):
+    for c, row in zip(classes, coef, strict=True):
         w = np.asarray(row)[:36]                            # HbO mean-feature block
         out[CLASS_NAMES[c]] = (w / (np.abs(w).max() + 1e-9)).tolist()
     return out
@@ -87,36 +92,21 @@ def _predictions(subject: int, X, y):
     """Honest per-trial output: train the fNIRS decoder on the OTHER subjects (LOSO), predict THIS
     subject's trials. Returns ({class: {truth, pred, probs, correct}} for the shown example trial) and the
     subject's cross-subject fold accuracy — so the viewer shows ground truth vs prediction, not just signal."""
-    import polars as pl
-
-    from baselines.fnirs import features as ff
-    from core.data import store
-    from core.data.fnirs.base import FnirsCfg
-
     meta = store.Store.load("shin2017_nback", FnirsCfg(tmax=20.0))
     Xtr, ytr = store.Store.gather(meta.filter(pl.col("subject") != str(subject)))
     clf = ff.fit(Xtr, ytr)
     probs = ff.score(clf, X)
     pred = probs.argmax(1)
-    per = {}
-    for c in sorted(np.unique(y).tolist()):
-        i = int((y == c).argmax())                         # the example trial shown for this class (first match)
-        per[CLASS_NAMES[c]] = {"truth": CLASS_NAMES[c], "pred": CLASS_NAMES[int(pred[i])],
-                               "probs": [round(float(p), 3) for p in probs[i]],
-                               "correct": bool(pred[i] == c)}
-    score = {"acc": round(float((pred == y).mean()), 3), "chance": round(1 / 3, 3),
-             "regime": "cross-subject (LOSO)", "decoder": "fNIRS mean+slope+peak → LDA"}
-    return per, score
+    return ViewData.prediction_report(CLASS_NAMES, Decode(y, pred, probs, 1 / 3, "fNIRS mean+slope+peak → LDA"))
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--subject", type=int, default=1)
-    ap.add_argument("--out", default="neuroviz/web/data")
-    args = ap.parse_args()
+    args = ViewData.subject_args(__doc__)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     X, y, names, pos, fs = _subject_epochs(args.subject)
-    print(f"fNIRS subject {args.subject}: {len(X)} epochs, {len(names)} ch, classes {sorted(np.unique(y).tolist())}")
+    logger.info(f"fNIRS subject {args.subject}: {len(X)} epochs, {len(names)} ch, "
+                f"classes {sorted(np.unique(y).tolist())}")
 
     hbo, ftimes = _frames(X, y, slice(0, 36))
     data = {
@@ -126,7 +116,7 @@ def main():
         "channels": names,
         "pos": pos.tolist(),
         "classes": [CLASS_NAMES[c] for c in sorted(np.unique(y).tolist())],
-        "frames": {"response": hbo},                       # one signal topomap (HbO activation); HbR is in the waveforms
+        "frames": {"response": hbo},                       # HbO activation topomap (HbR lives in the waveforms)
         "frame_times": ftimes,
         "lda_patterns": _lda_patterns(X, y),               # decoder view (per-class HbO weight)
         "waveforms": _waveforms(X, y, names),
@@ -135,19 +125,8 @@ def main():
     data["predictions"] = per                              # ground truth vs decoder prediction (per shown trial)
     data["score"] = score                                  # the honest cross-subject decoder accuracy
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    (out / f"fnirs_subject{args.subject}.json").write_text(json.dumps(data))
-
-    # modality-aware manifest: merge with any existing EEG entry
-    mpath = out / "manifest.json"
-    man = json.loads(mpath.read_text()) if mpath.exists() else {}
-    if "modalities" not in man:                             # migrate old {subjects:[...]} = EEG
-        man = {"modalities": {"eeg": man.get("subjects", [])}, }
-    man["modalities"].setdefault("fnirs", [])
-    subs = sorted({*man["modalities"]["fnirs"], int(args.subject)})
-    man["modalities"]["fnirs"] = subs
-    mpath.write_text(json.dumps(man))
-    print(f"-> {out}/fnirs_subject{args.subject}.json  (+ manifest, fnirs subjects {subs})")
+    subs = Manifest.publish(out, args.subject, "fnirs_subject", "fnirs", data)
+    logger.info(f"-> {out}/fnirs_subject{args.subject}.json  (+ manifest, fnirs subjects {subs})")
 
 
 if __name__ == "__main__":

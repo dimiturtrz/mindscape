@@ -26,7 +26,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from pyriemann.estimation import Covariances
 from sklearn.model_selection import GroupKFold
 
 from baselines.eeg import transfer
@@ -39,6 +38,7 @@ from core.data.fnirs.base import FnirsCfg
 from neuroscan import models
 from neuroscan.evaluation import metrics
 from neuroscan.tasks.cli import Cli
+from neuroscan.tasks.workload.riemann import Riemann
 
 logger = logging.getLogger(__name__)
 
@@ -179,22 +179,19 @@ class RunFusion:
         eeg_fit, eeg_score = models.Methods.get_method("riemann")   # plain-EEG fallback (fusion EEG is Riemann)
         fn_fit, fn_score = models.Methods.get_method("fnirs_lda")
 
-        def _cov(X):
-            return Covariances("oas").transform(X.astype(np.float64))
-
         def eeg_probs(Xtr, ytr, gtr, Xte, gte):
             """EEG decoder as a probability fn. Default = zero-shot RE-CENTERED Riemann (recenter each subject —
             train AND test — to the identity, unsupervised); needs the subject groups, so it can't be a plain
             get_method decoder. The `nback_fusion_plain` config (params.plain_eeg) falls back to plain Riemann."""
             if not recenter:
                 return eeg_score(eeg_fit(Xtr, ytr), Xte)
-            return transfer.zero_shot_predict(transfer.Domain(_cov(Xtr), ytr, gtr),
-                                              transfer.Domain(_cov(Xte), groups=gte), scale=False)
+            return transfer.zero_shot_predict(transfer.Domain(Riemann.cov(Xtr), ytr, gtr),
+                                              transfer.Domain(Riemann.cov(Xte), groups=gte), scale=False)
 
         def eeg_feats(X, g):
             """EEG feature vector for feature-level fusion — the re-centered tangent-space rep, so its EEG side
             matches the strong probs-side EEG (not a crude log-variance)."""
-            return transfer.recentered_tangent_features(_cov(X), g)
+            return transfer.recentered_tangent_features(Riemann.cov(X), g)
 
         # fold generator over the shared subject set (same split drives both modalities)
         if regime == "cross_subject_kfold":

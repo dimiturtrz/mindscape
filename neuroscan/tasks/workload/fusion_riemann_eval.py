@@ -15,10 +15,7 @@ from __future__ import annotations
 import logging
 
 import numpy as np
-from pyriemann.estimation import Covariances
-from sklearn.model_selection import StratifiedGroupKFold
 
-from baselines.eeg import transfer
 from core.data import store
 from core.data.eeg import shin2017_nback_eeg as eegmod
 from core.data.eeg.base import EpochCfg
@@ -27,6 +24,7 @@ from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
 from neuroscan.evaluation import metrics
 from neuroscan.tasks.cli import Cli
+from neuroscan.tasks.workload.riemann import Riemann
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +39,6 @@ class FusionRiemannEval:
     """Brain-camera fusion Riemann-eval helpers — the free helpers folded in as staticmethods."""
 
     @classmethod
-    def _cov(cls, X):
-        return Covariances("oas").transform(X.astype(np.float64))
-
-    @classmethod
     def _build_all(cls, band="sum"):
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
         mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))
@@ -53,16 +47,13 @@ class FusionRiemannEval:
         pos_e = bc.EegMontage.eeg_positions(ch_e)
         Cs, ys, gs = [], [], []
         for s in subs:
-            Xe, ye = store.Store.gather(me.filter(me["subject"] == s))
-            Xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
-            if not np.array_equal(ye, yf):
-                raise ValueError(f"subject {s} EEG/fNIRS misaligned")
+            Xe, Xf, ye = store.Store.gather_aligned(me, mf, s)
             if _CSD:
                 Xe = bc.CSD.csd_transform(Xe, ch_e, 100.0)                 # spatial deblur before fusion
             pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter().subject_dir(int(s)))
             joint, _ = bc.BrainCamera.fused_node_series(bc.PairedModalities(Xe, Xf, pos_e, pos_f), band=band,
                                                         series=bc.SeriesConfig(fps=_FPS, t_end=_TEND))
-            Cs.append(cls._cov(joint))
+            Cs.append(Riemann.cov(joint))
             ys.append(ye)
             gs.append(np.array([s] * len(ye)))
         return np.concatenate(Cs), np.concatenate(ys), np.concatenate(gs)
@@ -74,14 +65,10 @@ class FusionRiemannEval:
         logger.info(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · "
                     f"cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
         accs, kaps = [], []
-        for seed in _SEEDS:
-            for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(C, y, g):
-                # winning EEG method: per-subject re-center (train AND test, unsupervised) -> tangent -> LR
-                proba = transfer.zero_shot_predict(transfer.Domain(C[tr], y[tr], g[tr]),
-                                                   transfer.Domain(C[te], groups=g[te]), scale=False)
-                pred = proba.argmax(1)
-                accs.append(metrics.Metrics.accuracy(y[te], pred))
-                kaps.append(metrics.Metrics.kappa(y[te], pred))
+        for yte, proba in Riemann.cross_subject_folds(C, y, g, _SEEDS, _K):
+            pred = proba.argmax(1)
+            accs.append(metrics.Metrics.accuracy(yte, pred))
+            kaps.append(metrics.Metrics.kappa(yte, pred))
         a, k = float(np.mean(accs)), float(np.mean(kaps))
         logger.info(f"\n  fused-only (joint EEG×fNIRS×coverage) · re-centered tangent · "
               f"cross-subject {len(_SEEDS)}x{_K}-fold: "

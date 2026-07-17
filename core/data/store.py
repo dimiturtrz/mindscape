@@ -129,6 +129,19 @@ class Store:
             y[i] = yp
         return X, y
 
+    @staticmethod
+    def gather_aligned(meta_e: pl.DataFrame, meta_f: pl.DataFrame, subject: str | int
+                       ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Gather one subject's EEG + fNIRS epochs block-aligned -> (Xe, Xf, y). Hard guard that the two label
+        sequences match (raises if the paired blocks are misaligned) — the one place any EEG↔fNIRS fusion path
+        must go through, so a silent misalignment can never fake a fusion gain. `y` is the shared label vector."""
+        s = str(subject)
+        xe, ye = Store.gather(meta_e.filter(meta_e["subject"] == s))
+        xf, yf = Store.gather(meta_f.filter(meta_f["subject"] == s))
+        if len(ye) != len(yf) or not np.array_equal(ye, yf):
+            raise ValueError(f"subject {s} EEG/fNIRS blocks misaligned — fusion invalid")
+        return xe, xf, ye
+
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")

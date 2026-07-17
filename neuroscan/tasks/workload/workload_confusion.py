@@ -11,14 +11,12 @@ from __future__ import annotations
 import logging
 
 import numpy as np
-from pyriemann.estimation import Covariances
-from sklearn.model_selection import StratifiedGroupKFold
 
-from baselines.eeg import transfer
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from neuroscan.evaluation import metrics
 from neuroscan.tasks.cli import Cli
+from neuroscan.tasks.workload.riemann import Riemann
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +28,6 @@ class WorkloadConfusion:
     """Workload confusion-matrix diagnostic helpers — the free helpers folded in as staticmethods."""
 
     @classmethod
-    def _cov(cls, X):
-        return Covariances("oas").transform(X.astype(np.float64))
-
-    @classmethod
     def main(cls):
         Cli.setup_logging()
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
@@ -41,7 +35,7 @@ class WorkloadConfusion:
         Cs, ys, gs = [], [], []
         for s in subs:
             X, y = store.Store.gather(me.filter(me["subject"] == s))
-            Cs.append(cls._cov(X))
+            Cs.append(Riemann.cov(X))
             ys.append(y)
             gs.append(np.array([s] * len(y)))
         C, y, g = np.concatenate(Cs), np.concatenate(ys), np.concatenate(gs)
@@ -49,13 +43,11 @@ class WorkloadConfusion:
 
         conf = np.zeros((n_cls, n_cls), int)
         accs = []
-        for seed in _SEEDS:
-            for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(C, y, g):
-                pred = transfer.zero_shot_predict(transfer.Domain(C[tr], y[tr], g[tr]),
-                                                  transfer.Domain(C[te], groups=g[te]), scale=False).argmax(1)
-                accs.append(metrics.Metrics.accuracy(y[te], pred))
-                for t, p in zip(y[te], pred, strict=True):
-                    conf[t, p] += 1
+        for yte, proba in Riemann.cross_subject_folds(C, y, g, _SEEDS, _K):
+            pred = proba.argmax(1)
+            accs.append(metrics.Metrics.accuracy(yte, pred))
+            for t, p in zip(yte, pred, strict=True):
+                conf[t, p] += 1
 
         logger.info(f"EEG-alone re-centered Riemann · 3-way acc {np.mean(accs):.3f} · classes 0-back/2-back/3-back")
         logger.info("confusion (row=true, col=pred), summed over seeds×folds:")

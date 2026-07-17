@@ -9,21 +9,18 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
+import logging
 
 import numpy as np
 
 from core.config import REPO
-from core.data import store
-from core.data.eeg.base import EpochCfg
-from core.data.eeg import shin2017_nback_eeg as eegmod
-from core.data.fnirs.base import FnirsCfg
-from core.data.fnirs import shin2017 as fnmod
 from core.features import fusion as bc
+from neuroviz.fusion.inputs import PairedInputs
+
+logger = logging.getLogger(__name__)
 
 _FS_E, _FS_F, _TMIN_F = 100.0, 10.0, -2.0
 _FPS, _TEND, _FN_TMAX = 10.0, 20.0, 32.0        # fNIRS epoched past _TEND so read-forward (τ+lag) fills the tail
-_CSD = True                                      # surface-Laplacian deblur of EEG before fusion (scalp-space fix)
 _COV_GRID = 40                                   # locality-coverage kernel resolution exported for the viz
 
 
@@ -32,19 +29,11 @@ def main():
     ap.add_argument("--subject", type=int, default=1)
     ap.add_argument("--block", type=int, default=0)
     args = ap.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
-    mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))     # past 20 s so the read-forward tail has blood
-    s = str(args.subject)
-    Xe, ye = store.Store.gather(me.filter(me["subject"] == s))
-    Xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
-    assert np.array_equal(ye, yf), "EEG/fNIRS misaligned"
-    ch_e = eegmod.Shin2017NbackEegAdapter.adapter().channels()
-    if _CSD:
-        Xe = bc.CSD.csd_transform(Xe, ch_e, _FS_E)               # spatial deblur before fusion (scalp-space)
+    inp = PairedInputs.load(args.subject, _FS_E, _FN_TMAX)
+    Xe, Xf, ye, pos_e, pos_f = inp.Xe, inp.Xf, inp.y, inp.pos_e, inp.pos_f
     b = args.block
-    pos_e = bc.EegMontage.eeg_positions(ch_e)
-    pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter()._subject_dir(args.subject))
 
     # single source of truth: core computes the fused representation (band-power envelopes + CBSI neural,
     # lag-aligned) and the locality-coverage kernel. The viz just displays them — no fusion logic in JS.
@@ -70,9 +59,9 @@ def main():
     dst = REPO / "neuroviz" / "web" / "data" / f"brain_camera_subject{args.subject}.json"
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(json.dumps(out))
-    print(f"-> {dst.relative_to(REPO)}  ({len(t_dst)} frames, EEG {pos_e.shape[0]}ch, fNIRS {pos_f.shape[0]}ch, "
-          f"class {out['label']}, derived lag {coupling['lag']:.1f}s decay {coupling['decay']:.1f}s "
-          f"β {coupling['beta']:.2g})")
+    logger.info(f"-> {dst.relative_to(REPO)}  ({len(t_dst)} frames, EEG {pos_e.shape[0]}ch, fNIRS {pos_f.shape[0]}ch, "
+                f"class {out['label']}, derived lag {coupling['lag']:.1f}s decay {coupling['decay']:.1f}s "
+                f"β {coupling['beta']:.2g})")
 
 
 def _disp(x: np.ndarray) -> np.ndarray:

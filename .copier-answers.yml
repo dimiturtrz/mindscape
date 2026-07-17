@@ -7,8 +7,8 @@ author: mindscape
 coverage_floor: 80
 data_env_var: MINDSCAPE_DATA
 domain: ml
-jscpd_paths: core neuroscan
-lint_paths: core neuroscan
+jscpd_paths: core neuroscan neuroviz
+lint_paths: core neuroscan neuroviz
 packages: core,neuroscan
 project_name: mindscape
 repo_url: https://github.com/dimiturtrz/mindscape
