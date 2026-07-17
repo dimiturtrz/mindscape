@@ -38,6 +38,10 @@ _UNCLIP = "diffusers/stable-diffusion-2-1-unclip-i2i-l"
 _TILE = 224            # per-image square in the output grid
 _EVAL_BATCH = 256
 _DEFAULT_TARGET = "vitl14"
+# unCLIP's image_normalizer expects RAW OpenAI ViT-L/14 image embeds (norm ~19, measured mean over the 200
+# THINGS-EEG2 test images, std 1.0). Our targets + the encoder output are L2-normalized (norm 1) for InfoNCE —
+# feeding norm-1 to the decoder decodes to garbage. Rescale to this magnitude before decoding (bd 71n).
+_CLIP_SCALE = 19.0
 
 
 @dataclass
@@ -61,14 +65,19 @@ class Reconstruct:
         from diffusers import StableUnCLIPImg2ImgPipeline  # noqa: PLC0415 — heavy optional dep, load on use
         dtype = torch.float16 if device == "cuda" else torch.float32
         pipe = StableUnCLIPImg2ImgPipeline.from_pretrained(_UNCLIP, torch_dtype=dtype)
-        return pipe.to(device)
+        if device != "cuda":
+            return pipe.to(device)
+        pipe.enable_model_cpu_offload()   # keep only the active component on VRAM (offload the rest to CPU)
+        pipe.enable_vae_slicing()         # decode the VAE in slices — bounds the peak decode allocation
+        return pipe
 
     @staticmethod
     def decode(pipe, embeds: Float[np.ndarray, "n d"], device: str,
                steps: int = 20, noise_level: int = 0) -> list[Image.Image]:
         """Decode CLIP image embeddings [n, 768] -> PIL images via `image_embeds` injection (skips the encoder)."""
         dtype = torch.float16 if device == "cuda" else torch.float32
-        tensor = torch.from_numpy(np.ascontiguousarray(embeds)).to(device=device, dtype=dtype)
+        scaled = embeds / (np.linalg.norm(embeds, axis=-1, keepdims=True) + 1e-8) * _CLIP_SCALE   # raw-CLIP magnitude
+        tensor = torch.from_numpy(np.ascontiguousarray(scaled)).to(device=device, dtype=dtype)
         images = []
         for i in range(len(tensor)):
             out = pipe(image_embeds=tensor[i:i + 1], prompt="", num_inference_steps=steps, noise_level=noise_level)
@@ -86,8 +95,12 @@ class Reconstruct:
 
     @staticmethod
     def _predict(encoder, eeg: Float[np.ndarray, "n ch t"], device: str) -> Float[np.ndarray, "n d"]:
-        """EEG [n, ch, t] -> L2-normalized CLIP-space embeddings [n, d] (the encoder's forward, batched)."""
-        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda")):
+        """EEG [n, ch, t] -> L2-normalized CLIP-space embeddings [n, d] (the encoder's forward, batched).
+
+        `no_grad` is load-bearing: without it the forward retains the autograd graph across every batch of the
+        16k-trial test set, leaking tens of GB of activations that are never freed (inference needs no graph).
+        """
+        with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda")):
             chunks = [encoder(torch.from_numpy(eeg[i:i + _EVAL_BATCH]).to(device)).float().cpu()
                       for i in range(0, len(eeg), _EVAL_BATCH)]
         return torch.cat(chunks).numpy()
@@ -130,8 +143,9 @@ class Reconstruct:
         """Reconstruct `cfg.n` test concepts. sanity = decoder ceiling (true CLIP); eeg = the EEG-predicted result."""
         device = "cuda" if torch.cuda.is_available() else "cpu"
         target = _DEFAULT_TARGET
-        pipe = Reconstruct._pipe(device)
 
+        # Encoder prediction first, then FREE it before loading the ~6 GB unCLIP pipe — co-residence OOMs a 32 GB
+        # card. Sequential GPU use: predict -> empty_cache -> decode.
         pred = None
         if cfg.mode == "eeg":
             encoder, ckpt = Reconstruct._load_encoder(Path(cfg.encoder_ckpt), device)
@@ -140,7 +154,11 @@ class Reconstruct:
             test_eeg, test_concept = TrainNice.test_features(cfg.test_subject, tcfg)
             pred = Reconstruct._concept_mean(
                 Reconstruct._predict(encoder, test_eeg, device), test_concept, int(test_concept.max()) + 1)
+            del encoder
+            if device == "cuda":
+                torch.cuda.empty_cache()
 
+        pipe = Reconstruct._pipe(device)
         true_emb = clip_targets.ClipTargets.concept_prototypes("test", target)
         concepts = list(range(min(cfg.n, len(true_emb))))
         stimuli = Reconstruct._stimulus_images(concepts)
