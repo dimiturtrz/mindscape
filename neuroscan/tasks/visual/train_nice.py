@@ -29,6 +29,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
+from jaxtyping import Float, Int, Shaped
 from pydantic import BaseModel
 from torch.utils.data import DataLoader, Dataset
 
@@ -55,8 +56,8 @@ class _EpochDataset(Dataset):
     of a much larger epoch pile). Together these keep a full 9-subject LOSO (~38 GB of epochs) in RAM instead
     of OOM-ing on the doubled copies (torch tensor + boolean-mask slice)."""
 
-    def __init__(self, eeg: np.ndarray, targets: np.ndarray, indices: np.ndarray | None = None,
-                 subject: np.ndarray | None = None):
+    def __init__(self, eeg: Float[np.ndarray, "n ch t"], targets: Float[np.ndarray, "n d"],
+                 indices: Int[np.ndarray, "m"] | None = None, subject: Int[np.ndarray, "n"] | None = None):
         self.eeg, self.targets, self.subject = eeg, targets, subject
         self.indices = indices
 
@@ -163,7 +164,7 @@ class TrainNice:
     reused by the cross-dataset runner."""
 
     @staticmethod
-    def _clip_targets(image_files: np.ndarray, split: str) -> np.ndarray:
+    def _clip_targets(image_files: Shaped[np.ndarray, "n"], split: str) -> Float[np.ndarray, "n d"]:
         """CLIP embedding per epoch, looked up by the image the subject viewed."""
         by_file = clip_targets.ClipTargets.embeddings_by_file(split)
         return np.stack([by_file[name] for name in image_files]).astype(np.float32)
@@ -204,7 +205,7 @@ class TrainNice:
                 "single_trial_hits": {k: h.tolist() for k, h in hits.items()}}   # persisted for paired delta (s1t2)
 
     @staticmethod
-    def _val_split(concept: np.ndarray, targets: np.ndarray, seed: int, fraction: float):
+    def _val_split(concept: Int[np.ndarray, "n"], targets: Float[np.ndarray, "n d"], seed: int, fraction: float):
         """Hold out a fraction of TRAINING concepts as a leak-free early-stop signal.
 
         Returns (train_mask, val_eeg_mask, val_labels, val_prototypes). Selection reads only this val set, so the
@@ -222,7 +223,8 @@ class TrainNice:
         return ~val_mask, val_mask, val_labels, prototypes
 
     @staticmethod
-    def _concept_neighbor_groups(targets: np.ndarray, concept_ids: np.ndarray, k: int) -> dict[int, list[int]]:
+    def _concept_neighbor_groups(targets: Float[np.ndarray, "n d"], concept_ids: Int[np.ndarray, "n"],
+                                 k: int) -> dict[int, list[int]]:
         """Per-concept CLIP-nearest neighbours (keyed by actual concept id), from the trials' own CLIP targets —
         the model-free hardness prior for clip_hard batching (bd 4ru). Prototype = mean target per concept."""
         concepts = sorted({int(c) for c in concept_ids})

@@ -16,7 +16,7 @@ Two pieces:
 from __future__ import annotations
 
 import numpy as np
-from jaxtyping import Float
+from jaxtyping import Float, Shaped
 from scipy.stats import kurtosis, skew
 
 from core.features.fnirs.amplitude import Amplitude
@@ -27,7 +27,8 @@ class DescriptorBank:
     staticmethods, public names kept). `FNIRS_FEATURE_FNS` maps family name -> the staticmethod."""
 
     @classmethod
-    def _slope(cls, X: np.ndarray, tc: np.ndarray, tc_ss: float) -> np.ndarray:
+    def _slope(cls, X: Float[np.ndarray, "n ch t"], tc: Float[np.ndarray, "t"], tc_ss: float
+               ) -> Float[np.ndarray, "n ch"]:
         """OLS slope of each channel over the (centred) time axis — the response's trend."""
         return (X * tc).sum(axis=2) / tc_ss
 
@@ -123,7 +124,7 @@ class WeightedFamilyScaler:
     out by the per-feature std, so it would have no effect. `weights` maps family name -> w (missing = 1.0);
     w≈0 effectively drops the family. `fam` is the column→family map from `extract_bank`."""
 
-    def __init__(self, fam: np.ndarray, weights: dict[str, float]):
+    def __init__(self, fam: Shaped[np.ndarray, "d"], weights: dict[str, float]):
         self.fam = fam
         self.weights = weights
 

@@ -201,12 +201,15 @@ advisory DB. **Nightly + manual dispatch, NOT a per-PR gate** (advisories change
 with no code change on your side), so it goes red on a schedule and notifies rather than blocking a merge.
 `--skip-editable` drops the git/local installs (sdlc-devtools) that carry no PyPI release to look up.
 
-### Shape contracts — advisory (sdlc-scaffold)
+### Shape contracts — ENFORCED (sdlc-scaffold, bd vip.4)
 
-`devtools.shape_contracts` — a public array/tensor boundary should carry a **jaxtyping** shape
+`devtools.shape_contracts` — a public array/tensor boundary must carry a **jaxtyping** shape
 (`Float[Tensor, "b c h w"]`, live at runtime via a `@shapecheck` beartype wrapper), not a bare
-`np.ndarray`/`Tensor`; repo array aliases in `[tool.shape_contracts]`. **Advisory** (report-only) until the
-tree is boundary-clean, then the scaffold graduates it to `--assert` (sdlc-scaffold-vip.4).
+`np.ndarray`/`Tensor`; repo array aliases in `[tool.shape_contracts]`. **GRADUATED advisory→`--assert`** at
+scaffold **v1.14.0** — the enforcement lives in the `sdlc-devtools` package (`--assert` was a no-op through
+v1.13.1), so adopting v1.14 turned the gate live; the tree was made boundary-clean at adoption (25 boundaries
+annotated). A fresh boundary without a shape now **blocks** CI — fix by adding the jaxtyping annotation, never
+a bare type. Non-numeric arrays (filename/string columns) use `Shaped[np.ndarray, "n"]`.
 
 ### Local gate runners — nox + pre-commit (bd kvo/dno)
 

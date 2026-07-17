@@ -22,7 +22,7 @@ import logging
 import mne
 import numpy as np
 import polars as pl
-from jaxtyping import Float
+from jaxtyping import Bool, Float
 from pydantic import BaseModel
 from scipy.signal import resample as _resample
 
@@ -81,7 +81,7 @@ class ThingsEeg1:
         return list(raw.ch_names[:_N_EEG])
 
     @staticmethod
-    def _row_mask(events: pl.DataFrame, cfg: ThingsEeg1EpochCfg) -> np.ndarray:
+    def _row_mask(events: pl.DataFrame, cfg: ThingsEeg1EpochCfg) -> Bool[np.ndarray, "n"]:
         """Which events.tsv rows to epoch: drop fixation-colour targets and (by default) the held-out validation
         stimuli. Flags are optional columns — absent means the dataset doesn't distinguish that split, keep all."""
         mask = np.ones(len(events), dtype=bool)

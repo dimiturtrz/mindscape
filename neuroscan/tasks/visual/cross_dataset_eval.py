@@ -18,6 +18,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from jaxtyping import Float
 from pydantic import BaseModel
 
 from core.data.eeg import things_eeg1, things_eeg2
@@ -65,7 +66,7 @@ class CrossDatasetEval:
 
     @staticmethod
     @torch.no_grad()
-    def _embed(encoder, eeg: np.ndarray, device: str) -> np.ndarray:
+    def _embed(encoder, eeg: Float[np.ndarray, "n ch t"], device: str) -> Float[np.ndarray, "n d"]:
         encoder.eval()
         return torch.cat([encoder(torch.tensor(eeg[i:i + _EVAL_BATCH]).to(device)).cpu()
                           for i in range(0, len(eeg), _EVAL_BATCH)]).numpy()

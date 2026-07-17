@@ -39,7 +39,7 @@ class Retrieval:
         return out
 
     @staticmethod
-    def _softmax(scores: np.ndarray) -> np.ndarray:
+    def _softmax(scores: Float[np.ndarray, "n k"]) -> Float[np.ndarray, "n k"]:
         scores = scores - scores.max(axis=1, keepdims=True)
         exp = np.exp(scores)
         return exp / exp.sum(axis=1, keepdims=True)
