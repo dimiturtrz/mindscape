@@ -11,8 +11,6 @@ topomap positions. Reuses the motor-imagery exporter's topomap / CSP / Riemann h
 """
 from __future__ import annotations
 
-import argparse
-import json
 import logging
 from pathlib import Path
 
@@ -22,7 +20,9 @@ import numpy as np
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from neuroscan.models import Methods
-from neuroviz.export import N_FRAMES, _csp_patterns, _pos2d, _riemann_patterns, _waveforms
+from neuroviz.export import N_FRAMES, _eeg_view
+from neuroviz.manifest import Manifest
+from neuroviz.viewdata import Decode, ViewData
 
 logger = logging.getLogger(__name__)
 
@@ -85,22 +85,11 @@ def _predictions(subject: int):
     probs = np.asarray(score(fit(Xtr, ytr), Xte))
     pred = probs.argmax(1)
     id2lab = {r["label_id"]: r["label"] for r in te.select("label_id", "label").unique().to_dicts()}
-    per = {}
-    for c in sorted(np.unique(yte).tolist()):
-        i = int((yte == c).argmax())
-        per[id2lab[c]] = {"truth": id2lab[c], "pred": id2lab[int(pred[i])],
-                          "probs": [round(float(p), 3) for p in probs[i]],
-                          "correct": bool(pred[i] == c)}
-    score_d = {"acc": round(float((pred == yte).mean()), 3), "chance": round(1 / 3, 3),
-               "regime": "cross-subject (LOSO)", "decoder": "Riemann (tangent space)"}
-    return per, score_d
+    return ViewData.prediction_report(id2lab, Decode(yte, pred, probs, 1 / 3, "Riemann (tangent space)"))
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--subject", type=int, default=1)
-    ap.add_argument("--out", default="neuroviz/web/data")
-    args = ap.parse_args()
+    args = ViewData.subject_args(__doc__)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     ep, labels = _epochs(args.subject)
@@ -111,31 +100,14 @@ def main():
     theta_fr, ftimes = _bandpower_frames(ep, labels, *THETA)
     alpha_fr, _ = _bandpower_frames(ep, labels, *ALPHA)
     beta_fr, _ = _bandpower_frames(ep, labels, *BETA)
-    data = {
-        "subject": str(args.subject),
-        "sfreq": float(ep.info["sfreq"]),
-        "channels": list(ep.ch_names),
-        "pos": _pos2d(ep.info).tolist(),
-        "classes": [str(c) for c in sorted(set(labels))],
-        "frames": {"theta": theta_fr, "alpha": alpha_fr, "beta": beta_fr},
-        "frame_times": ftimes,
-        "csp_patterns": _csp_patterns(ep, labels),
-        "riemann_patterns": _riemann_patterns(ep, labels),
-        "waveforms": _waveforms(ep, labels),
-    }
+    frames = {"theta": theta_fr, "alpha": alpha_fr, "beta": beta_fr}
+    data = _eeg_view(args.subject, ep, labels, frames, ftimes)
     per, score = _predictions(args.subject)
     data["predictions"] = per
     data["score"] = score
 
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    (out / f"eegwl_subject{args.subject}.json").write_text(json.dumps(data))
-    # manifest: register under a workload-EEG modality key (the viewer groups it into the workload task)
-    subs = sorted(int(p.stem.replace("eegwl_subject", "")) for p in out.glob("eegwl_subject*.json"))
-    mpath = out / "manifest.json"
-    man = json.loads(mpath.read_text()) if mpath.exists() else {"modalities": {}}
-    man.setdefault("modalities", {})["eeg_workload"] = subs
-    mpath.write_text(json.dumps(man))
+    subs = Manifest.publish(out, args.subject, "eegwl_subject", "eeg_workload", data)
     logger.info(f"-> {out}/eegwl_subject{args.subject}.json  (+ manifest, eeg_workload subjects {subs})")
 
 

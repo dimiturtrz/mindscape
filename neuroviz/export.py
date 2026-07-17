@@ -10,8 +10,6 @@ Views (all 2D, the conventions a neuro audience expects):
 """
 from __future__ import annotations
 
-import argparse
-import json
 import logging
 from pathlib import Path
 
@@ -28,6 +26,8 @@ from baselines.eeg.riemann import TangentSpace
 from core.config import Config
 from core.data import store
 from core.data.eeg.base import CANONICAL_MI, EpochCfg
+from neuroviz.manifest import Manifest
+from neuroviz.viewdata import Decode, ViewData
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +143,23 @@ def _waveforms(ep, labels, per_class=PER_CLASS, n_t=N_WAVE_T):
     return {"t": t, "trials": out, "chans": names}
 
 
+def _eeg_view(subject: int, ep, labels, frames: dict, ftimes: list) -> dict:
+    """The shared EEG view payload (motor-imagery and workload exporters differ only in the frame bands):
+    channels + 2D positions + per-class frames + CSP/Riemann patterns + example waveforms."""
+    return {
+        "subject": str(subject),
+        "sfreq": float(ep.info["sfreq"]),
+        "channels": list(ep.ch_names),
+        "pos": _pos2d(ep.info).tolist(),
+        "classes": [str(c) for c in sorted(set(labels))],
+        "frames": frames,
+        "frame_times": ftimes,
+        "csp_patterns": _csp_patterns(ep, labels),
+        "riemann_patterns": _riemann_patterns(ep, labels),
+        "waveforms": _waveforms(ep, labels),
+    }
+
+
 def _predictions(subject: int):
     """Honest per-trial output: train CSP+LDA on the OTHER subjects (LOSO), predict THIS subject's trials.
     Returns ({class: {truth, pred, probs, correct}} for a shown example trial) + the subject's fold accuracy."""
@@ -153,22 +170,11 @@ def _predictions(subject: int):
     probs = np.asarray(csp_lda.score(clf, Xte))
     pred = probs.argmax(1)
     id2name = {v: k for k, v in CANONICAL_MI.items()}      # canonical id -> MI class name
-    per = {}
-    for c in sorted(np.unique(yte).tolist()):
-        i = int((yte == c).argmax())
-        per[id2name[c]] = {"truth": id2name[c], "pred": id2name[int(pred[i])],
-                           "probs": [round(float(p), 3) for p in probs[i]],
-                           "correct": bool(pred[i] == c)}
-    score = {"acc": round(float((pred == yte).mean()), 3), "chance": 0.25,
-             "regime": "cross-subject (LOSO)", "decoder": "CSP+LDA"}
-    return per, score
+    return ViewData.prediction_report(id2name, Decode(yte, pred, probs, 0.25, "CSP+LDA"))
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--subject", type=int, default=1)
-    ap.add_argument("--out", default="neuroviz/web/data")
-    args = ap.parse_args()
+    args = ViewData.subject_args(__doc__)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     ep, labels = _load_epochs(args.subject)
@@ -176,33 +182,12 @@ def main():
 
     mu_fr, ftimes = _erd_frames(ep, labels, MU)
     beta_fr, _ = _erd_frames(ep, labels, BETA)
-    data = {
-        "subject": str(args.subject),
-        "sfreq": float(ep.info["sfreq"]),
-        "channels": list(ep.ch_names),
-        "pos": _pos2d(ep.info).tolist(),
-        "classes": [str(c) for c in sorted(set(labels))],
-        "frames": {"mu": mu_fr, "beta": beta_fr},
-        "frame_times": ftimes,
-        "csp_patterns": _csp_patterns(ep, labels),
-        "riemann_patterns": _riemann_patterns(ep, labels),
-        "waveforms": _waveforms(ep, labels),
-    }
+    data = _eeg_view(args.subject, ep, labels, {"mu": mu_fr, "beta": beta_fr}, ftimes)
     per, score = _predictions(args.subject)
     data["predictions"] = per                              # ground truth vs decoder prediction (per shown trial)
     data["score"] = score                                  # the honest cross-subject decoder accuracy
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    (out / f"subject{args.subject}.json").write_text(json.dumps(data))
-    # modality-aware manifest (the viewer's EEG/fNIRS switch reads it); preserve any fNIRS entry
-    eeg_subs = sorted(int(p.stem.replace("subject", "")) for p in out.glob("subject*.json")
-                      if not p.stem.startswith("fnirs"))
-    mpath = out / "manifest.json"
-    man = json.loads(mpath.read_text()) if mpath.exists() else {}
-    if "modalities" not in man:                            # migrate legacy {subjects:[...]}
-        man = {"modalities": {}}
-    man["modalities"]["eeg"] = eeg_subs
-    mpath.write_text(json.dumps(man))
+    Manifest.publish(out, args.subject, "subject", "eeg", data)
     logger.info(f"-> {out}/subject{args.subject}.json  (+ manifest)")
 
 

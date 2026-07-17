@@ -9,8 +9,6 @@ frames/waveforms) so one web app renders both modalities.
 """
 from __future__ import annotations
 
-import argparse
-import json
 import logging
 from pathlib import Path
 
@@ -25,6 +23,8 @@ from core.data import store
 from core.data.fnirs.base import FnirsCfg
 from core.data.fnirs.shin2017 import Shin2017NirsAdapter
 from core.features import Amplitude
+from neuroviz.manifest import Manifest
+from neuroviz.viewdata import Decode, ViewData
 
 logger = logging.getLogger(__name__)
 
@@ -97,22 +97,11 @@ def _predictions(subject: int, X, y):
     clf = ff.fit(Xtr, ytr)
     probs = ff.score(clf, X)
     pred = probs.argmax(1)
-    per = {}
-    for c in sorted(np.unique(y).tolist()):
-        i = int((y == c).argmax())                         # the example trial shown for this class (first match)
-        per[CLASS_NAMES[c]] = {"truth": CLASS_NAMES[c], "pred": CLASS_NAMES[int(pred[i])],
-                               "probs": [round(float(p), 3) for p in probs[i]],
-                               "correct": bool(pred[i] == c)}
-    score = {"acc": round(float((pred == y).mean()), 3), "chance": round(1 / 3, 3),
-             "regime": "cross-subject (LOSO)", "decoder": "fNIRS mean+slope+peak → LDA"}
-    return per, score
+    return ViewData.prediction_report(CLASS_NAMES, Decode(y, pred, probs, 1 / 3, "fNIRS mean+slope+peak → LDA"))
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--subject", type=int, default=1)
-    ap.add_argument("--out", default="neuroviz/web/data")
-    args = ap.parse_args()
+    args = ViewData.subject_args(__doc__)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     X, y, names, pos, fs = _subject_epochs(args.subject)
@@ -136,18 +125,7 @@ def main():
     data["predictions"] = per                              # ground truth vs decoder prediction (per shown trial)
     data["score"] = score                                  # the honest cross-subject decoder accuracy
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    (out / f"fnirs_subject{args.subject}.json").write_text(json.dumps(data))
-
-    # modality-aware manifest: merge with any existing EEG entry
-    mpath = out / "manifest.json"
-    man = json.loads(mpath.read_text()) if mpath.exists() else {}
-    if "modalities" not in man:                             # migrate old {subjects:[...]} = EEG
-        man = {"modalities": {"eeg": man.get("subjects", [])}, }
-    man["modalities"].setdefault("fnirs", [])
-    subs = sorted({*man["modalities"]["fnirs"], int(args.subject)})
-    man["modalities"]["fnirs"] = subs
-    mpath.write_text(json.dumps(man))
+    subs = Manifest.publish(out, args.subject, "fnirs_subject", "fnirs", data)
     logger.info(f"-> {out}/fnirs_subject{args.subject}.json  (+ manifest, fnirs subjects {subs})")
 
 
