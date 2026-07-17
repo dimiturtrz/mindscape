@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 from sklearn.model_selection import GroupKFold
 
+from baselines.fusion import combine
 from core.data import store
 from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
@@ -39,9 +40,8 @@ def main():
     classes = sorted(me["label"].unique().to_list())
     id2lab = dict(enumerate(sorted(me["label"].unique().to_list())))     # label_id -> name (matches gather order)
     n_classes = len(classes)
-    from pyriemann.estimation import Covariances
-
     from baselines.eeg import transfer
+    from neuroscan.tasks.workload.riemann import Riemann
     ff, fs = Methods.get_method("fnirs_lda")
 
     blocks = []
@@ -51,8 +51,8 @@ def main():
         Xet, yt, gt = _gather(me, subs[te]); Xft, yft, _ = _gather(mf, subs[te])
         assert np.array_equal(yt, yft)
         # EEG = re-centered Riemann (per-subject, zero-shot) — the strong workload modality; fNIRS = amplitude LDA
-        Ce = Covariances("oas").transform(Xe.astype(np.float64))
-        Cet = Covariances("oas").transform(Xet.astype(np.float64))
+        Ce = Riemann.cov(Xe)
+        Cet = Riemann.cov(Xet)
         pe = transfer.zero_shot_predict(transfer.Domain(Ce, y, ge),
                                         transfer.Domain(Cet, groups=gt), scale=False).argmax(1)
         pf = fs(ff(Xf, y), Xft).argmax(1)
@@ -62,12 +62,13 @@ def main():
 
     ce = np.array([b["eeg"] == b["truth"] for b in blocks])
     cf = np.array([b["fnirs"] == b["truth"] for b in blocks])
+    eeg_acc, fnirs_acc = float(ce.mean()), float(cf.mean())
+    comp = combine.complementarity({"eeg": eeg_acc, "fnirs": fnirs_acc}, ce, cf)
     summary = {
-        "eeg": float(ce.mean()), "fnirs": float(cf.mean()),
-        "oracle": float((ce | cf).mean()), "both_correct": float((ce & cf).mean()),
-        "eeg_only": float((ce & ~cf).mean()), "fnirs_only": float((~ce & cf).mean()),
-        "both_wrong": float((~ce & ~cf).mean()),
-        "err_corr": float(np.corrcoef(ce.astype(float), cf.astype(float))[0, 1]),
+        "eeg": eeg_acc, "fnirs": fnirs_acc,
+        "oracle": comp["oracle_either"], "both_correct": comp["both_correct"],
+        "eeg_only": comp["eeg_only"], "fnirs_only": comp["fnirs_only"],
+        "both_wrong": comp["both_wrong"], "err_corr": comp["err_corr"],
         "chance": 1.0 / n_classes, "n": len(blocks),
     }
     # late fusion (avg prob) would need probs; we cite the recorded number so the view stays consistent

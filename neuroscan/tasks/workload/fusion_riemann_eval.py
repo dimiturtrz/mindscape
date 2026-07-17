@@ -15,10 +15,7 @@ from __future__ import annotations
 import logging
 
 import numpy as np
-from pyriemann.estimation import Covariances
-from sklearn.model_selection import StratifiedGroupKFold
 
-from baselines.eeg import transfer
 from core.data import store
 from core.data.eeg import shin2017_nback_eeg as eegmod
 from core.data.eeg.base import EpochCfg
@@ -27,6 +24,7 @@ from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
 from neuroscan.evaluation import metrics
 from neuroscan.tasks.cli import Cli
+from neuroscan.tasks.workload.riemann import Riemann
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +37,6 @@ _FNIRS_BASELINE_ACC = 0.595                        # EEG-only re-centered Rieman
 
 class FusionRiemannEval:
     """Brain-camera fusion Riemann-eval helpers — the free helpers folded in as staticmethods."""
-
-    @classmethod
-    def _cov(cls, X):
-        return Covariances("oas").transform(X.astype(np.float64))
 
     @classmethod
     def _build_all(cls, band="sum"):
@@ -62,7 +56,7 @@ class FusionRiemannEval:
             pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter().subject_dir(int(s)))
             joint, _ = bc.BrainCamera.fused_node_series(bc.PairedModalities(Xe, Xf, pos_e, pos_f), band=band,
                                                         series=bc.SeriesConfig(fps=_FPS, t_end=_TEND))
-            Cs.append(cls._cov(joint))
+            Cs.append(Riemann.cov(joint))
             ys.append(ye)
             gs.append(np.array([s] * len(ye)))
         return np.concatenate(Cs), np.concatenate(ys), np.concatenate(gs)
@@ -74,14 +68,10 @@ class FusionRiemannEval:
         logger.info(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · "
                     f"cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
         accs, kaps = [], []
-        for seed in _SEEDS:
-            for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(C, y, g):
-                # winning EEG method: per-subject re-center (train AND test, unsupervised) -> tangent -> LR
-                proba = transfer.zero_shot_predict(transfer.Domain(C[tr], y[tr], g[tr]),
-                                                   transfer.Domain(C[te], groups=g[te]), scale=False)
-                pred = proba.argmax(1)
-                accs.append(metrics.Metrics.accuracy(y[te], pred))
-                kaps.append(metrics.Metrics.kappa(y[te], pred))
+        for yte, proba in Riemann.cross_subject_folds(C, y, g, _SEEDS, _K):
+            pred = proba.argmax(1)
+            accs.append(metrics.Metrics.accuracy(yte, pred))
+            kaps.append(metrics.Metrics.kappa(yte, pred))
         a, k = float(np.mean(accs)), float(np.mean(kaps))
         logger.info(f"\n  fused-only (joint EEG×fNIRS×coverage) · re-centered tangent · "
               f"cross-subject {len(_SEEDS)}x{_K}-fold: "
