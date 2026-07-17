@@ -23,9 +23,7 @@ def _maps(subject: int, block: int, band: str):
 
     me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0))
     mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=32.0))     # past 20 s so the read-forward tail has blood
-    s = str(subject)
-    Xe, ye = store.Store.gather(me.filter(me["subject"] == s))
-    Xf, _ = store.Store.gather(mf.filter(mf["subject"] == s))
+    Xe, Xf, ye = store.Store.gather_aligned(me, mf, subject)
     Xe = bc.CSD.csd_transform(Xe, eegmod.Shin2017NbackEegAdapter.adapter().channels(), 100.0)  # surface-Laplacian deblur (match export)
     pos_e = bc.EegMontage.eeg_positions(eegmod.Shin2017NbackEegAdapter.adapter().channels())
     pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter()._subject_dir(subject))

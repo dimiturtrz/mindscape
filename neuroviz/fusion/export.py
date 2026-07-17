@@ -35,10 +35,7 @@ def main():
 
     me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
     mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))     # past 20 s so the read-forward tail has blood
-    s = str(args.subject)
-    Xe, ye = store.Store.gather(me.filter(me["subject"] == s))
-    Xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
-    assert np.array_equal(ye, yf), "EEG/fNIRS misaligned"
+    Xe, Xf, ye = store.Store.gather_aligned(me, mf, args.subject)
     ch_e = eegmod.Shin2017NbackEegAdapter.adapter().channels()
     if _CSD:
         Xe = bc.CSD.csd_transform(Xe, ch_e, _FS_E)               # spatial deblur before fusion (scalp-space)

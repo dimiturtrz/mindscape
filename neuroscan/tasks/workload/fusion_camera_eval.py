@@ -44,10 +44,7 @@ class FusionCameraEval:
         pos_e = bc.EegMontage.eeg_positions(eegmod.Shin2017NbackEegAdapter.adapter().channels())
         Xs, ys, gs = [], [], []
         for s in subs:
-            Xe, ye = store.Store.gather(me.filter(me["subject"] == s))
-            Xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
-            if not np.array_equal(ye, yf):
-                raise ValueError(f"subject {s} EEG/fNIRS misaligned")
+            Xe, Xf, ye = store.Store.gather_aligned(me, mf, s)
             pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter().subject_dir(int(s)))
             Xs.append(bc.BrainCamera.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=_GRID,
                                       series=bc.SeriesConfig(fps=_FPS, t_end=_TEND)))

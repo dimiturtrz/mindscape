@@ -37,3 +37,31 @@ def test_gather_empty_raises():
     import pytest
     with pytest.raises(ValueError):
         store.Store.gather(pl.DataFrame({"path": [], "epoch": [], "label_id": []}))
+
+
+def _meta(npz, subject, labels):
+    return pl.DataFrame({
+        "path": [str(npz)] * len(labels), "epoch": list(range(len(labels))),
+        "label_id": list(labels), "subject": [str(subject)] * len(labels)})
+
+
+def test_gather_aligned_returns_both_modalities_and_shared_labels(tmp_path):
+    Xe = np.arange(3 * 2 * 4).reshape(3, 2, 4).astype(np.float32)
+    Xf = np.arange(3 * 5 * 6).reshape(3, 5, 6).astype(np.float32)     # fNIRS: different ch/t
+    np.savez(tmp_path / "e.npz", X=Xe, y=np.array([0, 1, 0]))
+    np.savez(tmp_path / "f.npz", X=Xf, y=np.array([0, 1, 0]))
+    me = _meta(tmp_path / "e.npz", 1, [0, 1, 0])
+    mf = _meta(tmp_path / "f.npz", 1, [0, 1, 0])
+    xe, xf, y = store.Store.gather_aligned(me, mf, 1)                 # int subject coerced to str
+    assert xe.shape == (3, 2, 4) and xf.shape == (3, 5, 6)
+    assert list(y) == [0, 1, 0]
+
+
+def test_gather_aligned_raises_on_misaligned_labels(tmp_path):
+    import pytest
+    np.savez(tmp_path / "e.npz", X=np.zeros((2, 1, 1), np.float32), y=np.array([0, 1]))
+    np.savez(tmp_path / "f.npz", X=np.zeros((2, 1, 1), np.float32), y=np.array([1, 0]))
+    me = _meta(tmp_path / "e.npz", "7", [0, 1])
+    mf = _meta(tmp_path / "f.npz", "7", [1, 0])
+    with pytest.raises(ValueError, match="misaligned"):
+        store.Store.gather_aligned(me, mf, "7")

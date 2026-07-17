@@ -47,10 +47,7 @@ class FusionRiemannEval:
         pos_e = bc.EegMontage.eeg_positions(ch_e)
         Cs, ys, gs = [], [], []
         for s in subs:
-            Xe, ye = store.Store.gather(me.filter(me["subject"] == s))
-            Xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
-            if not np.array_equal(ye, yf):
-                raise ValueError(f"subject {s} EEG/fNIRS misaligned")
+            Xe, Xf, ye = store.Store.gather_aligned(me, mf, s)
             if _CSD:
                 Xe = bc.CSD.csd_transform(Xe, ch_e, 100.0)                 # spatial deblur before fusion
             pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter().subject_dir(int(s)))

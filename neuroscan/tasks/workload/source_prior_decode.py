@@ -76,10 +76,7 @@ class SourcePriorDecode:
         arms = {"sensor": [], "dSPM": [], "uniform": [], "fNIRS": []}
         ys, gs = [], []
         for s in subs:
-            xe, ye = store.Store.gather(me.filter(me["subject"] == s))
-            xf, yf = store.Store.gather(mf.filter(mf["subject"] == s))
-            if not np.array_equal(ye, yf):
-                raise ValueError(f"subject {s} EEG/fNIRS misaligned")
+            xe, xf, ye = store.Store.gather_aligned(me, mf, s)
             w = cls._fnirs_prior(xf, fnmod.Shin2017NirsAdapter.adapter().subject_dir(int(s)), src2d)
             arms["sensor"].append(Riemann.cov(xe))
             arms["dSPM"].append(Riemann.cov(src.to_parcels(xe)))
