@@ -13,13 +13,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
+import mne
 import numpy as np
 
 from core.data import store
 from core.data.eeg.base import EpochCfg
+from neuroscan.models import Methods
 from neuroviz.export import N_FRAMES, _csp_patterns, _pos2d, _riemann_patterns, _waveforms
+
+logger = logging.getLogger(__name__)
 
 # the workload EEG recipe (matches tasks/workload runs): broadband 4-30 Hz, full 40 s block, 100 Hz
 _CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
@@ -55,8 +60,6 @@ def _bandpower_frames(ep, labels, fmin, fmax, n_frames=N_FRAMES):
 def _epochs(subject: int):
     """Rebuild an MNE EpochsArray for one subject from the processed store + its channel names/montage —
     so the motor-imagery exporter's helpers (which take MNE Epochs) run unchanged on this task."""
-    import mne
-
     names = store.Store.channels(_DATASET, _CFG)
     if not names:
         raise SystemExit(f"no channels.json for {_DATASET} — run `python -m core.data.store --name {_DATASET}`")
@@ -73,8 +76,6 @@ def _epochs(subject: int):
 def _predictions(subject: int):
     """Honest per-trial output: Riemann (tangent space) trained on the OTHER subjects (LOSO), predict THIS
     subject's blocks. Covariance methods read the workload band-power; chance is 1/3."""
-    from neuroscan.models import Methods
-
     meta = store.Store.load(_DATASET, _CFG)
     fit, score = Methods.get_method("riemann")
     tr = meta.filter(meta["subject"] != str(subject))
@@ -100,10 +101,11 @@ def main():
     ap.add_argument("--subject", type=int, default=1)
     ap.add_argument("--out", default="neuroviz/web/data")
     args = ap.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     ep, labels = _epochs(args.subject)
-    print(f"eeg-workload subject {args.subject}: {len(ep)} blocks, {len(ep.ch_names)} ch, "
-          f"classes {sorted(set(labels))}")
+    logger.info(f"eeg-workload subject {args.subject}: {len(ep)} blocks, {len(ep.ch_names)} ch, "
+                f"classes {sorted(set(labels))}")
 
     # per-class spatial band-power maps (θ/α/β) — switch load class to see frontal-theta / parietal-alpha shift
     theta_fr, ftimes = _bandpower_frames(ep, labels, *THETA)
@@ -134,7 +136,7 @@ def main():
     man = json.loads(mpath.read_text()) if mpath.exists() else {"modalities": {}}
     man.setdefault("modalities", {})["eeg_workload"] = subs
     mpath.write_text(json.dumps(man))
-    print(f"-> {out}/eegwl_subject{args.subject}.json  (+ manifest, eeg_workload subjects {subs})")
+    logger.info(f"-> {out}/eegwl_subject{args.subject}.json  (+ manifest, eeg_workload subjects {subs})")
 
 
 if __name__ == "__main__":

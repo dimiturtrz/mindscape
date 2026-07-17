@@ -12,9 +12,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
+import mne
 import numpy as np
+import polars as pl
+from mne.channels.layout import _find_topomap_coords
+from mne.decoding import CSP
+from moabb.datasets import BNCI2014_001
+from moabb.paradigms import MotorImagery
+
+from baselines.eeg import csp_lda
+from baselines.eeg.riemann import TangentSpace
+from core.config import Config
+from core.data import store
+from core.data.eeg.base import CANONICAL_MI, EpochCfg
+
+logger = logging.getLogger(__name__)
+
+_BINARY = 2                   # binary-LR special case: one coef row covers the two classes
 
 # --- bands ---
 MU = (8.0, 12.0)              # Hz — sensorimotor mu rhythm
@@ -35,11 +52,6 @@ PER_CLASS = 1                 # example trials per class in the waveform panel
 
 def _load_epochs(subject: int):
     """MNE Epochs for a subject (broad 4-40 Hz band, montage set) via MOABB."""
-    import mne
-    from moabb.datasets import BNCI2014_001
-    from moabb.paradigms import MotorImagery
-
-    from core.config import Config
     Config.configure_moabb_download()
     para = MotorImagery(n_classes=N_CLASSES, fmin=PROC_BAND[0], fmax=PROC_BAND[1],
                         tmin=0.0, tmax=None, resample=SFREQ)
@@ -50,17 +62,17 @@ def _load_epochs(subject: int):
 
 
 def _pos2d(info):
-    from mne.channels.layout import _find_topomap_coords
     pos = _find_topomap_coords(info, picks="eeg")          # sphere-projected 2D, the standard topo layout
     pos = pos - pos.mean(0)
     pos = pos / np.abs(pos).max()                          # normalize into [-1, 1]
     return pos
 
 
-def _erd_frames(ep, labels, fmin, fmax, n_frames=N_FRAMES, baseline_s=BASELINE_S):
+def _erd_frames(ep, labels, band_hz, n_frames=N_FRAMES, baseline_s=BASELINE_S):
     """Time-resolved ERD per class: band-limited power over the trial, baseline-normalized to the first
     `baseline_s` (pre-imagery). Negative = event-related DESYNCHRONIZATION (the motor-imagery signature).
     Returns ({class: [frame][ch]}, frame_times) — averaged across epochs, downsampled to n_frames."""
+    fmin, fmax = band_hz
     band = ep.copy().filter(fmin, fmax, verbose="error")
     sf = ep.info["sfreq"]
     X = band.get_data() * 1e6
@@ -82,7 +94,6 @@ def _erd_frames(ep, labels, fmin, fmax, n_frames=N_FRAMES, baseline_s=BASELINE_S
 
 
 def _csp_patterns(ep, labels, n=N_CSP):
-    from mne.decoding import CSP
     X = ep.get_data() * 1e6
     csp = CSP(n_components=n, reg="ledoit_wolf", log=True)
     csp.fit(X.astype(np.float64), labels)
@@ -99,19 +110,18 @@ def _riemann_patterns(ep, labels):
     how much that channel's own power drives the logit for the class. Parallel to CSP patterns, but here
     the feature is the covariance itself (no spatial filters). Returns {class: [w per channel]}, normalized.
     """
-    from baselines.eeg.riemann import TangentSpace
     X = ep.get_data() * 1e6
     clf = TangentSpace().fit(X.astype(np.float64), np.asarray(labels))
     lr = clf.pipe_.named_steps["logisticregression"]
     coef = np.atleast_2d(lr.coef_)                         # [n_class, n_tri] over upper-triangular cov entries
     classes = [str(c) for c in lr.classes_]
-    if coef.shape[0] == 1 and len(classes) == 2:           # binary LR: one row = class[1] vs class[0]
+    if coef.shape[0] == 1 and len(classes) == _BINARY:     # binary LR: one row = class[1] vs class[0]
         coef = np.vstack([-coef[0], coef[0]])
     n_ch = len(ep.ch_names)
     iu = np.triu_indices(n_ch)                             # pyriemann vectorization order (row-major upper)
     diag = iu[0] == iu[1]                                  # the diagonal (per-channel) entries
     out = {}
-    for c, row in zip(classes, coef):
+    for c, row in zip(classes, coef, strict=True):
         w = np.asarray(row)[diag]
         out[c] = (w / (np.abs(w).max() + 1e-9)).tolist()
     return out
@@ -136,24 +146,19 @@ def _waveforms(ep, labels, per_class=PER_CLASS, n_t=N_WAVE_T):
 def _predictions(subject: int):
     """Honest per-trial output: train CSP+LDA on the OTHER subjects (LOSO), predict THIS subject's trials.
     Returns ({class: {truth, pred, probs, correct}} for a shown example trial) + the subject's fold accuracy."""
-    import polars as pl
-
-    from baselines.eeg import csp_lda
-    from core.data import store
-    from core.data.eeg.base import CANONICAL_MI_NAMES, EpochCfg
-
     meta = store.Store.load("bnci2014_001", EpochCfg())
     Xtr, ytr = store.Store.gather(meta.filter(pl.col("subject") != str(subject)))
     Xte, yte = store.Store.gather(meta.filter(pl.col("subject") == str(subject)))
     clf = csp_lda.fit(Xtr, ytr)
     probs = np.asarray(csp_lda.score(clf, Xte))
     pred = probs.argmax(1)
+    id2name = {v: k for k, v in CANONICAL_MI.items()}      # canonical id -> MI class name
     per = {}
     for c in sorted(np.unique(yte).tolist()):
         i = int((yte == c).argmax())
-        per[CANONICAL_MI_NAMES[c]] = {"truth": CANONICAL_MI_NAMES[c], "pred": CANONICAL_MI_NAMES[int(pred[i])],
-                                      "probs": [round(float(p), 3) for p in probs[i]],
-                                      "correct": bool(pred[i] == c)}
+        per[id2name[c]] = {"truth": id2name[c], "pred": id2name[int(pred[i])],
+                           "probs": [round(float(p), 3) for p in probs[i]],
+                           "correct": bool(pred[i] == c)}
     score = {"acc": round(float((pred == yte).mean()), 3), "chance": 0.25,
              "regime": "cross-subject (LOSO)", "decoder": "CSP+LDA"}
     return per, score
@@ -164,12 +169,13 @@ def main():
     ap.add_argument("--subject", type=int, default=1)
     ap.add_argument("--out", default="neuroviz/web/data")
     args = ap.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     ep, labels = _load_epochs(args.subject)
-    print(f"subject {args.subject}: {len(ep)} epochs, {len(ep.ch_names)} ch, classes {sorted(set(labels))}")
+    logger.info(f"subject {args.subject}: {len(ep)} epochs, {len(ep.ch_names)} ch, classes {sorted(set(labels))}")
 
-    mu_fr, ftimes = _erd_frames(ep, labels, *MU)
-    beta_fr, _ = _erd_frames(ep, labels, *BETA)
+    mu_fr, ftimes = _erd_frames(ep, labels, MU)
+    beta_fr, _ = _erd_frames(ep, labels, BETA)
     data = {
         "subject": str(args.subject),
         "sfreq": float(ep.info["sfreq"]),
@@ -197,7 +203,7 @@ def main():
         man = {"modalities": {}}
     man["modalities"]["eeg"] = eeg_subs
     mpath.write_text(json.dumps(man))
-    print(f"-> {out}/subject{args.subject}.json  (+ manifest)")
+    logger.info(f"-> {out}/subject{args.subject}.json  (+ manifest)")
 
 
 if __name__ == "__main__":
