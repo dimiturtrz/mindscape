@@ -98,11 +98,13 @@ no vendored `devtools/` source — sgconfig/jscpd configs ship *inside* the pack
 `python -m devtools.config <name>`): don't hand-edit them to pass a gate — fix upstream in the scaffold and
 `uvx copier update` (or bump `devtools_ref` for an engine-only update), or edit only within `# >>> LOCAL-SLOT`
 regions. `copier update` pulls scaffold improvements as reviewable steps. (mindscape carries a few
-documented not-slotted local mods — the ML dep tree, the uv cu130 index, extra vulture `ignore_names`, and the
-`lint_paths`/`jscpd_paths` widening of the ruff + jscpd gates onto `neuroviz` (the viewer tree; hand-applied to
-`LINT_LAYERS`/`JSCPD_LAYERS` + the CI/pre-commit runner lines because same-version copier can't re-render the
-answer — a cross-version `copier update` regenerates the identical lines, so it's zero-drift; upstream
-proper-fix tracked in bd oeen) — and keeps its own README/CLAUDE/AGENTS content.)
+documented not-slotted local mods — the ML dep tree, the uv cu130 index, extra vulture `ignore_names` — and
+keeps its own README/CLAUDE/AGENTS content.) The ruff + jscpd gates scan `core neuroscan neuroviz`: the paths
+are the repo's own choice via the `lint_paths`/`jscpd_paths` answers (normal customization — the template
+leaves *which* modules to the repo), and the derived runner lines (`LINT_LAYERS`/`JSCPD_LAYERS` + the CI /
+pre-commit scope) were hand-synced to match because same-version copier doesn't re-render an answer change; a
+cross-version `copier update` regenerates the identical lines, so it's zero-drift. Only the paths segment is
+repo-owned — the `--select`, tool versions, and runner structure stay template-owned, untouched.
 
 ## Conventions & Patterns
 
