@@ -102,6 +102,11 @@ class TrainConfig(BaseModel):
     hard_beta: float = 0.0        # >0 = online hard-negative weighting in the InfoNCE loss (bd fww)
     soft_tau: float = 0.0         # >0 = concept-aware soft InfoNCE targets from CLIP-target sim (bd lbd) —
                                   # same-concept pairs become partial positives, not false negatives
+    clip_target: str = "vitb32"   # CLIP target zoo (bd ooi): "vitb32" (512-d, NICE default) | "vitl14" (768-d,
+                                  # sharper recon latent). The encoder auto-sizes to the target dim (EncoderSpec).
+    mse_weight: float = 0.0       # >0 = add MSE-to-CLIP to InfoNCE (bd ooi): hit the actual embedding, not only
+                                  # its direction, so the predicted vector is a usable decoder-conditioning latent
+    save_encoder: bool = False    # persist the trained encoder (+ spec) to runs/enc_*.pt for reconstruction (bd 71n)
     val_every: int = 1           # eval the (big) held-out val set every N epochs — strides its per-epoch cost
     amp: bool = True             # bf16 autocast on cuda; False = fp32 (the naive arm of the parity test, bd 9s5)
     recenter: bool = False       # per-subject signal re-centering M^-1/2 X before the encoder (bd dpi) —
@@ -164,10 +169,20 @@ class TrainNice:
     reused by the cross-dataset runner."""
 
     @staticmethod
-    def _clip_targets(image_files: Shaped[np.ndarray, "n"], split: str) -> Float[np.ndarray, "n d"]:
-        """CLIP embedding per epoch, looked up by the image the subject viewed."""
-        by_file = clip_targets.ClipTargets.embeddings_by_file(split)
+    def _clip_targets(image_files: Shaped[np.ndarray, "n"], split: str,
+                      target: str = "vitb32") -> Float[np.ndarray, "n d"]:
+        """CLIP embedding per epoch, looked up by the image the subject viewed (target = CLIP zoo name, bd ooi)."""
+        by_file = clip_targets.ClipTargets.embeddings_by_file(split, target)
         return np.stack([by_file[name] for name in image_files]).astype(np.float32)
+
+    @staticmethod
+    def test_features(test_subject: int, cfg: TrainConfig):
+        """Load + normalize a held-out subject's TEST epochs, encoder-ready (public: bd 71n reconstruct reuse).
+        Returns (eeg [n,ch,t] normalized, concept [n]). cbramod's z-score chain is stateless, so no train-fit
+        is needed here — for a stateful chain (MVNN) the leak-free fit lives in `train`, not this path."""
+        test_eeg, test_concept, _, test_subj, _ = TrainNice._load_split([test_subject], "test", cfg)
+        chain = EncoderRegistry.normalization(cfg.model)
+        return chain.apply(test_eeg, test_subj), test_concept
 
     @staticmethod
     def _load_split(subjects: list[int], split: str, cfg: TrainConfig):
@@ -180,7 +195,8 @@ class TrainNice:
         condition = np.unique(image_files, return_inverse=True)[1]          # same exemplar image = one condition (MVNN)
         if cfg.recenter:   # opt-in per-subject signal recenter (transductive; off by default, bd dpi killed)
             epochs = Covariance.recenter_signals(epochs, subject, shrinkage=cfg.recenter_shrinkage)  # M^-1/2 X
-        return epochs, concept, TrainNice._clip_targets(image_files, split), subject.astype(np.int64), condition
+        targets = TrainNice._clip_targets(image_files, split, cfg.clip_target)
+        return epochs, concept, targets, subject.astype(np.int64), condition
 
     @staticmethod
     @torch.no_grad()
@@ -200,8 +216,9 @@ class TrainNice:
                                 for c in range(n_concepts)])
         concept_avg = Nice.retrieval_topk(averaged, candidate_bank, torch.arange(n_concepts))
         continuous = Nice.retrieval_continuous(embedded, candidate_bank, labels)   # angular-error extras (bd 2y7k)
+        emb_mse = float(F.mse_loss(embedded, candidate_bank[labels]))   # recon proxy: predicted vs prototype (bd ooi)
         return {"single_trial": single, "single_trial_ci": single_ci, "concept_avg": concept_avg,
-                "continuous": continuous,
+                "continuous": continuous, "emb_mse": emb_mse,
                 "single_trial_hits": {k: h.tolist() for k, h in hits.items()}}   # persisted for paired delta (s1t2)
 
     @staticmethod
@@ -318,6 +335,8 @@ class TrainNice:
                 z = tr.encoder(eeg_batch)
                 loss = Nice.clip_infonce(z, target_batch, tr.logit_scale.exp().clamp(max=100),
                                     hard_beta=cfg.hard_beta, soft_tau=cfg.soft_tau)
+                if cfg.mse_weight > 0:                         # hit the CLIP embedding, not only its direction (bd ooi)
+                    loss = loss + cfg.mse_weight * F.mse_loss(z, target_batch)   # both L2-normed: MSE on the sphere
                 if tr.discriminator is not None:               # push encoder to be subject-invariant (GRL, bd 36g)
                     loss = loss + cfg.adv_weight * F.cross_entropy(tr.discriminator(z, lam), subj_batch.to(device))
                 if tr.geo_lap is not None:                     # montage-adjacency smoothness prior (bd 1x0)
@@ -429,7 +448,7 @@ class TrainNice:
         test_eeg = chain.apply(test_eeg, test_subj)      # test subject's whitener never saw these scored trials
         subj_map = {s: i for i, s in enumerate(sorted(set(train_subjects)))}
         subj_idx = np.array([subj_map[int(s)] for s in train_subj], dtype=np.int64) if cfg.adversarial else None
-        test_bank = clip_targets.ClipTargets.concept_prototypes("test")
+        test_bank = clip_targets.ClipTargets.concept_prototypes("test", cfg.clip_target)
         logger.info(f"train {train_eeg.shape} -> CLIP {train_targets.shape} | "
               f"test {test_eeg.shape} ({int(test_concept.max())+1} concepts)")
 
@@ -447,6 +466,13 @@ class TrainNice:
                               "test_concept_top1": concept[1], "test_concept_top5": concept[5],
                               "best_val_top1": stats["val_top1"],
                               **{f"test_{k}": v for k, v in test["continuous"].items()}})   # angular error (bd 2y7k)
+        if cfg.save_encoder:                                   # decodable checkpoint for reconstruction (bd 71n)
+            ckpt = Path(f"runs/enc_{cfg.model}_test{test_subject}_{cfg.clip_target}.pt")
+            torch.save({"state_dict": encoder.state_dict(), "model": cfg.model,
+                        "n_channels": train_eeg.shape[1], "n_times": train_eeg.shape[2],
+                        "embed_dim": train_targets.shape[1], "clip_target": cfg.clip_target,
+                        "resample": cfg.resample}, ckpt)
+            logger.info(f"saved encoder -> {ckpt}")
         result = {"regime": regime, "train": train_subjects, "test": test_subject, **stats,
                   "chance_top1": 1 / (int(test_concept.max()) + 1), **test}
         Invariants.check(result)                               # fail loud on a silently-inconsistent number

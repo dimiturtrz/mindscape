@@ -28,8 +28,16 @@ from neuroscan.tasks.cli import Cli
 logger = logging.getLogger(__name__)
 
 _ROOT = "things_eeg2"
-_CLIP_ARCH, _CLIP_PRETRAINED = "ViT-B-32", "laion2b_s34b_b79k"   # open_clip model (NICE uses a CLIP ViT)
-_EMBED_DIM = 512
+# CLIP target zoo (bd ooi): name -> (open_clip arch, pretrained tag). The embedding dim is DERIVED from the
+# loaded model, never hardcoded — the EEG encoder auto-sizes to the target dim (train_nice EncoderSpec), so a
+# richer target (ViT-L/14 768-d, MindEye-class recon fidelity) is a one-line target switch, no encoder rewiring.
+_TARGETS = {
+    "vitb32": ("ViT-B-32", "laion2b_s34b_b79k"),     # NICE's 512-d target (the default)
+    "vitl14": ("ViT-L-14", "openai"),                # 768-d recon latent — OpenAI (NOT LAION): the space
+                                                     # StableUnCLIPImg2ImgPipeline decodes from (bd 71n); LAION
+                                                     # CLIP is a different embedding space -> silent-garbage decode
+}
+_DEFAULT_TARGET = "vitb32"
 _IMAGE_EXTS = (".jpg", ".jpeg", ".png")
 
 
@@ -69,34 +77,38 @@ class ClipTargets:
         ]
 
     @staticmethod
-    def _load_clip(device: str):
-        model, _, preprocess = open_clip.create_model_and_transforms(_CLIP_ARCH, pretrained=_CLIP_PRETRAINED)
+    def _load_clip(target: str, device: str):
+        arch, pretrained = _TARGETS[target]
+        model, _, preprocess = open_clip.create_model_and_transforms(arch, pretrained=pretrained)
         return model.eval().to(device), preprocess
 
     @staticmethod
-    def compute(split: str, *, device: str | None = None, batch: int = 256, force: bool = False) -> Path:
-        """Embed every image in `split` with CLIP, cache to `<processed>/things_eeg2/clip_<split>.npz`.
+    def compute(split: str, target: str = _DEFAULT_TARGET, *,
+                device: str | None = None, batch: int = 256, force: bool = False) -> Path:
+        """Embed every image in `split` with the `target` CLIP model, cache to
+        `<processed>/things_eeg2/clip_<target>_<split>.npz`.
 
-        npz: `emb` [N, 512] float32 (L2-normalized), `concept` [N] int (concept index), `paths` [N] str.
+        npz: `emb` [N, d] float32 (L2-normalized; d from the model), `concept` [N] int, `paths` [N] str.
         Idempotent — returns the cache path, recomputing only if missing or `force`.
         """
-        cache_path = Config.processed_dir() / _ROOT / f"clip_{split}.npz"
+        cache_path = Config.processed_dir() / _ROOT / f"clip_{target}_{split}.npz"
         if cache_path.exists() and not force:
             return cache_path
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        model, preprocess = ClipTargets._load_clip(device)
+        model, preprocess = ClipTargets._load_clip(target, device)
 
         items = ClipTargets._list_images(split)
-        embeddings = np.empty((len(items), _EMBED_DIM), dtype=np.float32)
+        chunks = []
         for start in range(0, len(items), batch):
             chunk = items[start:start + batch]
             pixels = torch.stack([preprocess(Image.open(item.path).convert("RGB")) for item in chunk]).to(device)
             with torch.no_grad():
                 encoded = model.encode_image(pixels).float()
                 encoded = encoded / encoded.norm(dim=-1, keepdim=True)
-            embeddings[start:start + len(chunk)] = encoded.cpu().numpy()
-            logger.info(f"[clip:{split}] {start + len(chunk)}/{len(items)}")
+            chunks.append(encoded.cpu().numpy())
+            logger.info(f"[clip:{target}:{split}] {start + len(chunk)}/{len(items)}")
+        embeddings = np.concatenate(chunks).astype(np.float32)   # dim from the model, never hardcoded
         np.savez(cache_path,
                  emb=embeddings,
                  concept=np.asarray([item.concept for item in items], np.int64),
@@ -105,25 +117,25 @@ class ClipTargets:
         return cache_path
 
     @staticmethod
-    def load(split: str) -> tuple[np.ndarray, np.ndarray]:
-        """(emb [N,512], concept [N]) from cache — computes it first if absent."""
-        cached = np.load(ClipTargets.compute(split))
+    def load(split: str, target: str = _DEFAULT_TARGET) -> tuple[np.ndarray, np.ndarray]:
+        """(emb [N,d], concept [N]) from cache — computes it first if absent."""
+        cached = np.load(ClipTargets.compute(split, target))
         return cached["emb"], cached["concept"]
 
     @staticmethod
-    def embeddings_by_file(split: str) -> dict[str, np.ndarray]:
+    def embeddings_by_file(split: str, target: str = _DEFAULT_TARGET) -> dict[str, np.ndarray]:
         """{image basename -> CLIP embedding} for a split — lets the training runner align each EEG epoch to the
         exact image it viewed (the adapter returns the basename)."""
-        cached = np.load(ClipTargets.compute(split))
+        cached = np.load(ClipTargets.compute(split, target))
         basenames = [Path(str(path)).name for path in cached["paths"]]
         return dict(zip(basenames, cached["emb"], strict=True))
 
     @staticmethod
-    def concept_prototypes(split: str) -> Float[np.ndarray, "k d"]:
-        """Mean CLIP embedding per concept (re-normalized) -> [n_concepts, 512]; the retrieval candidate bank."""
-        embeddings, concept = ClipTargets.load(split)
+    def concept_prototypes(split: str, target: str = _DEFAULT_TARGET) -> Float[np.ndarray, "k d"]:
+        """Mean CLIP embedding per concept (re-normalized) -> [n_concepts, d]; the retrieval candidate bank."""
+        embeddings, concept = ClipTargets.load(split, target)
         n_concepts = int(concept.max()) + 1
-        prototypes = np.zeros((n_concepts, _EMBED_DIM), np.float32)
+        prototypes = np.zeros((n_concepts, embeddings.shape[1]), np.float32)
         for concept_idx in range(n_concepts):
             mean_emb = embeddings[concept == concept_idx].mean(0)
             prototypes[concept_idx] = mean_emb / (np.linalg.norm(mean_emb) + 1e-8)
@@ -132,7 +144,10 @@ class ClipTargets:
 
 def main():
     Cli.setup_logging()
-    ClipTargets.compute(sys.argv[1] if len(sys.argv) > 1 else "test")
+    argv = sys.argv[1:]
+    split = argv[0] if argv else "test"
+    target = argv[1] if len(argv) > 1 else _DEFAULT_TARGET
+    ClipTargets.compute(split, target)
 
 
 if __name__ == "__main__":

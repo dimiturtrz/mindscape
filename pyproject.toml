@@ -42,6 +42,7 @@ data = ["osfclient", "openneuro-py"]   # dataset fetch (Stage-3 EEG->image: OSF 
 # located from the install via `python -m devtools.config`. Pin lives in .copier-answers.yml (devtools_ref).
 devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.14.0#subdirectory=sdlc-devtools"]
 source = ["nibabel"]   # EEG->cortex source localization: MNE fsaverage forward/inverse (bd 728; core.features.eeg.source)
+recon = ["diffusers", "transformers", "accelerate"]   # EEG->image reconstruction: unCLIP decode of predicted CLIP embeds (bd 71n; neuroscan/tasks/visual/reconstruct.py)
 all = ["pytest", "onnx", "onnxruntime"]
 
 [build-system]
@@ -87,7 +88,8 @@ extend_exclude = ["noxfile.py"]
 # coverage-omitted shells or lazy imports deptry doesn't scan — onnx/onnxscript (export/ ONNX path,
 # core/export_onnx.py), osfclient/openneuro-py (data/ dataset fetch), nibabel (source/ fsaverage forward).
 DEP002 = ["pytest", "pytest-cov", "sdlc-devtools", "numpy", "jaxtyping", "beartype", "pydantic",
-          "onnx", "onnxscript", "osfclient", "openneuro-py", "nibabel"]
+          "onnx", "onnxscript", "osfclient", "openneuro-py", "nibabel",
+          "diffusers", "transformers", "accelerate"]   # recon/ unCLIP decode; only consumer is the omitted reconstruct.py shell
 # DEP001 (imported-but-undeclared): the external git-repo checkouts under external/ (gitignored, checked out
 # not vendored — CLAUDE.md), never pip deps: EEGPT (`EEGPT_mcae`/`models`, foundation.py) + `benchnirs`.
 DEP001 = ["EEGPT_mcae", "models", "benchnirs"]
@@ -170,6 +172,7 @@ omit = [
     "neuroscan/tasks/motor_imagery/align.py",   # MI transfer RUNNER (its logic is baselines/eeg/transfer.py, 100% tested)
     # dependency glue: onnx quantize / CLIP download / mlflow tracking / ONNX export
     "neuroscan/tasks/motor_imagery/quantize.py", "neuroscan/tasks/visual/clip_targets.py",
+    "neuroscan/tasks/visual/reconstruct.py",   # unCLIP decode of predicted CLIP embeds (diffusers + model download; bd 71n)
     "neuroscan/tracking.py",
     "core/export_onnx.py",   # ONNX export (onnx dep; trained-decoder glue)
     # interface / registry maps (no logic)
