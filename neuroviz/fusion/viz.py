@@ -16,30 +16,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
 
-from core.data import store
-from core.data.eeg import shin2017_nback_eeg as eegmod
-from core.data.eeg.base import EpochCfg
-from core.data.fnirs import shin2017 as fnmod
-from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
+from neuroviz.fusion.inputs import PairedInputs
 
 logger = logging.getLogger(__name__)
 
 
 def _maps(subject: int, block: int, band: str):
-    me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0))
-    mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=32.0))     # past 20 s so the read-forward tail has blood
-    Xe, Xf, ye = store.Store.gather_aligned(me, mf, subject)
-    channels = eegmod.Shin2017NbackEegAdapter.adapter().channels()
-    Xe = bc.CSD.csd_transform(Xe, channels, 100.0)                  # surface-Laplacian deblur (match export)
-    pos_e = bc.EegMontage.eeg_positions(channels)
-    pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter().subject_dir(subject))
-    X = bc.BrainCamera.build_tensor(bc.PairedModalities(Xe, Xf, pos_e, pos_f), grid=16,
+    inp = PairedInputs.load(subject)
+    X = bc.BrainCamera.build_tensor(bc.PairedModalities(inp.Xe, inp.Xf, inp.pos_e, inp.pos_f), grid=16,
                                     series=bc.SeriesConfig(fps=10.0, t_end=20.0))  # [n,C=5,16,16,T], lag derived
     band_idx = {"theta": 0, "alpha": 1, "beta": 2}[band]
     eeg = X[block, band_idx]            # [16,16,T] EEG band-power map
     neural = X[block, 3]               # [16,16,T] fNIRS CBSI neural map (lag-aligned; ch 3, ch 4 = coverage)
-    return eeg, neural, pos_e, pos_f, int(ye[block])
+    return eeg, neural, inp.pos_e, inp.pos_f, int(inp.y[block])
 
 
 def _grid_nodes(pos, grid=16):

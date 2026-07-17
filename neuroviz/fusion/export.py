@@ -14,18 +14,13 @@ import logging
 import numpy as np
 
 from core.config import REPO
-from core.data import store
-from core.data.eeg import shin2017_nback_eeg as eegmod
-from core.data.eeg.base import EpochCfg
-from core.data.fnirs import shin2017 as fnmod
-from core.data.fnirs.base import FnirsCfg
 from core.features import fusion as bc
+from neuroviz.fusion.inputs import PairedInputs
 
 logger = logging.getLogger(__name__)
 
 _FS_E, _FS_F, _TMIN_F = 100.0, 10.0, -2.0
 _FPS, _TEND, _FN_TMAX = 10.0, 20.0, 32.0        # fNIRS epoched past _TEND so read-forward (τ+lag) fills the tail
-_CSD = True                                      # surface-Laplacian deblur of EEG before fusion (scalp-space fix)
 _COV_GRID = 40                                   # locality-coverage kernel resolution exported for the viz
 
 
@@ -36,15 +31,9 @@ def main():
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
-    mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))     # past 20 s so the read-forward tail has blood
-    Xe, Xf, ye = store.Store.gather_aligned(me, mf, args.subject)
-    ch_e = eegmod.Shin2017NbackEegAdapter.adapter().channels()
-    if _CSD:
-        Xe = bc.CSD.csd_transform(Xe, ch_e, _FS_E)               # spatial deblur before fusion (scalp-space)
+    inp = PairedInputs.load(args.subject, _FS_E, _FN_TMAX)
+    Xe, Xf, ye, pos_e, pos_f = inp.Xe, inp.Xf, inp.y, inp.pos_e, inp.pos_f
     b = args.block
-    pos_e = bc.EegMontage.eeg_positions(ch_e)
-    pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter().subject_dir(args.subject))
 
     # single source of truth: core computes the fused representation (band-power envelopes + CBSI neural,
     # lag-aligned) and the locality-coverage kernel. The viz just displays them — no fusion logic in JS.
