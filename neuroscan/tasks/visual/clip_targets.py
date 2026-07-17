@@ -33,7 +33,9 @@ _ROOT = "things_eeg2"
 # richer target (ViT-L/14 768-d, MindEye-class recon fidelity) is a one-line target switch, no encoder rewiring.
 _TARGETS = {
     "vitb32": ("ViT-B-32", "laion2b_s34b_b79k"),     # NICE's 512-d target (the default)
-    "vitl14": ("ViT-L-14", "laion2b_s32b_b82k"),     # 768-d, sharper conditioning latent for reconstruction
+    "vitl14": ("ViT-L-14", "openai"),                # 768-d recon latent — OpenAI (NOT LAION): the space
+                                                     # StableUnCLIPImg2ImgPipeline decodes from (bd 71n); LAION
+                                                     # CLIP is a different embedding space -> silent-garbage decode
 }
 _DEFAULT_TARGET = "vitb32"
 _IMAGE_EXTS = (".jpg", ".jpeg", ".png")

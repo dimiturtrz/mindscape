@@ -9,5 +9,6 @@
   "amp": true,
   "resample": 200,
   "clip_target": "vitl14",
-  "mse_weight": 1.0
+  "mse_weight": 1.0,
+  "save_encoder": true
 }

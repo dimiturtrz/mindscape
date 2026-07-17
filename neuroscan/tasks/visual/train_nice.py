@@ -106,6 +106,7 @@ class TrainConfig(BaseModel):
                                   # sharper recon latent). The encoder auto-sizes to the target dim (EncoderSpec).
     mse_weight: float = 0.0       # >0 = add MSE-to-CLIP to InfoNCE (bd ooi): hit the actual embedding, not only
                                   # its direction, so the predicted vector is a usable decoder-conditioning latent
+    save_encoder: bool = False    # persist the trained encoder (+ spec) to runs/enc_*.pt for reconstruction (bd 71n)
     val_every: int = 1           # eval the (big) held-out val set every N epochs — strides its per-epoch cost
     amp: bool = True             # bf16 autocast on cuda; False = fp32 (the naive arm of the parity test, bd 9s5)
     recenter: bool = False       # per-subject signal re-centering M^-1/2 X before the encoder (bd dpi) —
@@ -173,6 +174,15 @@ class TrainNice:
         """CLIP embedding per epoch, looked up by the image the subject viewed (target = CLIP zoo name, bd ooi)."""
         by_file = clip_targets.ClipTargets.embeddings_by_file(split, target)
         return np.stack([by_file[name] for name in image_files]).astype(np.float32)
+
+    @staticmethod
+    def test_features(test_subject: int, cfg: TrainConfig):
+        """Load + normalize a held-out subject's TEST epochs, encoder-ready (public: bd 71n reconstruct reuse).
+        Returns (eeg [n,ch,t] normalized, concept [n]). cbramod's z-score chain is stateless, so no train-fit
+        is needed here — for a stateful chain (MVNN) the leak-free fit lives in `train`, not this path."""
+        test_eeg, test_concept, _, test_subj, _ = TrainNice._load_split([test_subject], "test", cfg)
+        chain = EncoderRegistry.normalization(cfg.model)
+        return chain.apply(test_eeg, test_subj), test_concept
 
     @staticmethod
     def _load_split(subjects: list[int], split: str, cfg: TrainConfig):
@@ -456,6 +466,13 @@ class TrainNice:
                               "test_concept_top1": concept[1], "test_concept_top5": concept[5],
                               "best_val_top1": stats["val_top1"],
                               **{f"test_{k}": v for k, v in test["continuous"].items()}})   # angular error (bd 2y7k)
+        if cfg.save_encoder:                                   # decodable checkpoint for reconstruction (bd 71n)
+            ckpt = Path(f"runs/enc_{cfg.model}_test{test_subject}_{cfg.clip_target}.pt")
+            torch.save({"state_dict": encoder.state_dict(), "model": cfg.model,
+                        "n_channels": train_eeg.shape[1], "n_times": train_eeg.shape[2],
+                        "embed_dim": train_targets.shape[1], "clip_target": cfg.clip_target,
+                        "resample": cfg.resample}, ckpt)
+            logger.info(f"saved encoder -> {ckpt}")
         result = {"regime": regime, "train": train_subjects, "test": test_subject, **stats,
                   "chance_top1": 1 / (int(test_concept.max()) + 1), **test}
         Invariants.check(result)                               # fail loud on a silently-inconsistent number
