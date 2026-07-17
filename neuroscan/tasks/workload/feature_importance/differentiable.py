@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
-from jaxtyping import Float
+from jaxtyping import Float, Int
 from omegaconf import OmegaConf
 from sklearn.model_selection import GroupShuffleSplit
 from torch import Tensor
@@ -57,7 +57,7 @@ class WeightedLinear(torch.nn.Module):
     weight-group of column j (per-family: 0..14; per-channel: j itself), so one learnable logit per group
     broadcasts to its columns."""
 
-    def __init__(self, group_idx: torch.Tensor, n_groups: int, d: int, n_classes: int):
+    def __init__(self, group_idx: Int[Tensor, "f"], n_groups: int, d: int, n_classes: int):
         super().__init__()
         self.logits = torch.nn.Parameter(torch.zeros(n_groups))
         self.head = torch.nn.Linear(d, n_classes)
@@ -113,7 +113,7 @@ class Differentiable:
 
     @classmethod
     @torch.no_grad()
-    def _predict(cls, model, X) -> np.ndarray:
+    def _predict(cls, model, X) -> Int[np.ndarray, "n"]:
         model.eval()
         return model(torch.as_tensor(X, dtype=torch.float32, device=_DEV)).argmax(1).cpu().numpy()
 
@@ -135,7 +135,7 @@ class Differentiable:
         return float(np.mean(accs))
 
     @classmethod
-    def _effective_n(cls, w: np.ndarray) -> float:
+    def _effective_n(cls, w: Float[np.ndarray, "f"]) -> float:
         p = w[w > _EPS]
         return float(np.exp(-(p * np.log(p)).sum()))
 

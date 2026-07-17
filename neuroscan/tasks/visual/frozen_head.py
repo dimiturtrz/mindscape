@@ -32,7 +32,8 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch import nn
+from jaxtyping import Float, Int, Shaped
+from torch import Tensor, nn
 
 from core.config import Config
 from core.data.eeg import things_eeg2 as things
@@ -118,7 +119,8 @@ class FrozenHead:
 
     @classmethod
     @torch.no_grad()
-    def _features(cls, module: nn.Module, eeg: np.ndarray, device: str, backbone: str, normalize: str) -> torch.Tensor:
+    def _features(cls, module: nn.Module, eeg: Float[np.ndarray, "n ch t"], device: str, backbone: str,
+                  normalize: str) -> Float[Tensor, "n ch s d"]:
         """Frozen token grid for every epoch, `[N, C, S, d]` float16 on CPU (the one-time cost). Raw epochs are
         first run through the backbone's normalization chain (bd 4aoz — `normalize='auto'` picks CBraMod's
         amplitude scale / EEGPT's z-score; a forced value drives the A/B), then patched by the Backbone: CBraMod
@@ -132,12 +134,13 @@ class FrozenHead:
         return torch.cat(out)
 
     @classmethod
-    def _clip_targets(cls, image_files: np.ndarray, split: str) -> np.ndarray:
+    def _clip_targets(cls, image_files: Shaped[np.ndarray, "n"], split: str) -> Float[np.ndarray, "n d"]:
         by_file = clip_targets.ClipTargets.embeddings_by_file(split)
         return np.stack([by_file[name] for name in image_files]).astype(np.float32)
 
     @classmethod
-    def _val_concepts(cls, concept: np.ndarray, targets: np.ndarray, seed: int, fraction: float):
+    def _val_concepts(cls, concept: Int[np.ndarray, "n"], targets: Float[np.ndarray, "n d"], seed: int,
+                      fraction: float):
         """Hold out a fraction of TRAIN concepts as a leak-free early-stop bank (mirrors train_nice._val_split)."""
         rng = np.random.default_rng(seed)
         concepts = np.unique(concept)

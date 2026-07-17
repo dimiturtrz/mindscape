@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 
 import numpy as np
+from jaxtyping import Float, Int
 from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 
 from baselines.fnirs.features import FnirsLda
@@ -54,7 +55,8 @@ class AugmentProbe:
         return np.concatenate(x), np.concatenate(y), np.concatenate(g)
 
     @classmethod
-    def _augment(cls, x_tr: np.ndarray, y_tr: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    def _augment(cls, x_tr: Float[np.ndarray, "n ch_f t"], y_tr: Int[np.ndarray, "n"],
+                 seed: int) -> tuple[np.ndarray, np.ndarray]:
         """Append `_N_AUG` domain-randomized copies of the train epochs (HbO=0:36, HbR=36:72)."""
         xs, ys = [x_tr], [y_tr]
         for k in range(_N_AUG):

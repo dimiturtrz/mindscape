@@ -18,7 +18,7 @@ class Coupling:
     folded in as staticmethods, public names kept)."""
 
     @staticmethod
-    def _gamma_kernel(t: np.ndarray, peak: float, width: float) -> np.ndarray:
+    def _gamma_kernel(t: Float[np.ndarray, "k"], peak: float, width: float) -> Float[np.ndarray, "k"]:
         """Causal single-gamma hemodynamic kernel on time axis `t` (s), parameterized by its center-of-mass `peak`
         (the delay) and dispersion `width` (both seconds), normalized to unit area. `mean = a·b = peak`,
         `std = √a·b = width` -> shape `a = (peak/width)²`, scale `b = width²/peak`."""

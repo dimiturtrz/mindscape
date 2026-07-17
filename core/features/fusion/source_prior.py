@@ -46,7 +46,7 @@ class SourcePrior:
         return r_gt @ np.linalg.inv(grgt + lam2 * np.eye(grgt.shape[0]))
 
     @staticmethod
-    def _parcel_aggregator(src, labels) -> np.ndarray:
+    def _parcel_aggregator(src, labels) -> Float[np.ndarray, "p s"]:
         """`A [n_labels, n_src]` averaging each label's sources — source order = concat of `src[h]["vertno"]`.
         Maps the fixed-orientation source estimate onto the same Desikan-Killiany parcels the dSPM path uses
         (`source.to_parcels`), so fNIRS-priored and plain-dSPM decodes are compared on one representation."""

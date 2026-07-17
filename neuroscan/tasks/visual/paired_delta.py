@@ -17,6 +17,7 @@ import logging
 from pathlib import Path
 
 import numpy as np
+from jaxtyping import Float
 
 from neuroscan.evaluation.invariants import Invariants
 from neuroscan.evaluation.metrics import BootCfg, Metrics
@@ -29,7 +30,7 @@ class PairedDelta:
     """Paired bootstrap delta-CI between two persisted retrieval runs (their per-trial hit vectors)."""
 
     @classmethod
-    def _hits(cls, result: dict, k: int) -> np.ndarray:
+    def _hits(cls, result: dict, k: int) -> Float[np.ndarray, "n"]:
         """The per-trial 0/1 hit vector at top-k from a `train --out` result (JSON keys are strings)."""
         return np.asarray(result["single_trial_hits"][str(k)], dtype=float)
 

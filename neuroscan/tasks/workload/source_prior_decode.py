@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 
 import numpy as np
+from jaxtyping import Float
 
 from core.data import store
 from core.data.eeg import shin2017_nback_eeg as eegmod
@@ -51,7 +52,8 @@ class SourcePriorDecode:
     """fNIRS-informed source-space fusion decode helpers (bd 4so) — the free helpers folded in as staticmethods."""
 
     @classmethod
-    def _fnirs_prior(cls, x_fnirs: np.ndarray, subject_dir, src2d: np.ndarray) -> np.ndarray:
+    def _fnirs_prior(cls, x_fnirs: Float[np.ndarray, "n ch_f t"], subject_dir,
+                     src2d: Float[np.ndarray, "src 2"]) -> Float[np.ndarray, "src"]:
         """Per-source prior `w [n_src]` from a subject's fNIRS: per-channel HbO response magnitude (std over time,
         mean over epochs — unsupervised) RBF-interpolated from the optode disk onto the source-space vertices."""
         act = np.asarray(x_fnirs[:, :36, :], dtype=np.float64).std(axis=-1).mean(axis=0)   # [36] HbO channels

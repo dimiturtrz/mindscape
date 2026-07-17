@@ -31,7 +31,8 @@ class BrainCamera:
     free helpers folded in as staticmethods, public names kept). ⚠️ LOSSY viz branch / DECODE NEGATIVE."""
 
     @staticmethod
-    def _bary(pos: np.ndarray, pts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def _bary(pos: Float[np.ndarray, "ch 2"], pts: Float[np.ndarray, "pts 2"],
+              ) -> tuple[Float[np.ndarray, "pts ch"], Float[np.ndarray, "pts"]]:
         """Barycentric linear-interpolation weight matrix `W[len(pts), n_ch]` mapping channel values at `pos` to
         arbitrary query points `pts` (Delaunay triangulation, computed once — every frame is then a matmul), plus
         the distance `d[len(pts)]` from each query point to its nearest sensor. Points outside the hull get zero
@@ -54,7 +55,8 @@ class BrainCamera:
         return W, d
 
     @staticmethod
-    def _interp_weights(pos: np.ndarray, grid: int) -> tuple[np.ndarray, np.ndarray]:
+    def _interp_weights(pos: Float[np.ndarray, "ch 2"], grid: int,
+                        ) -> tuple[Float[np.ndarray, "g2 ch"], Float[np.ndarray, "g2"]]:
         """Barycentric weights `W[grid², n_ch]` onto the head grid + a validity `mask[grid²]` (pixel within ~1.5
         grid-spacings of a sensor)."""
         gx = np.linspace(-1, 1, grid)
@@ -65,7 +67,8 @@ class BrainCamera:
         return W, mask
 
     @staticmethod
-    def _apply(vals: np.ndarray, W: np.ndarray, grid: int) -> np.ndarray:
+    def _apply(vals: Float[np.ndarray, "n ch t"], W: Float[np.ndarray, "g2 ch"],
+               grid: int) -> Float[np.ndarray, "n h w t"]:
         """`vals[n, ch, t]` × `W[grid², ch]` -> `maps[n, grid, grid, t]` (one einsum, all frames at once)."""
         m = np.einsum("nct,gc->ngt", vals, W)                              # [n, G², t]
         n, _, t = m.shape
@@ -138,14 +141,14 @@ class BrainCamera:
         return joint.astype(np.float32), coupling
 
     @staticmethod
-    def _zscore(m: np.ndarray) -> np.ndarray:
+    def _zscore(m: Float[np.ndarray, "n h w t"]) -> Float[np.ndarray, "n h w t"]:
         """Z-score a map block over space+time per sample (comparability across bands/modalities)."""
         mu = m.mean(axis=(1, 2, 3), keepdims=True)
         sd = m.std(axis=(1, 2, 3), keepdims=True) + 1e-6
         return (m - mu) / sd
 
     @staticmethod
-    def _broadcast(mask2d: np.ndarray, like_shape) -> np.ndarray:
+    def _broadcast(mask2d: Float[np.ndarray, "h w"], like_shape) -> Float[np.ndarray, "n h w t"]:
         """A `[grid,grid]` mask -> `[n, grid, grid, T]` matching a map block."""
         n, g, _, t = like_shape
         return np.broadcast_to(mask2d[None, :, :, None], (n, g, g, t)).astype(np.float32)
