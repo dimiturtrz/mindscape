@@ -45,6 +45,7 @@ from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tasks.visual.sampling import BatchSpec, Sampling
 from neuroscan.tracking import Tracking
+from neuroscan.training import EarlyStopper, TorchPerf  # shared TF32 + early-stop scaffold (bd 1eca)
 
 logger = logging.getLogger(__name__)
 
@@ -280,23 +281,11 @@ class TrainNice:
                           batch_size=cfg.batch, shuffle=True, drop_last=True)
 
     @staticmethod
-    def _enable_fast_matmul(device: str) -> None:
-        """TF32 for the residual fp32 matmuls (`high` precision). Measured −22% step time (bd 62ak: the win is in
-        backward, 25.8→17.3 ms) — parity-safe since training already runs bf16 autocast, and TF32's 10-bit mantissa
-        is MORE precise than the bf16 already in use. cudnn.benchmark is deliberately NOT set: measured neutral/worse
-        for the small NICE convs, and variable end-of-epoch batch shapes would re-trigger its autotune."""
-        if device != "cuda":
-            return
-        torch.set_float32_matmul_precision("high")
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
-
-    @staticmethod
     def _build_optim(spec: EncoderSpec, n_subjects: int, cfg: TrainConfig, device: str):
         """Encoder (by `cfg.model`, from the registry) + logit-scale + (optional) subject discriminator under one
         AdamW, plus a linear LR-warmup scheduler (opt-in, bd 07m: scales every group equally so the discriminative
         backbone/head ratio survives the ramp; warmup_epochs=0 -> a no-op constant-1.0 schedule)."""
-        TrainNice._enable_fast_matmul(device)               # every training path builds an optimizer here (bd 62ak)
+        TorchPerf.enable_fast_matmul(device)                # every training path builds an optimizer here (bd 62ak)
         encoder = EncoderRegistry.build_encoder(cfg.model, spec).to(device)
         logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
         # per-encoder optimizer groups if the encoder defines them (foundation: discriminative backbone/head LR),
@@ -391,7 +380,8 @@ class TrainNice:
                       TrainNice._geo_laplacian(encoder, data, cfg, device))   # spatial-smoothness prior (bd 1x0)
 
         fit_data = _FitArrays(train_eeg, train_targets, train_concept, fit_indices, subject)
-        best_val, best_state, best_epoch, since_improved, run_start = -1.0, None, -1, 0, time.perf_counter()
+        stopper = EarlyStopper(cfg.patience, mode="max")   # maximize val top-1 (bd 1eca)
+        run_start = time.perf_counter()
         for epoch in range(cfg.epochs):
             lam = (TrainNice._dann_lambda(epoch / max(1, cfg.epochs - 1), cfg.adv_lambda)
                    if cfg.adv_lambda_ramp else cfg.adv_lambda)
@@ -404,11 +394,7 @@ class TrainNice:
             if epoch % cfg.val_every == 0 or epoch == cfg.epochs - 1:      # stride the big val eval (bd)
                 val_eval = TrainNice.evaluate(encoder, RetrievalSet(val_eeg, val_labels, val_bank), device)
                 val_top1 = val_eval["single_trial"][1]
-                if val_top1 > best_val:
-                    best_val, best_epoch, since_improved = val_top1, epoch, 0
-                    best_state = {k: v.detach().cpu().clone() for k, v in encoder.state_dict().items()}
-                else:
-                    since_improved += 1
+                stop = stopper.update(val_top1, encoder, epoch)
                 Tracking.metrics({"loss": total_loss / max(1, n_batches), "val_top1": val_top1,
                                   "val_cos_to_true": val_eval["continuous"]["cos_to_true_mean"],
                                   "sec_per_epoch": train_s}, step=epoch)   # per-epoch curve + speed in mlflow
@@ -417,12 +403,13 @@ class TrainNice:
                           f"val-top1 {val_top1*100:.2f}%  cos {val_eval['continuous']['cos_to_true_mean']:.3f}"
                           f"  {train_s:.1f}s ({n_batches / train_s:.0f} batch/s)  "
                           f"~{(time.perf_counter() - run_start) / (epoch + 1) * (cfg.epochs - epoch - 1):.0f}s left")
-                if since_improved >= cfg.patience:
-                    logger.info(f"early stop at ep {epoch} (best val = ep {best_epoch})")
+                if stop:
+                    logger.info(f"early stop at ep {epoch} (best val = ep {stopper.best_step})")
                     break
 
-        encoder.load_state_dict(best_state)                            # keep the best-VAL checkpoint
-        return encoder, {"best_val_epoch": best_epoch, "val_top1": best_val, "epochs_run": epoch + 1}
+        stopper.restore(encoder)                                       # keep the best-VAL checkpoint
+        return encoder, {"best_val_epoch": stopper.best_step, "val_top1": stopper.best_metric,
+                         "epochs_run": epoch + 1}
 
     @staticmethod
     def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dict:

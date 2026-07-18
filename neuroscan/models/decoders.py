@@ -12,20 +12,18 @@ ONNX-exportable (the Stage-2 edge path rides on it). RTX 5090 + bf16 autocast: m
 """
 from __future__ import annotations
 
-import copy
 import logging
 from dataclasses import dataclass
 
 import numpy as np
 import torch
 from braindecode.models import ATCNet, Deep4Net, EEGConformer, EEGNetv4, ShallowFBCSPNet
-from jaxtyping import Float, Int
 from pydantic import BaseModel
-from sklearn.base import BaseEstimator, ClassifierMixin
 
 # standardizers + crops live in transforms.py (independently testable); re-exported under the legacy
 # private names so callers (e.g. tasks/motor_imagery/quantize.py) keep working.
 from neuroscan.models.transforms import Transforms
+from neuroscan.training import EarlyStopper, TorchPerf  # shared TF32 + early-stop scaffold (bd 1eca)
 
 # method -> (braindecode class, training + crop hparams). crop_frac=0.5 + 16 train crops is the standard
 # 2a recipe; strong nets get more epochs (cheap on the 5090, capped by early stopping).
@@ -133,18 +131,8 @@ class BraindecodeClf:
         Xva, yva = BraindecodeClf._take(Xs, y, vi, cl, self.n_test_crops)     # vi is None when no val -> (None, None)
         return Xtr, ytr, Xva, yva
 
-    @staticmethod
-    def _enable_fast_matmul(device: str) -> None:
-        """TF32 for the residual fp32 matmuls (bd 62ak: ~-22% step, the win is in backward) — parity-safe since the
-        loop already runs bf16 autocast, so TF32's 10-bit mantissa is more precise than the bf16 already in use."""
-        if device != "cuda":
-            return
-        torch.set_float32_matmul_precision("high")
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
-
     def fit(self, X, y):
-        BraindecodeClf._enable_fast_matmul(self.device)
+        TorchPerf.enable_fast_matmul(self.device)
         Xs = self.std.fit(X)(X)
         Xtr, ytr, Xva, yva = self._make_train_val(Xs, y)
         xt = torch.tensor(Xtr, device=self.device)
@@ -159,7 +147,7 @@ class BraindecodeClf:
         lossf = torch.nn.CrossEntropyLoss()
         amp = self.device == "cuda"
         n = len(xt)
-        best_loss, best_state, bad = float("inf"), None, 0
+        stopper = EarlyStopper(self.patience, mode="min", min_delta=1e-4)   # minimize val loss (bd 1eca)
         for ep in range(self.epochs):
             self.net.train()
             perm = torch.randperm(n, device=self.device)
@@ -176,21 +164,17 @@ class BraindecodeClf:
                 self.net.eval()
                 with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16, enabled=amp):
                     vl = float(lossf(self.net(xv), yv))
-                if vl < best_loss - 1e-4:
-                    best_loss, bad, best_state = vl, 0, copy.deepcopy(self.net.state_dict())
-                else:
-                    bad += 1
+                stop = stopper.update(vl, self.net, ep)
                 if self.log_every and (ep + 1) % self.log_every == 0:
                     logger.info(f"    ep {ep + 1}/{self.epochs}  lr {sched.get_last_lr()[0]:.2e}  "
-                                f"val {vl:.3f}  (best {best_loss:.3f}, bad {bad})")
-                if bad >= self.patience:
-                    logger.info(f"    early stop @ ep {ep + 1} (val {best_loss:.3f})")
+                                f"val {vl:.3f}  (best {stopper.best_metric:.3f}, bad {stopper.bad})")
+                if stop:
+                    logger.info(f"    early stop @ ep {ep + 1} (val {stopper.best_metric:.3f})")
                     break
             elif self.log_every and (ep + 1) % self.log_every == 0:
                 logger.info(f"    ep {ep + 1}/{self.epochs}  lr {sched.get_last_lr()[0]:.2e}")
 
-        if best_state is not None:
-            self.net.load_state_dict(best_state)
+        stopper.restore(self.net)
         return self
 
     def _trial_outputs(self, X, *, softmax: bool):
@@ -241,46 +225,3 @@ class BraindecodeClf:
             return clf.predict_proba(X)
 
         return fit, score
-
-
-class BraindecodeEstimator(ClassifierMixin, BaseEstimator):
-    """sklearn-estimator face of a braindecode method (bd kvb) — so a net composes into `Pipeline` /
-    `GridSearchCV` / `cross_validate` alongside the CSP+LDA baselines, which are already sklearn estimators.
-
-    sklearn convention: `__init__` stores hyperparameters verbatim (no data, no logic — `get_params`/`set_params`
-    and `clone` depend on it) and the data-derived shape (channels / times / classes) is inferred in `fit`. A
-    param left None takes the method's recipe default from `MODELS`. `fit` delegates to `BraindecodeClf.make`, the
-    SAME construction path the harness uses, so scores are identical to the `(fit, score)` route by construction —
-    this is an additive interoperability face, not a second trainer.
-
-    NOTE: this buys composability + param-search ergonomics, not fold PARALLELISM — `cross_validate`'s loky
-    process-backend is env-dead on this Windows+native-stack setup (bd 07n / loky-fold-parallel-measured-null);
-    run its folds sequentially (n_jobs=1) or parallelize coarsely at the OS-process level.
-    """
-
-    def __init__(self, method: str = "eegnet", *, epochs: int | None = None, lr: float | None = None,  # noqa: PLR0913
-                 batch: int | None = None, weight_decay: float | None = None, patience: int | None = None,
-                 crop_frac: float | None = None, standardize: str | None = None, seed: int = 0,
-                 device: str | None = None):
-        self.method = method
-        self.epochs, self.lr, self.batch, self.weight_decay = epochs, lr, batch, weight_decay
-        self.patience, self.crop_frac, self.standardize = patience, crop_frac, standardize
-        self.seed, self.device = seed, device
-
-    def _overrides(self) -> dict:
-        """The non-None hyperparameters, as `make`'s fit kwargs (None => keep the method's recipe default)."""
-        keys = ("epochs", "lr", "batch", "weight_decay", "patience", "crop_frac", "standardize", "seed", "device")
-        return {k: v for k in keys if (v := getattr(self, k)) is not None}
-
-    def fit(self, X: Float[np.ndarray, "*batch ch t"], y: Int[np.ndarray, "*batch"]) -> BraindecodeEstimator:
-        """Infer shape from (X, y), train via the shared `make` path, expose the fitted state (trailing `_`)."""
-        fit_fn, _ = BraindecodeClf.make(self.method)
-        self.classes_ = np.unique(y)
-        self.clf_ = fit_fn(np.asarray(X), np.asarray(y), **self._overrides())
-        return self
-
-    def predict_proba(self, X: Float[np.ndarray, "*batch ch t"]) -> Float[np.ndarray, "*batch c"]:
-        return self.clf_.predict_proba(np.asarray(X))
-
-    def predict(self, X: Float[np.ndarray, "*batch ch t"]) -> Int[np.ndarray, "*batch"]:
-        return self.classes_[self.predict_proba(X).argmax(1)]
