@@ -38,6 +38,7 @@ from core.features.eeg.covariance import Covariance
 from core.features.eeg.montage import EegMontage
 from neuroscan.evaluation.invariants import Invariants
 from neuroscan.evaluation.metrics import Metrics
+from neuroscan.evaluation.retrieval import Retrieval
 from neuroscan.models.encoders import NORMALIZE_CHOICES, EncoderRegistry, EncoderSpec
 from neuroscan.models.nice import Nice, SubjectDiscriminator
 from neuroscan.tasks.cli import Cli
@@ -216,9 +217,13 @@ class TrainNice:
                                 for c in range(n_concepts)])
         concept_avg = Nice.retrieval_topk(averaged, candidate_bank, torch.arange(n_concepts))
         continuous = Nice.retrieval_continuous(embedded, candidate_bank, labels)   # angular-error extras (bd 2y7k)
+        # rank-aware retrieval quality (MRR / median-rank / PR-AUC) off the [N,C] cosine score matrix — the same
+        # numbers cross_dataset_eval reports, now on the primary cross-subject single-trial eval (bd 7tl).
+        scores = (embedded @ candidate_bank.t()).numpy()
+        rank_metrics = Retrieval.retrieval_metrics(scores, labels.numpy(), ks=(1, 5))
         emb_mse = float(F.mse_loss(embedded, candidate_bank[labels]))   # recon proxy: predicted vs prototype (bd ooi)
         return {"single_trial": single, "single_trial_ci": single_ci, "concept_avg": concept_avg,
-                "continuous": continuous, "emb_mse": emb_mse,
+                "continuous": continuous, "retrieval_metrics": rank_metrics, "emb_mse": emb_mse,
                 "single_trial_hits": {k: h.tolist() for k, h in hits.items()}}   # persisted for paired delta (s1t2)
 
     @staticmethod
@@ -465,7 +470,11 @@ class TrainNice:
             Tracking.metrics({"test_single_top1": single[1], "test_single_top5": single[5],
                               "test_concept_top1": concept[1], "test_concept_top5": concept[5],
                               "best_val_top1": stats["val_top1"],
-                              **{f"test_{k}": v for k, v in test["continuous"].items()}})   # angular error (bd 2y7k)
+                              **{f"test_{k}": v for k, v in test["continuous"].items()},   # angular error (bd 2y7k)
+                              **{f"test_{k}": v for k, v in test["retrieval_metrics"].items()}})   # rank-aware (bd 7tl)
+            rm = test["retrieval_metrics"]
+            logger.info(f"test5 single-top1 {single[1]*100:.2f}%  MRR {rm['mrr']:.3f}  "
+                        f"median-rank {rm['median_rank']:.0f}  PR-AUC {rm['pr_auc']:.3f}")
         if cfg.save_encoder:                                   # decodable checkpoint for reconstruction (bd 71n)
             ckpt = Path(f"runs/enc_{cfg.model}_test{test_subject}_{cfg.clip_target}.pt")
             torch.save({"state_dict": encoder.state_dict(), "model": cfg.model,
