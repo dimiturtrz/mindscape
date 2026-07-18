@@ -19,7 +19,9 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 from braindecode.models import ATCNet, Deep4Net, EEGConformer, EEGNetv4, ShallowFBCSPNet
+from jaxtyping import Float, Int
 from pydantic import BaseModel
+from sklearn.base import BaseEstimator, ClassifierMixin
 
 # standardizers + crops live in transforms.py (independently testable); re-exported under the legacy
 # private names so callers (e.g. tasks/motor_imagery/quantize.py) keep working.
@@ -239,3 +241,46 @@ class BraindecodeClf:
             return clf.predict_proba(X)
 
         return fit, score
+
+
+class BraindecodeEstimator(ClassifierMixin, BaseEstimator):
+    """sklearn-estimator face of a braindecode method (bd kvb) — so a net composes into `Pipeline` /
+    `GridSearchCV` / `cross_validate` alongside the CSP+LDA baselines, which are already sklearn estimators.
+
+    sklearn convention: `__init__` stores hyperparameters verbatim (no data, no logic — `get_params`/`set_params`
+    and `clone` depend on it) and the data-derived shape (channels / times / classes) is inferred in `fit`. A
+    param left None takes the method's recipe default from `MODELS`. `fit` delegates to `BraindecodeClf.make`, the
+    SAME construction path the harness uses, so scores are identical to the `(fit, score)` route by construction —
+    this is an additive interoperability face, not a second trainer.
+
+    NOTE: this buys composability + param-search ergonomics, not fold PARALLELISM — `cross_validate`'s loky
+    process-backend is env-dead on this Windows+native-stack setup (bd 07n / loky-fold-parallel-measured-null);
+    run its folds sequentially (n_jobs=1) or parallelize coarsely at the OS-process level.
+    """
+
+    def __init__(self, method: str = "eegnet", *, epochs: int | None = None, lr: float | None = None,  # noqa: PLR0913
+                 batch: int | None = None, weight_decay: float | None = None, patience: int | None = None,
+                 crop_frac: float | None = None, standardize: str | None = None, seed: int = 0,
+                 device: str | None = None):
+        self.method = method
+        self.epochs, self.lr, self.batch, self.weight_decay = epochs, lr, batch, weight_decay
+        self.patience, self.crop_frac, self.standardize = patience, crop_frac, standardize
+        self.seed, self.device = seed, device
+
+    def _overrides(self) -> dict:
+        """The non-None hyperparameters, as `make`'s fit kwargs (None => keep the method's recipe default)."""
+        keys = ("epochs", "lr", "batch", "weight_decay", "patience", "crop_frac", "standardize", "seed", "device")
+        return {k: v for k in keys if (v := getattr(self, k)) is not None}
+
+    def fit(self, X: Float[np.ndarray, "*batch ch t"], y: Int[np.ndarray, "*batch"]) -> BraindecodeEstimator:
+        """Infer shape from (X, y), train via the shared `make` path, expose the fitted state (trailing `_`)."""
+        fit_fn, _ = BraindecodeClf.make(self.method)
+        self.classes_ = np.unique(y)
+        self.clf_ = fit_fn(np.asarray(X), np.asarray(y), **self._overrides())
+        return self
+
+    def predict_proba(self, X: Float[np.ndarray, "*batch ch t"]) -> Float[np.ndarray, "*batch c"]:
+        return self.clf_.predict_proba(np.asarray(X))
+
+    def predict(self, X: Float[np.ndarray, "*batch ch t"]) -> Int[np.ndarray, "*batch"]:
+        return self.classes_[self.predict_proba(X).argmax(1)]

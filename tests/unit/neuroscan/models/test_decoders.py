@@ -46,3 +46,58 @@ def test_make_unknown_method_raises_listing_methods():
 
     with pytest.raises(KeyError, match="unknown decoder"):
         decoders.BraindecodeClf.make("not_a_method")
+
+
+def _tiny_xy(seed=0):
+    rng = np.random.default_rng(seed)
+    n, ch, T = 24, 8, 256
+    return rng.standard_normal((n, ch, T)).astype(np.float32), np.tile([0, 1, 2, 3], n // 4)
+
+
+def test_estimator_matches_make_route_byte_identical(monkeypatch):
+    """The sklearn-estimator face (bd kvb) delegates to `make`, so its per-trial proba is IDENTICAL to the
+    (fit, score) harness route at the same seed/overrides — additive interoperability, not a second trainer."""
+    import torch
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    from neuroscan.models import decoders
+
+    X, y = _tiny_xy()
+    over = {"epochs": 2, "patience": 0}
+
+    fit, score = decoders.BraindecodeClf.make("eegnet")
+    p_route = score(fit(X, y, **over), X)
+
+    est = decoders.BraindecodeEstimator("eegnet", **over).fit(X, y)
+    p_est = est.predict_proba(X)
+
+    assert np.array_equal(p_est, p_route)          # same construction path + seed -> byte-identical
+
+
+def test_estimator_composes_in_sklearn_pipeline(monkeypatch):
+    """It drops into a sklearn Pipeline unchanged (the kvb acceptance) and predict() returns class labels."""
+    import torch
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    from sklearn.pipeline import Pipeline
+
+    from neuroscan.models import decoders
+
+    X, y = _tiny_xy()
+    pipe = Pipeline([("clf", decoders.BraindecodeEstimator("eegnet", epochs=2, patience=0))])
+    pipe.fit(X, y)
+    pred = pipe.predict(X)
+    assert pred.shape == (len(y),)
+    assert set(np.unique(pred)).issubset(set(np.unique(y)))     # predictions are real class labels
+
+
+def test_estimator_get_set_params_and_clone():
+    """sklearn contract: hyperparameters round-trip through get_params/set_params and survive clone (no fit,
+    no torch, no GPU) — what GridSearchCV relies on."""
+    from sklearn.base import clone
+
+    from neuroscan.models import decoders
+
+    est = decoders.BraindecodeEstimator("eegnet", lr=1e-3)
+    assert est.get_params()["lr"] == 1e-3
+    est.set_params(lr=5e-4, method="atcnet")
+    assert est.get_params()["lr"] == 5e-4
+    assert clone(est).get_params()["method"] == "atcnet"        # clone reconstructs from get_params
