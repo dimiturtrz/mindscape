@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import mne
 import numpy as np
@@ -50,25 +51,26 @@ N_WAVE_T = 300                # downsampled time points for waveform display
 PER_CLASS = 1                 # example trials per class in the waveform panel
 
 
-def _load_epochs(subject: int):
+def _load_epochs(subject: int) -> tuple[Any, np.ndarray]:
     """MNE Epochs for a subject (broad 4-40 Hz band, montage set) via MOABB."""
     Config.configure_moabb_download()
     para = MotorImagery(n_classes=N_CLASSES, fmin=PROC_BAND[0], fmax=PROC_BAND[1],
                         tmin=0.0, tmax=None, resample=SFREQ)
     ep, labels, _ = para.get_data(dataset=BNCI2014_001(), subjects=[subject], return_epochs=True)
-    ep.set_montage(mne.channels.make_standard_montage("standard_1020"),
+    ep.set_montage(mne.channels.make_standard_montage("standard_1020"),  # type: ignore[union-attr]
                    match_case=False, on_missing="ignore")
     return ep, np.asarray(labels)
 
 
-def _pos2d(info):
+def _pos2d(info: Any):
     pos = _find_topomap_coords(info, picks="eeg")          # sphere-projected 2D, the standard topo layout
     pos = pos - pos.mean(0)
     pos = pos / np.abs(pos).max()                          # normalize into [-1, 1]
     return pos
 
 
-def _erd_frames(ep, labels, band_hz, n_frames=N_FRAMES, baseline_s=BASELINE_S):
+def _erd_frames(ep: Any, labels: np.ndarray, band_hz: tuple[float, float], n_frames: int = N_FRAMES,
+                baseline_s: float = BASELINE_S):
     """Time-resolved ERD per class: band-limited power over the trial, baseline-normalized to the first
     `baseline_s` (pre-imagery). Negative = event-related DESYNCHRONIZATION (the motor-imagery signature).
     Returns ({class: [frame][ch]}, frame_times) — averaged across epochs, downsampled to n_frames."""
@@ -93,7 +95,7 @@ def _erd_frames(ep, labels, band_hz, n_frames=N_FRAMES, baseline_s=BASELINE_S):
     return frames, ftimes
 
 
-def _csp_patterns(ep, labels, n=N_CSP):
+def _csp_patterns(ep: Any, labels: np.ndarray, n: int = N_CSP):
     X = ep.get_data() * 1e6
     csp = CSP(n_components=n, reg="ledoit_wolf", log=True)
     csp.fit(X.astype(np.float64), labels)
@@ -102,7 +104,7 @@ def _csp_patterns(ep, labels, n=N_CSP):
     return [(row / (np.abs(row).max() + 1e-9)).tolist() for row in pat]
 
 
-def _riemann_patterns(ep, labels):
+def _riemann_patterns(ep: Any, labels: np.ndarray):
     """Per-class Riemannian discriminant channel weights — what the tangent-space classifier learned.
 
     Fits the tangent-space + logistic-regression baseline (baselines/eeg/riemann.py), then reads each class's
@@ -127,7 +129,7 @@ def _riemann_patterns(ep, labels):
     return out
 
 
-def _waveforms(ep, labels, per_class=PER_CLASS, n_t=N_WAVE_T):
+def _waveforms(ep: Any, labels: np.ndarray, per_class: int = PER_CLASS, n_t: int = N_WAVE_T):
     """One example trial per class, ALL channels (downsampled to ~n_t points for display).
     The viewer colors each channel by its contribution to the selected view — no hardcoded highlight."""
     names = list(ep.ch_names)
@@ -143,7 +145,8 @@ def _waveforms(ep, labels, per_class=PER_CLASS, n_t=N_WAVE_T):
     return {"t": t, "trials": out, "chans": names}
 
 
-def _eeg_view(subject: int, ep, labels, frames: dict, ftimes: list) -> dict:
+def _eeg_view(subject: int, ep: Any, labels: np.ndarray, frames: dict[str, Any],
+              ftimes: list[float]) -> dict[str, Any]:
     """The shared EEG view payload (motor-imagery and workload exporters differ only in the frame bands):
     channels + 2D positions + per-class frames + CSP/Riemann patterns + example waveforms."""
     return {

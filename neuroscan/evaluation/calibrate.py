@@ -16,8 +16,10 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
+import polars as pl
 import torch
 from jaxtyping import Float, Int
 
@@ -88,12 +90,13 @@ class Calibrate:
         return ap.parse_args()
 
     @classmethod
-    def _per_subject_rows(cls, meta, fit, test_session):
+    def _per_subject_rows(cls, meta: pl.DataFrame, fit: Callable[..., Any],
+                          test_session: str) -> list[dict[str, str | float]]:
         """One temperature-scaling row per subject: fit T on the in-session val, report val + cross-session ECE."""
-        rows = []
+        rows: list[dict[str, str | float]] = []
         for s in sorted(meta["subject"].unique().to_list()):
             # train+val from the train session (in-session), test = the eval session (cross-session)
-            train, val, test = splits.Splits.within_subject(meta, s, test_sessions=[test_session])
+            train, val, test = splits.Splits.within_subject(meta, s, test_sessions=(test_session,))
             if val.is_empty() or test.is_empty():
                 continue
             Xtr, ytr = store.Store.gather(train)
@@ -113,11 +116,11 @@ class Calibrate:
         return rows
 
     @classmethod
-    def _summarize(cls, rows, method):
+    def _summarize(cls, rows: list[dict[str, str | float]], method: str) -> tuple[dict[str, Any], float, float]:
         """Aggregate per-subject rows into the summary dict; returns (summary, val_fix, test_fix)."""
-        m = {k: float(np.mean([r[k] for r in rows]))
+        m = {k: float(np.mean([float(r[k]) for r in rows]))
              for k in ("T", "val_ece_uncal", "val_ece_temp", "test_ece_uncal", "test_ece_temp")}
-        summary = {"method": method, "regime": "within_calibration", "n": len(rows),
+        summary: dict[str, Any] = {"method": method, "regime": "within_calibration", "n": len(rows),
                    "T_mean": m["T"],
                    "val_ece": {"uncal": m["val_ece_uncal"], "temp": m["val_ece_temp"]},
                    "test_ece": {"uncal": m["test_ece_uncal"], "temp": m["test_ece_temp"]},
@@ -129,7 +132,7 @@ class Calibrate:
         return summary, val_fix, test_fix
 
     @classmethod
-    def _report(cls, summary, method, val_fix, test_fix):
+    def _report(cls, summary: dict[str, Any], method: str, val_fix: float, test_fix: float) -> None:
         """Log the val->test ECE transfer and store the verdict on `summary`."""
         logger.info(f"\n=== {method} temperature scaling (in-session val -> cross-session test) ===")
         logger.info(f"  val  ECE {summary['val_ece']['uncal']:.3f} -> "

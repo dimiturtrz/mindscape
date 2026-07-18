@@ -23,6 +23,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import optuna
@@ -57,7 +58,7 @@ class OptunaSearch:
     kept)."""
 
     @classmethod
-    def _cv_score(cls, bank: Bank, weights, fold_seeds, k) -> float:
+    def _cv_score(cls, bank: Bank, weights: dict[str, float], fold_seeds: list[int], k: int) -> float:
         """Mean accuracy of standardise→per-family-weight→shrinkage-LDA over StratifiedGroupKFold repeated for
         each seed in `fold_seeds`. Grouped by subject (whole subjects per fold); the scaler fits on train only."""
         accs = []
@@ -81,9 +82,10 @@ class OptunaSearch:
         return optuna.storages.JournalStorage(backend)
 
     @classmethod
-    def _run_one_study(cls, bank: Bank, families, cfg, tpe_seed, storage):
+    def _run_one_study(cls, bank: Bank, families: list[str], cfg: Any, tpe_seed: int,
+                       storage: optuna.storages.BaseStorage):
         """One Optuna study (one TPE seed): returns (importances, top_weight_means, best_value, best_params)."""
-        def objective(trial):
+        def objective(trial: optuna.Trial) -> float:
             weights = {f: trial.suggest_float(f, cfg.weight_low, cfg.weight_high) for f in families}
             return cls._cv_score(bank, weights, list(cfg.fold_seeds), cfg.k)
 
@@ -105,10 +107,11 @@ class OptunaSearch:
         return importances, top_w, float(study.best_value), dict(study.best_params)
 
     @classmethod
-    def _stability(cls, per_seed_importances, families, topn=5):
+    def _stability(cls, per_seed_importances: list[dict[str, float]], families: list[str], topn: int = 5):
         """How much do the top-`topn` important families agree across the study reruns? Jaccard overlap of the
         top sets — high = a stable, trustworthy importance ranking; low = the 'importance' is search noise."""
-        top_sets = [set(sorted(imp, key=imp.get, reverse=True)[:topn]) for imp in per_seed_importances]
+        top_sets = [set(sorted(imp.keys(), key=lambda x: imp[x], reverse=True)[:topn])
+                    for imp in per_seed_importances]
         pairs = [(a, b) for i, a in enumerate(top_sets) for b in top_sets[i + 1:]]
         jac = [len(a & b) / len(a | b) for a, b in pairs] if pairs else [1.0]
         consensus = sorted(families, key=lambda f: np.mean([imp.get(f, 0.0) for imp in per_seed_importances]),
@@ -129,7 +132,7 @@ class OptunaSearch:
         if args.trials:
             cfg.n_trials = args.trials
 
-        meta = store.Store.load(cfg.dataset, FnirsCfg())
+        meta = store.Store.load(cfg.dataset, cast(Any, FnirsCfg()))
         X, y = store.Store.gather(meta)
         groups = meta["subject"].to_numpy()
         F, fam = DescriptorBank.extract_bank(X)
@@ -145,14 +148,17 @@ class OptunaSearch:
             f"(chance {chance:.3f}) · journal {out}/journal.log"
         )
 
-        per_seed_imp, per_seed_topw, peaks, bests = [], [], [], []
+        per_seed_imp: list[dict[str, float]] = []
+        per_seed_topw: list[dict[str, float]] = []
+        peaks: list[float] = []
+        bests: list[dict[str, Any]] = []
         for s in cfg.tpe_seeds:
             imp, topw, best, bparams = cls._run_one_study(bank, families, cfg, int(s), storage)
             per_seed_imp.append(imp)
             per_seed_topw.append(topw)
             peaks.append(best)
             bests.append(bparams)
-            top3 = sorted(imp, key=imp.get, reverse=True)[:3]
+            top3 = sorted(imp.keys(), key=lambda x: imp[x], reverse=True)[:3]
             logger.info(f"  seed {s}: peak-acc {best:.3f} (optimistic) · top-3 by importance {top3}")
 
         stab = cls._stability(per_seed_imp, families)

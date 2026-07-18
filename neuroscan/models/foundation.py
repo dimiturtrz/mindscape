@@ -39,7 +39,7 @@ import logging
 import sys
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, override
 
 import torch
 from jaxtyping import Float
@@ -84,6 +84,7 @@ class CBraModBackbone(Backbone):
         self.patch_points = 200
         self.d_model = 200
 
+    @override
     def forward(self, x: Float[torch.Tensor, "n ch t"]) -> Float[torch.Tensor, "n ch s d"]:
         b, c, t = x.shape
         p = self.patch_points
@@ -100,6 +101,8 @@ class EegptBackbone(Backbone):
     (mean/flat/attn) apply, geometry heads do not."""
 
     _N_TIME = round(_EEGPT_RATE * _EEGPT_EPOCH_S)   # samples fed to the encoder (-> 4 patches at stride 64)
+    keep: torch.Tensor        # registered buffers (declared so the type checker sees Tensor, not Module|Tensor)
+    chan_ids: torch.Tensor
 
     def __init__(self, channel_names: list[str], patch_stride: int | None = None):
         super().__init__()
@@ -110,6 +113,7 @@ class EegptBackbone(Backbone):
         self.register_buffer("keep", torch.tensor(keep, dtype=torch.long))
         self.register_buffer("chan_ids", module.prepare_chan_ids([channel_names[i] for i in keep]))
 
+    @override
     def forward(self, x: Float[torch.Tensor, "n ch t"]) -> Float[torch.Tensor, "n n_time embed_num d"]:
         x = x[:, self.keep, :]                                    # -> the 58 EEGPT channels (input pre-normalized)
         return self.module(x, chan_ids=self.chan_ids)            # [B, N_time, embed_num, d]
@@ -215,6 +219,6 @@ class Foundation:
         backbone is frozen/eval-locked; `Lora.inject` re-arms only the low-rank A/B, which `Model.param_groups`
         picks up via `requires_grad` as the sole trainable backbone group."""
         model = cls._cbramod_model(spec, pool="mean", freeze=True)
-        n_adapted = Lora.inject(model.backbone.module)
+        n_adapted = Lora.inject(cast(nn.Module, model.backbone.module))
         logger.info(f"cbramod_lora: injected rank-8 LoRA into {n_adapted} linear layers")
         return model

@@ -22,6 +22,7 @@ import pickle
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any, cast
 
 import joblib
 import mlflow
@@ -55,8 +56,8 @@ class Tracking:
         return bool(os.environ.get("MINDSCAPE_NO_MLFLOW"))
 
     @staticmethod
-    def _flat(d: dict, prefix: str = "") -> dict:
-        out = {}
+    def _flat(d: dict[str, Any], prefix: str = "") -> dict[str, Any]:
+        out: dict[str, Any] = {}
         for k, v in (d or {}).items():
             key = f"{prefix}{k}"
             if isinstance(v, dict):
@@ -67,8 +68,8 @@ class Tracking:
 
     @staticmethod
     @contextmanager
-    def run(experiment: str, run_name: str, params: dict | None = None, tags: dict | None = None,
-            run_dir: str | Path | None = None):
+    def run(experiment: str, run_name: str, params: dict[str, Any] | None = None,
+            tags: dict[str, Any] | None = None, run_dir: str | Path | None = None):
         """Open a tracked run (local mlruns/). No-op context if tracking is off; never breaks the caller.
         If `run_dir` holds a .mlflow_run_id, resume that run (log into it); else start fresh and persist the id."""
         global _active
@@ -93,7 +94,8 @@ class Tracking:
                     mlflow.log_params(Tracking._flat(params))
                 if idf:
                     idf.parent.mkdir(parents=True, exist_ok=True)
-                    idf.write_text(mlflow.active_run().info.run_id)
+                    active = cast(Any, mlflow.active_run())
+                    idf.write_text(active.info.run_id)
             for k, v in (tags or {}).items():
                 mlflow.set_tag(k, str(v))
             _active = mlflow
@@ -110,7 +112,7 @@ class Tracking:
             _active = None
 
     @staticmethod
-    def metrics(d: dict, step: int | None = None) -> None:
+    def metrics(d: dict[str, Any], step: int | None = None) -> None:
         if _active is None:
             return
         for k, v in d.items():
@@ -120,7 +122,7 @@ class Tracking:
                 logger.debug(f"tracking: {exc}")
 
     @staticmethod
-    def per_group(prefix: str, d: dict) -> None:
+    def per_group(prefix: str, d: dict[str, Any]) -> None:
         """Log a per-group scalar dict as <prefix>_<group> (e.g. acc_subject_1)."""
         Tracking.metrics({f"{prefix}_{g}": v for g, v in d.items()})
 
@@ -136,7 +138,7 @@ class Tracking:
             logger.debug(f"tracking: {exc}")
 
     @staticmethod
-    def artifact_json(name: str, obj) -> None:
+    def artifact_json(name: str, obj: Any) -> None:
         if _active is None:
             return
         try:
@@ -147,7 +149,7 @@ class Tracking:
             logger.debug(f"tracking: {exc}")
 
     @staticmethod
-    def save_model(clf, name: str, run_dir: str | Path | None = None) -> Path | None:
+    def save_model(clf: Any, name: str, run_dir: str | Path | None = None) -> Path | None:
         """Persist a trained model (best-effort, guarded) and log it as a run artifact.
 
         Handles both decoder kinds behind the harness contract:

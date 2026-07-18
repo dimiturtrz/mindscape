@@ -20,8 +20,10 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
+from jaxtyping import Float, Int
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import GroupKFold
 
@@ -47,7 +49,8 @@ class CalibrationAblation:
         return LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")
 
     @classmethod
-    def _cv_raw_or_transductive(cls, F, y, g, subs, zt):
+    def _cv_raw_or_transductive(cls, F: Float[np.ndarray, "n f"], y: Int[np.ndarray, "n"],
+                                g: Int[np.ndarray, "n"], subs: Int[np.ndarray, "n"], *, zt: bool) -> float:
         accs = []
         for train_subj, test_subj in GroupKFold(_K).split(subs, groups=subs):
             train_mask, test_mask = np.isin(g, subs[train_subj]), np.isin(g, subs[test_subj])
@@ -57,7 +60,8 @@ class CalibrationAblation:
         return float(np.mean(accs))
 
     @classmethod
-    def _cv_calib_half(cls, F, y, g, subs, rng):
+    def _cv_calib_half(cls, F: Float[np.ndarray, "n f"], y: Int[np.ndarray, "n"], g: Int[np.ndarray, "n"],
+                       subs: Int[np.ndarray, "n"], rng: np.random.Generator) -> float:
         """Leakage-free per-subject calibration: train z-scored on train subjects; for each test subject, fit stats on
         a random half of its blocks and score the other half."""
         accs = []
@@ -65,7 +69,8 @@ class CalibrationAblation:
             Ftr = SubjectNorm.zscore_per_subject(F, g)            # train side: per-subject z (train subjects only used)
             train_mask = np.isin(g, subs[train_subj])
             clf = cls._lda().fit(Ftr[train_mask], y[train_mask])
-            yt, yp = [], []
+            yt: list[Any] = []
+            yp: list[Any] = []
             for s in subs[test_subj]:
                 idx = np.where(g == s)[0]
                 perm = rng.permutation(idx)
@@ -82,7 +87,7 @@ class CalibrationAblation:
         Cli.setup_logging()
         rng = np.random.default_rng(_SEED)
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
-        mf = store.Store.load("shin2017_nback", FnirsCfg())
+        mf = store.Store.load("shin2017_nback", cast(EpochCfg, FnirsCfg()))
         subs = np.array(sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list())))
         qe = me.filter(me["subject"].is_in([str(s) for s in subs]))
         qf = mf.filter(mf["subject"].is_in([str(s) for s in subs]))
@@ -102,7 +107,9 @@ class CalibrationAblation:
         }
         # fusion picture on the z-scored (transductive) features: EEG becomes the strong modality; oracle grows
         Fez, Ffz = SubjectNorm.zscore_per_subject(Fe, ge), SubjectNorm.zscore_per_subject(Ff, ge)
-        CE, CF, late_hits = [], [], []
+        CE: list[np.ndarray] = []
+        CF: list[np.ndarray] = []
+        late_hits: list[np.ndarray] = []
         for train_subj, test_subj in GroupKFold(_K).split(subs, groups=subs):
             train_mask, test_mask = np.isin(ge, subs[train_subj]), np.isin(ge, subs[test_subj])
             pe = cls._lda().fit(Fez[train_mask], y[train_mask]).predict_proba(Fez[test_mask])

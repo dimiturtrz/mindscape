@@ -15,8 +15,13 @@ class BandPower:
     """EEG band-power — the oscillatory feature (free helpers folded in as staticmethods, public names kept)."""
 
     @staticmethod
-    def band_powers(X: Float[np.ndarray, "n ch t"], fs: float, bands=CANONICAL_BANDS, *,
-                    relative: bool = False) -> Float[np.ndarray, "n f"]:
+    def band_powers(
+        X: Float[np.ndarray, "n ch t"],
+        fs: float,
+        bands: tuple[tuple[str, float, float], ...] = CANONICAL_BANDS,
+        *,
+        relative: bool = False,
+    ) -> Float[np.ndarray, "n f"]:
         """Per-channel log band-power in each band -> `[n, ch*len(bands)]`. One Welch PSD over the time axis
         (vectorized across n and ch), then integrate each band.
 

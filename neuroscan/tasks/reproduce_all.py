@@ -16,6 +16,7 @@ import json
 import logging
 import time
 from pathlib import Path
+from typing import cast
 
 from core import config
 from core.data import store
@@ -38,12 +39,14 @@ class ReproduceAll:
         of truth. align/fusion carry their own aggregation + entrypoints, so `align` / `run_fusion` regenerate
         those, not this. Returns (name, dataset, method, regime, cfg, test_session) tuples."""
         runs = []
-        for name in config.experiment_names():
-            exp = config.load_experiment(name)
+        for name in config.Config.experiment_names():
+            exp = config.Config.load_experiment(name)
             if exp.task not in ("decode", "fnirs"):
                 continue
             cfg = FnirsCfg(**exp.recipe) if exp.task == "fnirs" else EpochCfg(**exp.recipe)
-            runs.append((name, exp.dataset, exp.method, exp.regime, cfg, exp.test_session))
+            # decode/fnirs runs always carry dataset/method/regime (the task filter above guarantees it)
+            runs.append((name, cast(str, exp.dataset), cast(str, exp.method), cast(str, exp.regime),
+                         cfg, exp.test_session))
         return runs
 
     @classmethod
@@ -64,9 +67,9 @@ class ReproduceAll:
                 raise SystemExit(f"--only names not decode/fnirs experiments: {sorted(missing)}")
         runs = [r for r in runs if not (args.cross_only and r[3] == "within")]
         for name, dataset, method, regime, cfg, test_session in runs:
-            meta = store.Store.load(dataset, cfg)
-            n_classes = int(meta["label_id"].max()) + 1
-            tsess = [test_session] if (regime == "within" and test_session) else ()
+            meta = store.Store.load(dataset, cast(EpochCfg, cfg))
+            n_classes = int(cast(int, meta["label_id"].max())) + 1
+            tsess = (test_session,) if (regime == "within" and test_session) else ()
             folds = harness.Harness.folds_for(meta, regime, test_sessions=tsess)
             fit_fn, score_fn = models.Methods.get_method(method, fs=getattr(cfg, "resample", None))
             # classical baselines parallelize folds; nets don't

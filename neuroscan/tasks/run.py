@@ -20,6 +20,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import cast
 
 from core import config
 from core.data import store
@@ -44,15 +45,15 @@ def main():
                     help="skip updating the committed results.json snapshot (use for scratch/experimental runs)")
     args = ap.parse_args()
 
-    exp = config.load_experiment(args.exp, args.overrides)
-    dataset, method, regime = exp.dataset, exp.method, exp.regime
+    exp = config.Config.load_experiment(args.exp, args.overrides)
+    dataset, method, regime = cast(str, exp.dataset), cast(str, exp.method), cast(str, exp.regime)
     cfg = EpochCfg(**exp.recipe)
     meta = store.Store.load(dataset, cfg)
-    n_classes = int(meta["label_id"].max()) + 1                  # derived from data, not assumed 4-class
+    n_classes = int(cast(int, meta["label_id"].max())) + 1        # derived from data, not assumed 4-class
     logger.info(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · {n_classes} classes · "
           f"sessions {sorted(meta['session'].unique().to_list())} · recipe {cfg.key()}")
 
-    test_sessions = [exp.test_session] if (regime == "within" and exp.test_session) else ()
+    test_sessions = (exp.test_session,) if (regime == "within" and exp.test_session) else ()
     folds = harness.Harness.folds_for(meta, regime, test_sessions=test_sessions)
     fit_fn, score_fn = models.Methods.get_method(method, fs=cfg.resample)
 

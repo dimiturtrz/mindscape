@@ -7,6 +7,7 @@ plus both montages' 2D positions. One home so the "what the brain-camera reads" 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 
@@ -36,7 +37,7 @@ class PairedInputs:
         """Block-aligned EEG+fNIRS for one subject + montage positions, EEG CSD-deblurred. `fn_tmax` epochs
         fNIRS past the 20 s window so the read-forward (τ+lag) tail still has blood."""
         me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=fs_e))
-        mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=fn_tmax))
+        mf = store.Store.load("shin2017_nback", cast(EpochCfg, FnirsCfg(tmax=fn_tmax)))
         xe, xf, y = store.Store.gather_aligned(me, mf, subject)
         channels = eegmod.Shin2017NbackEegAdapter.adapter().channels()
         xe = bc.CSD.csd_transform(xe, channels, fs_e)               # surface-Laplacian deblur before fusion

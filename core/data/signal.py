@@ -8,9 +8,11 @@ it). `core/data/eeg/*` and `core/data/fnirs/*` both depend on this; it depends o
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
-from jaxtyping import Float
+import polars as pl
+from jaxtyping import Float, Int
 from scipy.signal import butter, filtfilt
 
 # canonical n-back workload classes (load level) — shared by the fNIRS and EEG n-back adapters
@@ -26,6 +28,35 @@ class BlockedRecording:
     labels: np.ndarray
 
 
+class EpochBatch:
+    """Accumulate per-subject epochs + their meta columns, then stack into the common
+    (X[n,ch,t] float32, y[n] int64, subject/session/run frame) triple every dataset adapter returns — the
+    one home for the assemble-and-frame contract (the Store schema), shared across the EEG + fNIRS adapters."""
+
+    def __init__(self):
+        self.Xs: list[np.ndarray] = []
+        self.ys: list[np.ndarray] = []
+        self.subj: list[str] = []
+        self.sess: list[str] = []
+        self.run: list[str] = []
+
+    def add(self, X: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"],
+            subj: list[str], sess: list[str], run: list[str]) -> None:
+        """Append one subject's epochs and its per-epoch subject/session/run meta columns."""
+        self.Xs.append(X)
+        self.ys.append(y)
+        self.subj += subj
+        self.sess += sess
+        self.run += run
+
+    def stack(self) -> tuple[Float[np.ndarray, "n ch t"], Int[np.ndarray, "n"], pl.DataFrame]:
+        """Concatenate to the canonical float32/int64 arrays + the subject/session/run meta frame."""
+        X = np.concatenate(self.Xs).astype(np.float32)
+        y = np.concatenate(self.ys).astype(np.int64)
+        meta = pl.DataFrame({"subject": self.subj, "session": self.sess, "run": self.run})
+        return X, y, meta
+
+
 class Signal:
     """Cross-modality data primitives (bandpass, block epoching) as staticmethods (public names kept) — the
     neutral data layer both EEG and fNIRS adapters ride on."""
@@ -36,7 +67,8 @@ class Signal:
         """Zero-phase Butterworth bandpass, filtering the LAST (time) axis (filtfilt — no phase shift). Rank-
         agnostic: `*batch` leading axes pass through, so continuous [ch, T] and epoched [n, ch, T] both work."""
         nyq = fs / 2.0
-        b, a = butter(order, [l_freq / nyq, min(h_freq, nyq * 0.99) / nyq], btype="band")
+        b, a = cast(tuple[np.ndarray, np.ndarray],
+                    butter(order, [l_freq / nyq, min(h_freq, nyq * 0.99) / nyq], btype="band"))
         return filtfilt(b, a, X, axis=-1)
 
     @staticmethod

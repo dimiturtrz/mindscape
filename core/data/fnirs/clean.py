@@ -17,7 +17,20 @@ not here. Idempotency is NOT assumed — CBSI recomputes its mix from the signal
 """
 from __future__ import annotations
 
+from typing import Protocol
+
 import numpy as np
+from jaxtyping import Float
+
+
+class Cleaner(Protocol):
+    """Protocol for fNIRS cleaners (fit/transform interface)."""
+
+    def fit(self, X: Float[np.ndarray, "n ch t"]) -> Cleaner:
+        ...
+
+    def transform(self, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch t"]:
+        ...
 
 
 class Cbsi:
@@ -29,10 +42,10 @@ class Cbsi:
 
     Stateless (α is per-epoch, per-channel → no cross-trial fit → leakage-free at load)."""
 
-    def fit(self, X):
+    def fit(self, X: Float[np.ndarray, "n ch t"]):
         return self
 
-    def transform(self, X):
+    def transform(self, X: Float[np.ndarray, "n ch t"]):
         dt = np.asarray(X).dtype
         X = np.asarray(X, dtype=np.float64)
         ch = X.shape[1] // 2
@@ -48,10 +61,10 @@ class Detrend:
     trend the 0.01 Hz highpass leaves). Stateless; a control more than a fix (largely redundant with the
     highpass, so a near-null ablation result is the expected, measured outcome)."""
 
-    def fit(self, X):
+    def fit(self, X: Float[np.ndarray, "n ch t"]):
         return self
 
-    def transform(self, X):
+    def transform(self, X: Float[np.ndarray, "n ch t"]):
         dt = np.asarray(X).dtype
         X = np.asarray(X, dtype=np.float64)
         t = X.shape[2]
@@ -66,16 +79,16 @@ class Chain:
     """Ordered composite — fit/transform each cleaner on the previous one's output (like sklearn Pipeline).
     Non-commutative, so the list order is the applied order."""
 
-    def __init__(self, cleaners: list):
+    def __init__(self, cleaners: list[Cleaner]):
         self.cleaners = cleaners
 
-    def fit(self, X):
+    def fit(self, X: Float[np.ndarray, "n ch t"]):
         for c in self.cleaners:
             c.fit(X)
             X = c.transform(X)
         return self
 
-    def transform(self, X):
+    def transform(self, X: Float[np.ndarray, "n ch t"]):
         for c in self.cleaners:
             X = c.transform(X)
         return X
@@ -89,7 +102,7 @@ class Clean:
     kept). The stateful cleaners (Cbsi/Detrend/Chain) stay their own classes."""
 
     @staticmethod
-    def make_cleaner(spec):
+    def make_cleaner(spec: str | list[str] | None):
         """`str | list[str] | None` -> a `Cleaner` (single = one-element `Chain`) or `None`. Unknown name errors."""
         if spec is None:
             return None
@@ -102,7 +115,7 @@ class Clean:
         return Chain([_CLEANERS[n]() for n in names])
 
     @staticmethod
-    def clean_key(spec) -> str:
+    def clean_key(spec: str | list[str] | None) -> str:
         """Cache-key fragment for a clean spec (part of FnirsCfg.key so a cleaned cache never collides)."""
         if spec is None:
             return "none"

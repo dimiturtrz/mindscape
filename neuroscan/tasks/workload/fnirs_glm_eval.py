@@ -9,6 +9,7 @@ question is whether GLM-β sharpens the *decodable* boundary (0-vs-load) or — 
 from __future__ import annotations
 
 import logging
+from typing import Any, Callable, cast
 
 from baselines.fnirs.features import FnirsLda
 from baselines.fnirs.glm import GlmBeta
@@ -29,13 +30,13 @@ class FnirsGlmEval:
     """GLM-β fNIRS eval helpers — the free helpers folded in as staticmethods."""
 
     @classmethod
-    def _acc(cls, build, data: CvData, config: CvConfig):
+    def _acc(cls, build: Callable[[], Any], data: CvData, config: CvConfig) -> float:
         return Eval.cv_score(build, data, config)[0]
 
     @classmethod
     def main(cls):
         Cli.setup_logging()
-        meta = store.Store.load(_DATASET, FnirsCfg())                          # clean=None (no filter, as requested)
+        meta = store.Store.load(_DATASET, cast(store.EpochCfg, FnirsCfg()))    # clean=None (no filter, as requested)
         X, y = store.Store.gather(meta)
         data = CvData(X, y, meta["subject"].to_numpy())
         logger.info(f"GLM-β vs collapse · Shin n-back · {len(y)} blocks · {meta['subject'].n_unique()} subj · "

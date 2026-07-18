@@ -13,9 +13,11 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import polars as pl
+from jaxtyping import Float
 from scipy.special import softmax
 
 from core import export_onnx
@@ -34,7 +36,8 @@ _ONNX_PARITY_TOL = 1e-3   # max |Δlogit| allowed between the torch net and its 
 
 class Quantize:
     @classmethod
-    def _onnx_trial_proba(cls, path, X_std, crop_len, n_test_crops):
+    def _onnx_trial_proba(cls, path: Path, X_std: Float[np.ndarray, "n ch t"], crop_len: int | None,
+                          n_test_crops: int):
         """Run an ONNX model over the crops of each trial and average softmax back per trial."""
         if crop_len:
             Xc, tidx = Transforms.crops(X_std, crop_len, n_test_crops)
@@ -60,7 +63,7 @@ class Quantize:
         return ap.parse_args()
 
     @classmethod
-    def _track_run(cls, rep, method, sub, gap, rep_dir):
+    def _track_run(cls, rep: dict[str, Any], method: str, sub: int | str, gap: float, rep_dir: Path):
         """Log the deployment triad (accuracy / size / latency) to MLflow (guarded)."""
         with tracking.Tracking.run("mindscape", f"quantize_{method}",
                           params={"method": method, "subject": str(sub)},
@@ -74,7 +77,7 @@ class Quantize:
             tracking.Tracking.metrics(record)
 
     @classmethod
-    def _report(cls, rep, method, sub, gap, out):
+    def _report(cls, rep: dict[str, Any], method: str, sub: int | str, gap: float, out: str | Path):
         """Print the fp32-vs-int8 accuracy / size / latency summary for one subject."""
         logger.info(f"\n=== {method} edge quantization (subject {sub}) ===")
         logger.info(f"  parity max|Δlogit| {gap:.2e}  (gate < 1e-3) OK")

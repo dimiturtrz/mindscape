@@ -8,8 +8,10 @@ within/cross delta is the CLEANING, nothing else. Each arm re-epochs the data wi
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 from core.data import store
+from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.workload._eval import CvConfig, CvData, Eval
@@ -28,7 +30,7 @@ def main():
     logger.info(f"  {'clean':<18}{'within':>9}{'±sd':>7}{'κ':>7}   {'cross':>9}{'±sd':>7}{'κ':>7}{'  Δcross':>9}")
     base_cross = None
     for name, spec in _ARMS:
-        meta = store.Store.load(_DATASET, FnirsCfg(clean=spec))
+        meta = store.Store.load(_DATASET, cast(EpochCfg, FnirsCfg(clean=spec)))
         X, y = store.Store.gather(meta)
         data = CvData(X, y, meta["subject"].to_numpy())
         wa, ws, wk = Eval.cv_score(None, data, CvConfig(grouped=False))

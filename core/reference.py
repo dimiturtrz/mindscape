@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from typing import Any, cast
 
 from omegaconf import OmegaConf
 
@@ -20,11 +21,11 @@ class Reference:
     (public names kept), so a result is always read against the literature, not in a vacuum."""
 
     @staticmethod
-    def ceilings(dataset: str, regime: str) -> dict:
+    def ceilings(dataset: str, regime: str) -> dict[str, dict[str, Any]]:
         """{method: {acc, kappa?, source}} for a dataset+regime, or {} if none recorded."""
         if not _REF.exists():
             return {}
-        ref = OmegaConf.to_container(OmegaConf.load(_REF), resolve=True)
+        ref = cast(dict[str, Any], OmegaConf.to_container(OmegaConf.load(_REF), resolve=True))
         return (ref.get(dataset, {}) or {}).get(regime, {}) or {}
 
     @staticmethod

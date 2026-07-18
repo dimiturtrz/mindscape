@@ -13,7 +13,7 @@ from core.data.eeg.bnci2014_001 import Bnci2014001
 from core.data.eeg.shin2017_nback_eeg import Shin2017NbackEegAdapter
 from core.data.fnirs.shin2017 import Shin2017NirsAdapter
 
-_FACTORIES: dict[str, Callable] = {}
+_FACTORIES: dict[str, Callable[[], DatasetAdapter]] = {}
 
 
 class Registry:
@@ -24,7 +24,7 @@ class Registry:
     _populated = False
 
     @staticmethod
-    def register(name: str, factory: Callable) -> None:
+    def register(name: str, factory: Callable[[], DatasetAdapter]) -> None:
         _FACTORIES[name] = factory
 
     @staticmethod

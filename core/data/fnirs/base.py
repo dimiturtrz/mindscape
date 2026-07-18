@@ -10,6 +10,8 @@ Canonical n-back workload labels (fixed so a decoder's classes mean the same eve
 """
 from __future__ import annotations
 
+import numpy as np
+from jaxtyping import Float, Shaped
 from pydantic import BaseModel
 
 # Cross-modality primitives (block epoching, n-back labels) live in the neutral data layer
@@ -40,7 +42,7 @@ class FnirsCfg(BaseModel):
     clean: str | list[str] | None = None
 
     def key(self) -> str:
-        def f(x):
+        def f(x: float) -> str:
             return str(x).replace(".", "p").replace("-", "m")
         rs = "native" if self.resample is None else f(self.resample)
         return (f"b{f(self.l_freq)}-{f(self.h_freq)}_t{f(self.tmin)}-{f(self.tmax)}"
@@ -51,7 +53,13 @@ class FnirsEpochs:
     """fNIRS-recipe epoching over the shared modality-agnostic windowing op (public name kept)."""
 
     @staticmethod
-    def epoch_blocks(cont, onsets, y, fs: float, cfg: FnirsCfg) -> tuple:
+    def epoch_blocks(
+        cont: Float[np.ndarray, "ch t"],
+        onsets: Shaped[np.ndarray, "n"],
+        y: Shaped[np.ndarray, "n"],
+        fs: float,
+        cfg: FnirsCfg,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Baseline-corrected block epoching per the fNIRS recipe — a thin FnirsCfg adapter over the shared
         `Signal.block_epochs` (the modality-agnostic windowing op)."""
         return Signal.block_epochs(BlockedRecording(cont, onsets, y), fs, cfg.tmin, cfg.tmax, cfg.baseline_s)

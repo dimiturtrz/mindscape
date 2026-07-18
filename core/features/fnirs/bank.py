@@ -33,54 +33,61 @@ class DescriptorBank:
         return (X * tc).sum(axis=2) / tc_ss
 
     @classmethod
-    def f_mean(cls, X):    return X.mean(axis=2)                                    # response amplitude
+    def f_mean(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
+        return X.mean(axis=2)                                    # response amplitude
     @classmethod
-    def f_var(cls, X):     return X.var(axis=2)                                     # response variability
+    def f_var(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
+        return X.var(axis=2)                                     # response variability
     @classmethod
-    def f_min(cls, X):     return X.min(axis=2)
+    def f_min(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
+        return X.min(axis=2)
     @classmethod
-    def f_max(cls, X):     return X.max(axis=2)
+    def f_max(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
+        return X.max(axis=2)
     @classmethod
-    def f_range(cls, X):   return X.max(axis=2) - X.min(axis=2)
+    def f_range(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
+        return X.max(axis=2) - X.min(axis=2)
     @classmethod
-    def f_auc(cls, X):     return np.trapezoid(X, axis=2)                 # area under the response (trapezoid)
+    def f_auc(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
+        return np.trapezoid(X, axis=2)                 # area under the response (trapezoid)
     @classmethod
-    def f_final(cls, X):   return X[:, :, -max(1, X.shape[2] // 10):].mean(axis=2)  # plateau (last ~10% of window)
+    def f_final(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
+        return X[:, :, -max(1, X.shape[2] // 10):].mean(axis=2)  # plateau (last ~10% of window)
 
     @classmethod
-    def f_peak(cls, X):
+    def f_peak(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
         idx = np.abs(X).argmax(axis=2)                                          # signed extreme (max |value|)
         return np.take_along_axis(X, idx[:, :, None], axis=2)[:, :, 0]
 
     @classmethod
-    def f_time_to_peak(cls, X):
+    def f_time_to_peak(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
         return np.abs(X).argmax(axis=2).astype(np.float32) / X.shape[2]         # latency of the extreme, in [0,1)
 
     @classmethod
-    def f_skew(cls, X):
+    def f_skew(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
         return np.nan_to_num(skew(X, axis=2)).astype(np.float32)               # asymmetry (flat channel -> 0)
 
     @classmethod
-    def f_kurtosis(cls, X):
+    def f_kurtosis(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
         return np.nan_to_num(kurtosis(X, axis=2)).astype(np.float32)          # peakedness (flat channel -> 0)
 
     @classmethod
-    def f_zero_crossings(cls, X):
+    def f_zero_crossings(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
         return (np.diff(np.signbit(X), axis=2).sum(axis=2)).astype(np.float32)  # # sign changes over time
 
     @classmethod
-    def f_slope(cls, X):
+    def f_slope(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
         tc, tc_ss = Amplitude.time_axis(X.shape[2])
         return cls._slope(X, tc, tc_ss)
 
     @classmethod
-    def f_early_slope(cls, X):
+    def f_early_slope(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
         h = X.shape[2] // 2                                                     # first-half rise
         tc, tc_ss = Amplitude.time_axis(h)
         return cls._slope(X[:, :, :h], tc, tc_ss)
 
     @classmethod
-    def f_late_slope(cls, X):
+    def f_late_slope(cls, X: Float[np.ndarray, "n ch t"]) -> Float[np.ndarray, "n ch"]:
         h = X.shape[2] // 2                                                     # second-half plateau/decay
         Xl = X[:, :, h:]
         tc, tc_ss = Amplitude.time_axis(Xl.shape[2])
@@ -98,7 +105,8 @@ class DescriptorBank:
         stable scaler downstream (the study standardises then weights)."""
         X = np.asarray(X, dtype=np.float64)
         ch = X.shape[1]
-        blocks, fam = [], []
+        blocks: list[np.ndarray] = []
+        fam: list[str] = []
         for name, fn in FNIRS_FEATURE_FNS.items():
             blocks.append(np.asarray(fn(X), dtype=np.float64))                 # [n, ch]
             fam.extend([name] * ch)
@@ -128,13 +136,13 @@ class WeightedFamilyScaler:
         self.fam = fam
         self.weights = weights
 
-    def fit(self, X, y=None):
+    def fit(self, X: Float[np.ndarray, "n d"], y: None = None) -> WeightedFamilyScaler:
         X = np.asarray(X, dtype=np.float64)
         self.mean_ = X.mean(axis=0)
         self.std_ = X.std(axis=0) + 1e-8                                   # guard zero-variance columns
         self.w_ = np.array([float(self.weights.get(f, 1.0)) for f in self.fam])
         return self
 
-    def transform(self, X):
+    def transform(self, X: Float[np.ndarray, "n d"]) -> Float[np.ndarray, "n d"]:
         X = np.asarray(X, dtype=np.float64)
         return ((X - self.mean_) / self.std_) * self.w_                    # standardise, THEN weight

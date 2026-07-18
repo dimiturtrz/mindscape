@@ -16,6 +16,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import polars as pl
@@ -41,7 +42,7 @@ class Store:
         return Config.processed_dir() / name / cfg.key()
 
     @staticmethod
-    def _rows_for_subject(name: str, sub: int, npz: Path, label_names: dict[int, str]) -> list[dict]:
+    def _rows_for_subject(name: str, sub: int, npz: Path, label_names: dict[int, str]) -> list[dict[str, str | int]]:
         """Build per-epoch meta rows from a subject npz WITHOUT loading X (npz is lazy per-key).
         `label_names` (id->name) comes from the dataset's own adapter, so the label column is correct for
         any modality (MI classes, n-back load levels, …) — no hardcoded convention."""
@@ -66,11 +67,11 @@ class Store:
         # channel names are dataset-level metadata — persist them into processed/ so the cache is
         # self-describing (one format), instead of downstream readers reaching back into the raw files.
         names_fn = getattr(adapter, "channels", None)
-        ch_names = names_fn() if callable(names_fn) else None
+        ch_names: list[str] | None = cast(list[str] | None, names_fn() if callable(names_fn) else None)
         if ch_names:
             (out / "channels.json").write_text(json.dumps(list(ch_names)))
 
-        rows: list[dict] = []
+        rows: list[dict[str, str | int]] = []
         for sub in adapter.subjects():
             npz = data / f"sub{sub}.npz"
             if rebuild or not npz.exists():

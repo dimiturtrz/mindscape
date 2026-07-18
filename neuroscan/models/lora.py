@@ -20,6 +20,7 @@ fused attention either, so the 20-line hand-roll here is the lighter equal — n
 from __future__ import annotations
 
 import math
+from typing import override
 
 from jaxtyping import Float
 from torch import Tensor, nn
@@ -45,6 +46,7 @@ class LoraLinear(nn.Module):
         nn.init.zeros_(self.b.weight)
         self.scaling = alpha / rank
 
+    @override
     def forward(self, x: Float[Tensor, "... d_in"]) -> Float[Tensor, "... d_out"]:
         return self.base(x) + self.scaling * self.b(self.a(x))
 

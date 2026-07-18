@@ -22,6 +22,7 @@ null (the prior regularizes, doesn't inform the discriminant) — complementarit
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
 import numpy as np
 from jaxtyping import Float
@@ -52,7 +53,7 @@ class SourcePriorDecode:
     """fNIRS-informed source-space fusion decode helpers (bd 4so) — the free helpers folded in as staticmethods."""
 
     @classmethod
-    def _fnirs_prior(cls, x_fnirs: Float[np.ndarray, "n ch_f t"], subject_dir,
+    def _fnirs_prior(cls, x_fnirs: Float[np.ndarray, "n ch_f t"], subject_dir: Any,
                      src2d: Float[np.ndarray, "src 2"]) -> Float[np.ndarray, "src"]:
         """Per-source prior `w [n_src]` from a subject's fNIRS: per-channel HbO response magnitude (std over time,
         mean over epochs — unsupervised) RBF-interpolated from the optode disk onto the source-space vertices."""
@@ -69,14 +70,15 @@ class SourcePriorDecode:
     def _build(cls):
         """Per-subject covariances for the four arms + labels/groups, over the EEG∩fNIRS subjects."""
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
-        mf = store.Store.load("shin2017_nback", FnirsCfg())
+        mf = store.Store.load("shin2017_nback", cast(EpochCfg, FnirsCfg()))
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
         ch_e = eegmod.Shin2017NbackEegAdapter.adapter().channels()
         g, agg = SourcePrior.prior_leadfield(ch_e, _SFREQ)
         src = Source(ch_e, _SFREQ)
         src2d = EegMontage.to_unit_disk(src.source_positions()[:, :2])       # source flatmap
-        arms = {"sensor": [], "dSPM": [], "uniform": [], "fNIRS": []}
-        ys, gs = [], []
+        arms: dict[str, list[np.ndarray]] = {"sensor": [], "dSPM": [], "uniform": [], "fNIRS": []}
+        ys: list[np.ndarray] = []
+        gs: list[np.ndarray] = []
         for s in subs:
             xe, xf, ye = store.Store.gather_aligned(me, mf, s)
             w = cls._fnirs_prior(xf, fnmod.Shin2017NirsAdapter.adapter().subject_dir(int(s)), src2d)

@@ -25,6 +25,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Generator, override
 
 import numpy as np
 import torch
@@ -52,7 +53,7 @@ logger = logging.getLogger(__name__)
 _EVAL_BATCH = 512   # batch >=2048 trips a cuDNN illegal-access on this conv shape (Blackwell / cu130)
 
 
-class _EpochDataset(Dataset):
+class _EpochDataset(Dataset[tuple[torch.Tensor, torch.Tensor, int]]):
     """Numpy-backed — converts per sample, so the (large) training array is never copied into one torch
     tensor up front. `indices` optionally views a subset of the arrays without copying them (the fit split
     of a much larger epoch pile). Together these keep a full 9-subject LOSO (~38 GB of epochs) in RAM instead
@@ -66,8 +67,9 @@ class _EpochDataset(Dataset):
     def __len__(self) -> int:
         return len(self.indices) if self.indices is not None else len(self.eeg)
 
-    def __getitem__(self, idx: int):
-        row = int(self.indices[idx]) if self.indices is not None else idx
+    @override
+    def __getitem__(self, index: int):
+        row = int(self.indices[index]) if self.indices is not None else index
         subj = 0 if self.subject is None else int(self.subject[row])
         return torch.from_numpy(self.eeg[row]), torch.from_numpy(self.targets[row]), subj
 
@@ -202,7 +204,7 @@ class TrainNice:
 
     @staticmethod
     @torch.no_grad()
-    def evaluate(encoder, data: RetrievalSet, device, batch: int = _EVAL_BATCH) -> dict:
+    def evaluate(encoder: Any, data: RetrievalSet, device: str, batch: int = _EVAL_BATCH) -> dict[str, Any]:
         """Single-trial + concept-averaged retrieval top-1/5 against a per-concept prototype bank."""
         encoder.eval()
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda")):
@@ -257,7 +259,8 @@ class TrainNice:
         return {concepts[i]: [concepts[j] for j in raw[i]] for i in range(len(concepts))}
 
     @staticmethod
-    def _epoch_steps(data: _FitArrays, neighbor_groups, cfg: TrainConfig, rng, epoch_n: int):
+    def _epoch_steps(data: _FitArrays, neighbor_groups: dict[int, list[int]] | None, cfg: TrainConfig,
+                     rng: np.random.Generator, epoch_n: int):
         """This epoch's (eeg, target, subject) batch iterator per `cfg.sampling`: strict balanced / CLIP-hard
         (bd 2j2/4ru), round-robin stratified (bd ewd), or uniform DataLoader. train_frac subsamples (bd kqa/pqh).
         Every source yields the subject index too (dummy zeros unless adversarial) so the loop has one shape."""
@@ -267,7 +270,9 @@ class TrainNice:
             full_bpe = max(1, len(fit) // (cfg.concepts_per_batch * cfg.samples_per_concept))
             n_bpe = full_bpe if cfg.train_frac >= 1.0 else max(1, int(full_bpe * cfg.train_frac))
             spec = BatchSpec(cfg.concepts_per_batch, cfg.samples_per_concept, n_bpe)
-            pos_batches = (Sampling.clip_hard_batches(data.concept[fit], neighbor_groups, spec, rng)
+            if cfg.sampling == "clip_hard" and neighbor_groups is None:
+                raise ValueError("neighbor_groups required for clip_hard sampling")
+            pos_batches = (Sampling.clip_hard_batches(data.concept[fit], neighbor_groups, spec, rng)  # type: ignore[arg-type]
                            if cfg.sampling == "clip_hard" else Sampling.balanced_batches(data.concept[fit], spec, rng))
             # generator, NOT a list: build+free each batch's tensors on demand (a list materializes the whole
             # epoch of copied tensors at once -> OOM on the 240k-trial cross set).
@@ -286,7 +291,7 @@ class TrainNice:
         AdamW, plus a linear LR-warmup scheduler (opt-in, bd 07m: scales every group equally so the discriminative
         backbone/head ratio survives the ramp; warmup_epochs=0 -> a no-op constant-1.0 schedule)."""
         TorchPerf.enable_fast_matmul(device)                # every training path builds an optimizer here (bd 62ak)
-        encoder = EncoderRegistry.build_encoder(cfg.model, spec).to(device)
+        encoder = EncoderRegistry.build_encoder(cfg.model, spec).to(device)  # type: ignore[attr-defined]
         logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
         # per-encoder optimizer groups if the encoder defines them (foundation: discriminative backbone/head LR),
         # else one group at cfg.lr (NICE — unchanged).
@@ -305,7 +310,7 @@ class TrainNice:
         return encoder, logit_scale, discriminator, optimizer, scheduler
 
     @staticmethod
-    def _geo_laplacian(encoder, data: TrainData, cfg: TrainConfig, device: str):
+    def _geo_laplacian(encoder: Any, data: TrainData, cfg: TrainConfig, device: str):
         """Channel graph-Laplacian tensor for the spatial-smoothness prior (bd 1x0), or None when the prior is off
         (geo_lambda=0), no montage positions travelled with the data, or the encoder has no spatial conv to
         smooth (foundation backbones). Built once per fit; the penalty rides the training loop."""
@@ -315,28 +320,31 @@ class TrainNice:
         return torch.tensor(EegMontage.channel_laplacian(data.positions, cfg.geo_sigma), device=device)
 
     @staticmethod
-    def _run_epoch(tr: _StepCtx, steps, lam: float, cfg: TrainConfig, device: str) -> tuple[float, int]:
+    def _run_epoch(tr: _StepCtx,
+                   steps: Generator[tuple[torch.Tensor, torch.Tensor, torch.Tensor], None, None]
+                         | DataLoader[tuple[torch.Tensor, torch.Tensor, int]],
+                   lam: float, cfg: TrainConfig, device: str) -> tuple[float, int]:
         """One training epoch over `steps`; returns (summed batch loss, n_batches). Keeps the per-step loss
         assembly in one place — InfoNCE (bd, CLIP loss) + optional subject-adversary term (GRL, bd 36g) +
         optional graph-Laplacian spatial-smoothness prior (bd 1x0) — with the mutable components carried by `tr`."""
-        tr.encoder.train()
+        tr.encoder.train()  # type: ignore[attr-defined]
         total_loss, n_batches = 0.0, 0
         for eeg_batch, target_batch, subj_batch in steps:
             eeg_batch = eeg_batch.to(device)
             target_batch = torch.nn.functional.normalize(target_batch.to(device), dim=-1)
-            tr.optimizer.zero_grad()
+            tr.optimizer.zero_grad()  # type: ignore[attr-defined]
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda" and cfg.amp)):
-                z = tr.encoder(eeg_batch)
-                loss = Nice.clip_infonce(z, target_batch, tr.logit_scale.exp().clamp(max=100),
+                z = tr.encoder(eeg_batch)  # type: ignore[operator]
+                loss = Nice.clip_infonce(z, target_batch, tr.logit_scale.exp().clamp(max=100),  # type: ignore[attr-defined]
                                     hard_beta=cfg.hard_beta, soft_tau=cfg.soft_tau)
                 if cfg.mse_weight > 0:                         # hit the CLIP embedding, not only its direction (bd ooi)
                     loss = loss + cfg.mse_weight * F.mse_loss(z, target_batch)   # both L2-normed: MSE on the sphere
                 if tr.discriminator is not None:               # push encoder to be subject-invariant (GRL, bd 36g)
-                    loss = loss + cfg.adv_weight * F.cross_entropy(tr.discriminator(z, lam), subj_batch.to(device))
+                    loss = loss + cfg.adv_weight * F.cross_entropy(tr.discriminator(z, lam), subj_batch.to(device))  # type: ignore[operator]
                 if tr.geo_lap is not None:                     # montage-adjacency smoothness prior (bd 1x0)
-                    loss = loss + cfg.geo_lambda * tr.encoder.geo_penalty(tr.geo_lap)
+                    loss = loss + cfg.geo_lambda * tr.encoder.geo_penalty(tr.geo_lap)  # type: ignore[attr-defined]
             loss.backward()                                    # bf16 autocast needs no GradScaler (unlike fp16)
-            tr.optimizer.step()
+            tr.optimizer.step()  # type: ignore[attr-defined]
             total_loss += loss.item()
             n_batches += 1
         return total_loss, n_batches
@@ -412,7 +420,7 @@ class TrainNice:
                          "epochs_run": epoch + 1}
 
     @staticmethod
-    def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dict:
+    def train(train_subjects: list[int], test_subject: int, cfg: TrainConfig) -> dict[str, Any]:
         """Fit the encoder (contrastive) on EEG2 with leak-free early stopping; return the test result at the
         best-val checkpoint. Reusable entry point — `main()` only builds the config and prints/saves this dict."""
         torch.manual_seed(cfg.seed)

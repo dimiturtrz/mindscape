@@ -17,6 +17,7 @@ Two questions, in order:
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import numpy as np
 from jaxtyping import Float, Int
@@ -44,8 +45,10 @@ class AugmentProbe:
     @classmethod
     def _build(cls):
         """Paired (HbO, HbR) epochs restricted to the binary `_CLASSES` contrast, relabelled 0/1."""
-        meta = store.Store.load("shin2017_nback", FnirsCfg())
-        x, y, g = [], [], []
+        meta = store.Store.load("shin2017_nback", cast(store.EpochCfg, FnirsCfg()))
+        x: list[np.ndarray] = []
+        y: list[np.ndarray] = []
+        g: list[np.ndarray] = []
         for s in sorted(meta["subject"].unique().to_list()):
             xs, ys = store.Store.gather(meta.filter(meta["subject"] == s))
             m = np.isin(ys, _CLASSES)
@@ -66,9 +69,10 @@ class AugmentProbe:
         return np.concatenate(xs), np.concatenate(ys)
 
     @classmethod
-    def _cross(cls, x, y, g, *, augment: bool) -> tuple[float, float]:
+    def _cross(cls, x: Float[np.ndarray, "n f"], y: Int[np.ndarray, "n"], g: Int[np.ndarray, "n"],
+               *, augment: bool) -> tuple[float, float]:
         """Cross-subject grouped k-fold `FnirsLda`; optionally augment each fold's train set."""
-        accs = []
+        accs: list[float] = []
         for seed in _SEEDS:
             for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(x, y, g):
                 x_tr, y_tr = (cls._augment(x[tr], y[tr], seed) if augment else (x[tr], y[tr]))
@@ -77,9 +81,10 @@ class AugmentProbe:
         return float(np.mean(accs)), float(np.std(accs))
 
     @classmethod
-    def _within(cls, x, y, g) -> tuple[float, float]:
+    def _within(cls, x: Float[np.ndarray, "n f"], y: Int[np.ndarray, "n"],
+                g: Int[np.ndarray, "n"]) -> tuple[float, float]:
         """Within-subject k-fold (pooled), the ceiling that bounds the cross-subject headroom."""
-        accs = []
+        accs: list[float] = []
         for seed in _SEEDS:
             for tr, te in StratifiedKFold(_K, shuffle=True, random_state=seed).split(x, y):
                 proba = FnirsLda().fit(x[tr], y[tr]).predict_proba(x[te])

@@ -14,6 +14,8 @@ The fNIRS-activation → per-source weight mapping (optode co-registration) is t
 """
 from __future__ import annotations
 
+from typing import Any
+
 import mne
 import numpy as np
 from jaxtyping import Float
@@ -46,11 +48,12 @@ class SourcePrior:
         return r_gt @ np.linalg.inv(grgt + lam2 * np.eye(grgt.shape[0]))
 
     @staticmethod
-    def _parcel_aggregator(src, labels) -> Float[np.ndarray, "p s"]:
+    def _parcel_aggregator(src: list[dict[str, Any]], labels: list[Any]) -> Float[np.ndarray, "p s"]:
         """`A [n_labels, n_src]` averaging each label's sources — source order = concat of `src[h]["vertno"]`.
         Maps the fixed-orientation source estimate onto the same Desikan-Killiany parcels the dSPM path uses
         (`source.to_parcels`), so fNIRS-priored and plain-dSPM decodes are compared on one representation."""
-        idx, start = [], 0
+        idx: list[dict[int, int]] = []
+        start = 0
         for s in src:
             idx.append({int(v): start + i for i, v in enumerate(s["vertno"])})
             start += len(s["vertno"])
@@ -63,8 +66,11 @@ class SourcePrior:
         return a
 
     @staticmethod
-    def prior_leadfield(ch_names: list[str], sfreq: float,
-                        cfg=None) -> tuple[np.ndarray, np.ndarray]:   # pragma: no cover — MNE fsaverage lead field
+    def prior_leadfield(
+        ch_names: list[str],
+        sfreq: float,
+        cfg: SourceConfig | None = None,
+    ) -> tuple[Float[np.ndarray, "ch s"], Float[np.ndarray, "p s"]]:   # pragma: no cover — MNE fsaverage lead field
         """`(g [n_ch, n_src], aggregator [n_labels, n_src])` for a montage — the fixed-orientation lead field and
         the Desikan-Killiany parcel-averaging matrix. The expensive forward is built once here so a per-subject
         decode can vary only the prior `w` (`weighted_min_norm_inverse`) without rebuilding it (4so batch decode)."""
