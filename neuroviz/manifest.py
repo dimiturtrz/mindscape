@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 
 class Manifest:
     """Neuroviz view-data writer: one subject JSON + the modality-aware manifest merge."""
 
     @staticmethod
-    def publish(out: Path, subject: int, prefix: str, modality: str, data: dict) -> list[int]:
+    def publish(out: Path, subject: int, prefix: str, modality: str, data: dict[str, Any]) -> list[int]:
         """Write `<prefix><subject>.json` under `out`, then set `manifest.json`'s
         `modalities[modality]` to every subject exported for this prefix (globbed from disk, so
         re-running a single subject keeps the others). Returns the sorted subject list."""

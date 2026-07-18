@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 import mne
 import numpy as np
@@ -34,7 +35,8 @@ ALPHA = (8.0, 13.0)           # Hz — parietal alpha suppresses with load
 BETA = (13.0, 30.0)           # Hz
 
 
-def _bandpower_frames(ep, labels, fmin, fmax, n_frames=N_FRAMES):
+def _bandpower_frames(ep: mne.EpochsArray, labels: np.ndarray, fmin: float, fmax: float,
+                      n_frames: int = N_FRAMES) -> tuple[dict[str, list[list[float]]], list[float]]:
     """Per-class SPATIAL band-power map over the block — the workload signal is *where* a rhythm concentrates
     and how that differs by load, NOT temporal change-from-onset (that's the motor-imagery ERD story). So:
     band-limited log-power per channel per time-bin, then **spatially demeaned** each frame (subtract the
@@ -43,7 +45,7 @@ def _bandpower_frames(ep, labels, fmin, fmax, n_frames=N_FRAMES):
     ({class: [frame][ch]}, frame_times)."""
     band = ep.copy().filter(fmin, fmax, verbose="error")
     sf = ep.info["sfreq"]
-    power = (band.get_data() * 1e6) ** 2                     # [n_epochs, ch, t]
+    power = (cast(np.ndarray, band.get_data()) * 1e6) ** 2                     # [n_epochs, ch, t]
     T = power.shape[2]
     edges = np.linspace(0, T, n_frames + 1).astype(int)
     widths = np.diff(edges)

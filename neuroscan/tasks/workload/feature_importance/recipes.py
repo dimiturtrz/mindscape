@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
 import numpy as np
+from jaxtyping import Float, Int
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -49,19 +51,21 @@ class Recipes:
     kept)."""
 
     @classmethod
-    def _cv(cls, F, fam, y, groups, families):
+    def _cv(cls, F: Float[np.ndarray, "n f"], fam: Any, y: Int[np.ndarray, "n"],
+            groups: Int[np.ndarray, "n"], families: list[str]):
         Fr = F[:, np.isin(fam, families)]
-        accs, kaps = [], []
+        accs: list[float] = []
+        kaps: list[float] = []
         for tr, te in Cv.grouped_folds(Fr, y, groups, _SEEDS, _K):
             clf = make_pipeline(StandardScaler(),
                                 LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")).fit(Fr[tr], y[tr])
             pred = clf.predict(Fr[te])
-            accs.append(metrics.Metrics.accuracy(y[te], pred))
-            kaps.append(metrics.Metrics.kappa(y[te], pred))
+            accs.append(metrics.Metrics.accuracy(y[te], pred))  # type: ignore[arg-type]
+            kaps.append(metrics.Metrics.kappa(y[te], pred))  # type: ignore[arg-type]
         return float(np.mean(accs)), float(np.std(accs)), float(np.mean(kaps))
 
     @classmethod
-    def _record(cls, key, acc, kappa, n_classes):
+    def _record(cls, key: str, acc: float, kappa: float, n_classes: int):
         """Write a harness-schema aggregate for this recipe and merge it into results.json (marker-backing)."""
         run = f"fnirs_recipe_{key}_{_DATASET}"
         run_dir = REPO / "runs" / run
@@ -75,7 +79,7 @@ class Recipes:
     @classmethod
     def main(cls):
         Cli.setup_logging()
-        meta = store.Store.load(_DATASET, FnirsCfg())
+        meta = store.Store.load(_DATASET, FnirsCfg())  # type: ignore[arg-type]
         X, y = store.Store.gather(meta)
         groups = meta["subject"].to_numpy()
         F, fam = DescriptorBank.extract_bank(X)

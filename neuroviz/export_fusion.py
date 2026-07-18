@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 from sklearn.model_selection import GroupKFold
@@ -32,7 +33,7 @@ _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _OUT = Path(__file__).parent / "web" / "data" / "fusion.json"
 
 
-def _gather(meta, subs):
+def _gather(meta: Any, subs: np.ndarray):
     q = meta.filter(meta["subject"].is_in([str(s) for s in subs]))
     X, y = store.Store.gather(q)
     return X, y, q["subject"].to_numpy()
@@ -41,7 +42,7 @@ def _gather(meta, subs):
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     me = store.Store.load(_EEG, _EEG_CFG)
-    mf = store.Store.load(_FNIRS, FnirsCfg())
+    mf = store.Store.load(_FNIRS, cast(EpochCfg, FnirsCfg()))
     subs = np.array(sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list())))
     classes = sorted(me["label"].unique().to_list())
     id2lab = dict(enumerate(sorted(me["label"].unique().to_list())))     # label_id -> name (matches gather order)
@@ -90,7 +91,7 @@ def main():
     # add a fusion flag to the manifest so the viewer shows the third mode (create it if the single-modality
     # exporters haven't run yet — they merge their own keys in later)
     man_path = _OUT.parent / "manifest.json"
-    man = json.loads(man_path.read_text()) if man_path.exists() else {"modalities": {}}
+    man: dict[str, Any] = json.loads(man_path.read_text()) if man_path.exists() else {"modalities": {}}
     man["fusion"] = True
     man_path.write_text(json.dumps(man))
     logger.info(f"updated {man_path.name}: fusion=true")

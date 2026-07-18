@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 import torch
+import torch.nn as nn
 from jaxtyping import Float
 from onnxruntime.quantization import QuantType, quantize_dynamic
 
@@ -26,14 +27,14 @@ class OnnxExport:
     (public names kept), so the Stage-2 edge tail has one home."""
 
     @staticmethod
-    def export(net, n_chans: int, n_times: int, path: str | Path, device: str = "cpu") -> Path:
+    def export(net: nn.Module, n_chans: int, n_times: int, path: str | Path, device: str = "cpu") -> Path:
         """Export a trained torch module to ONNX with a dynamic batch axis. Returns the path."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         net = net.to(device).eval()
         dummy = torch.zeros(1, n_chans, n_times, device=device)
         torch.onnx.export(
-            net, dummy, str(path), input_names=["eeg"], output_names=["logits"],
+            net, (dummy,), str(path), input_names=["eeg"], output_names=["logits"],
             dynamic_axes={"eeg": {0: "batch"}, "logits": {0: "batch"}}, opset_version=17)
         return path
 
@@ -47,10 +48,11 @@ class OnnxExport:
     def run(path: str | Path, X: np.ndarray) -> np.ndarray:
         """ONNX logits for standardized input X [n, ch, t]."""
         sess = OnnxExport._session(path)
-        return sess.run(["logits"], {"eeg": X.astype(np.float32)})[0]
+        return np.asarray(sess.run(["logits"], {"eeg": X.astype(np.float32)})[0])
 
     @staticmethod
-    def parity(net, onnx_path: str | Path, X_std: Float[np.ndarray, "n ch t"], device: str = "cpu") -> float:
+    def parity(net: nn.Module, onnx_path: str | Path, X_std: Float[np.ndarray, "n ch t"],
+               device: str = "cpu") -> float:
         """Max abs difference between torch logits and ONNX logits on the same input. Gate before trusting."""
         net = net.to(device).eval()
         with torch.no_grad():

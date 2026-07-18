@@ -51,7 +51,7 @@ class Source:
     def _fsaverage_dir() -> tuple[str, str]:   # pragma: no cover — needs the fsaverage template data
         """(fsaverage path, subjects_dir), fetched/cached by MNE under the data root."""
         fs = mne.datasets.fetch_fsaverage(verbose=False)
-        return fs, os.path.dirname(fs)
+        return str(fs), os.path.dirname(str(fs))
 
     def _montage_info(self):
         """An average-referenced EEG `Info` with the channels placed on the standard 10-05 montage."""
@@ -87,7 +87,7 @@ class Source:
         _, subjects_dir = Source._fsaverage_dir()
         return [lbl for lbl in mne.read_labels_from_annot("fsaverage", self.cfg.parcellation,
                                                           subjects_dir=subjects_dir, verbose=False)
-                if "unknown" not in lbl.name]
+                if lbl.name is not None and "unknown" not in lbl.name]
 
     def source_positions(self) -> Float[np.ndarray, "s 3"]:
         """3D positions `[n_src, 3]` of the fixed-orientation source-space vertices, in the forward's source

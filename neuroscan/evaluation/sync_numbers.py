@@ -26,6 +26,8 @@ import json
 import logging
 import re
 import sys
+from pathlib import Path
+from typing import Any
 
 from core.config import REPO
 from neuroscan.tasks.cli import Cli
@@ -42,14 +44,14 @@ _TERM = re.compile(r"^([\w.]+?)\.([a-z_]+)$")     # <run>.<field>; field validat
 
 class SyncNumbers:
     @staticmethod
-    def _doc_files() -> list:
+    def _doc_files() -> list[Path]:
         """Root README first, then every sub-README.md outside vendored/generated trees."""
         subs = [p for p in sorted(REPO.rglob("README.md"))
                 if p != _README and not _SKIP_DIRS & set(p.relative_to(REPO).parts)]
         return [_README, *subs]
 
     @staticmethod
-    def _lookup(runs: dict, term: str) -> float:
+    def _lookup(runs: dict[str, Any], term: str) -> float:
         m = _TERM.match(term.strip())
         if not m:
             raise KeyError(f"bad term {term!r} (want <run_name>.acc|kappa|ece)")
@@ -62,7 +64,7 @@ class SyncNumbers:
         return float(v)
 
     @staticmethod
-    def _render(runs: dict, expr: str) -> str:
+    def _render(runs: dict[str, Any], expr: str) -> str:
         expr = expr.strip()
         if "-" in expr and not expr.startswith("-"):          # a.field-b.field -> signed within→cross gap
             a, b = expr.split("-", 1)
@@ -71,7 +73,7 @@ class SyncNumbers:
         return f"{SyncNumbers._lookup(runs, expr):.{_DP}f}"
 
     @staticmethod
-    def _markers(runs: dict, text: str) -> list[tuple[str, str, str, str]]:
+    def _markers(runs: dict[str, Any], text: str) -> list[tuple[str, str, str, str]]:
         """(full_match, expr, current_text, rendered) for every marker in document order."""
         return [(m[0], m[1], m[2], SyncNumbers._render(runs, m[1])) for m in _MARKER.finditer(text)]
 

@@ -26,6 +26,7 @@ import logging
 import math
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast, override
 
 import numpy as np
 import torch
@@ -37,6 +38,7 @@ from torch import Tensor
 
 from core.config import REPO
 from core.data import store
+from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from core.features import DescriptorBank
 from neuroscan.tasks.cli import Cli
@@ -57,6 +59,8 @@ class WeightedLinear(torch.nn.Module):
     weight-group of column j (per-family: 0..14; per-channel: j itself), so one learnable logit per group
     broadcasts to its columns."""
 
+    group_idx: torch.Tensor   # registered buffer (declared so indexing sees Tensor, not Module|Tensor)
+
     def __init__(self, group_idx: Int[Tensor, "f"], n_groups: int, d: int, n_classes: int):
         super().__init__()
         self.logits = torch.nn.Parameter(torch.zeros(n_groups))
@@ -70,6 +74,7 @@ class WeightedLinear(torch.nn.Module):
         w = self.weights()
         return -(w * (w + 1e-12).log()).sum()
 
+    @override
     def forward(self, x: Float[Tensor, "n f"]) -> Float[Tensor, "n c"]:
         return self.head(x * self.weights()[self.group_idx])
 
@@ -96,7 +101,8 @@ class Differentiable:
     public names kept)."""
 
     @classmethod
-    def _fit(cls, Xtr, ytr, spec: GroupSpec, lam, hp) -> WeightedLinear:
+    def _fit(cls, Xtr: Float[np.ndarray, "n d"], ytr: Int[np.ndarray, "n"], spec: GroupSpec,
+             lam: float, hp: dict[str, Any]) -> WeightedLinear:
         model = WeightedLinear(spec.group_idx, spec.n_groups, Xtr.shape[1], spec.n_classes).to(_DEV)
         opt = torch.optim.Adam(model.parameters(), lr=hp["lr"], weight_decay=hp["weight_decay"])
         Xt = torch.as_tensor(Xtr, dtype=torch.float32, device=_DEV)
@@ -113,19 +119,21 @@ class Differentiable:
 
     @classmethod
     @torch.no_grad()
-    def _predict(cls, model, X) -> Int[np.ndarray, "n"]:
+    def _predict(cls, model: WeightedLinear, X: Float[np.ndarray, "n d"]) -> Int[np.ndarray, "n"]:
         model.eval()
         return model(torch.as_tensor(X, dtype=torch.float32, device=_DEV)).argmax(1).cpu().numpy()
 
     @classmethod
-    def _standardise(cls, Xtr, Xte):
+    def _standardise(cls, Xtr: Float[np.ndarray, "n d"],
+                     Xte: Float[np.ndarray, "m d"]) -> tuple[Float[np.ndarray, "n d"], Float[np.ndarray, "m d"]]:
         """Fit per-feature standardisation on TRAIN, apply to both (no leakage) — the weights act on unit-scale
         features so raw-scale differences between metrics don't bias the weighting."""
         mu, sd = Xtr.mean(0), Xtr.std(0) + 1e-8
         return (Xtr - mu) / sd, (Xte - mu) / sd
 
     @classmethod
-    def _cv_acc(cls, data: _SearchData, spec: GroupSpec, lam, hp):
+    def _cv_acc(cls, data: _SearchData, spec: GroupSpec, lam: float,
+                hp: dict[str, Any]) -> float:
         """Mean CV accuracy at this lambda, over repeated seeded StratifiedGroupKFold (subject-grouped)."""
         accs = []
         for tr, te in Cv.grouped_folds(data.F, data.y, data.groups, hp["fold_seeds"], hp["k"]):
@@ -140,7 +148,7 @@ class Differentiable:
         return float(np.exp(-(p * np.log(p)).sum()))
 
     @classmethod
-    def _knee(cls, points):
+    def _knee(cls, points: list[dict[str, Any]]) -> dict[str, Any]:
         """Utopia-corner knee of the (acc, eff_n) sweep: closest to high-acc / low-eff_n."""
         acc = np.array([p["acc"] for p in points])
         en = np.array([p["eff_n"] for p in points])
@@ -149,7 +157,8 @@ class Differentiable:
         return points[int(np.hypot(1 - an, en_).argmin())]
 
     @classmethod
-    def _family_weights(cls, w, group_idx_np, families, grain):
+    def _family_weights(cls, w: Float[np.ndarray, "g"], group_idx_np: Int[np.ndarray, "d"],
+                        families: list[str], grain: str) -> dict[str, float]:
         """Report weights per family: identity for grain=family, else sum the column weights within each family."""
         if grain == "family":
             return {f: float(w[i]) for i, f in enumerate(families)}
@@ -169,7 +178,7 @@ class Differentiable:
         hp = {"lr": cfg.lr, "weight_decay": cfg.weight_decay, "epochs": cfg.epochs,
               "k": cfg.k, "fold_seeds": list(cfg.fold_seeds)}
 
-        meta = store.Store.load(cfg.dataset, FnirsCfg())
+        meta = store.Store.load(cfg.dataset, cast(EpochCfg, FnirsCfg()))
         X, y = store.Store.gather(meta)
         groups = meta["subject"].to_numpy()
         Fb, fam = DescriptorBank.extract_bank(X)

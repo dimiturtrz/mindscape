@@ -11,6 +11,7 @@ Non-circular (forward shape != estimator shape). Run it to re-check the operator
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import numpy as np
 from scipy.signal import fftconvolve
@@ -30,12 +31,14 @@ class ValidateCoupling:
     """Coupling-extraction ground-truth check helpers (bd uqw) — the free helpers folded in as staticmethods."""
 
     @staticmethod
-    def run(n_seeds: int = 5) -> dict:
+    def run(n_seeds: int = 5) -> dict[str, Any]:
         """Recover CBSI-vs-neural correlation + coupling lag/sign across seeds against the synthetic ground truth."""
         cfg = SynthConfig()
         hrf = Synthetic.double_gamma_hrf(_FS, cfg)
         com = float((np.arange(len(hrf)) * hrf).sum() / hrf.sum() / _FS)
-        corrs, lags, signs = [], [], []
+        corrs: list[float] = []
+        lags: list[float] = []
+        signs: list[bool] = []
         for seed in range(n_seeds):
             rng = np.random.default_rng(seed)
             drive = np.zeros((1, 2000))

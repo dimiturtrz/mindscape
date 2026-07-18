@@ -20,6 +20,7 @@ import argparse
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import torch
@@ -60,11 +61,11 @@ class Reconstruct:
     """EEG->image via unCLIP decode of a predicted CLIP embedding — op-namespace of staticmethods (bd 71n)."""
 
     @staticmethod
-    def _pipe(device: str):
+    def _pipe(device: str) -> Any:
         """StableUnCLIP image-variation pipeline, fp16 on cuda. Lazy import: diffusers is the `recon` extra."""
         from diffusers import StableUnCLIPImg2ImgPipeline  # noqa: PLC0415 — heavy optional dep, load on use
         dtype = torch.float16 if device == "cuda" else torch.float32
-        pipe = StableUnCLIPImg2ImgPipeline.from_pretrained(_UNCLIP, torch_dtype=dtype)
+        pipe: Any = StableUnCLIPImg2ImgPipeline.from_pretrained(_UNCLIP, torch_dtype=dtype)
         if device != "cuda":
             return pipe.to(device)
         pipe.enable_model_cpu_offload()   # keep only the active component on VRAM (offload the rest to CPU)
@@ -72,7 +73,7 @@ class Reconstruct:
         return pipe
 
     @staticmethod
-    def decode(pipe, embeds: Float[np.ndarray, "n d"], device: str,
+    def decode(pipe: Any, embeds: Float[np.ndarray, "n d"], device: str,
                steps: int = 20, noise_level: int = 0) -> list[Image.Image]:
         """Decode CLIP image embeddings [n, 768] -> PIL images via `image_embeds` injection (skips the encoder)."""
         dtype = torch.float16 if device == "cuda" else torch.float32
@@ -85,16 +86,16 @@ class Reconstruct:
         return images
 
     @staticmethod
-    def _load_encoder(ckpt_path: Path, device: str):
+    def _load_encoder(ckpt_path: Path, device: str) -> tuple[Any, dict[str, Any]]:
         """Rebuild the encoder from its saved spec and load the trained weights (train_nice save_encoder)."""
         ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
         spec = EncoderSpec(n_channels=ckpt["n_channels"], n_times=ckpt["n_times"], embed_dim=ckpt["embed_dim"])
-        encoder = EncoderRegistry.build_encoder(ckpt["model"], spec).to(device)
+        encoder: Any = cast(Any, EncoderRegistry.build_encoder(ckpt["model"], spec)).to(device)
         encoder.load_state_dict(ckpt["state_dict"])
         return encoder.eval(), ckpt
 
     @staticmethod
-    def _predict(encoder, eeg: Float[np.ndarray, "n ch t"], device: str) -> Float[np.ndarray, "n d"]:
+    def _predict(encoder: Any, eeg: Float[np.ndarray, "n ch t"], device: str) -> Float[np.ndarray, "n d"]:
         """EEG [n, ch, t] -> L2-normalized CLIP-space embeddings [n, d] (the encoder's forward, batched).
 
         `no_grad` is load-bearing: without it the forward retains the autograd graph across every batch of the
@@ -146,8 +147,10 @@ class Reconstruct:
 
         # Encoder prediction first, then FREE it before loading the ~6 GB unCLIP pipe — co-residence OOMs a 32 GB
         # card. Sequential GPU use: predict -> empty_cache -> decode.
-        pred = None
+        pred: np.ndarray | None = None
         if cfg.mode == "eeg":
+            if cfg.encoder_ckpt is None:
+                raise ValueError("encoder_ckpt required for eeg mode")
             encoder, ckpt = Reconstruct._load_encoder(Path(cfg.encoder_ckpt), device)
             target = ckpt.get("clip_target", _DEFAULT_TARGET)
             tcfg = TrainConfig(model=ckpt["model"], clip_target=target, resample=ckpt.get("resample", 200))
@@ -165,7 +168,8 @@ class Reconstruct:
         decoded_true = Reconstruct.decode(pipe, true_emb[concepts], device, cfg.steps, cfg.noise_level)
 
         if cfg.mode == "eeg":
-            decoded_eeg = Reconstruct.decode(pipe, pred[concepts], device, cfg.steps, cfg.noise_level)
+            decoded_eeg = Reconstruct.decode(pipe, cast(np.ndarray, pred)[concepts], device, cfg.steps,
+                                             cfg.noise_level)
             rows = [[stimuli[i], decoded_true[i], decoded_eeg[i]] for i in range(len(concepts))]
             labels = ("stimulus", "decode(true CLIP)", "decode(EEG)")
         else:

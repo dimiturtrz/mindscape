@@ -15,12 +15,14 @@ import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import open_clip
 import torch
 from jaxtyping import Float
 from PIL import Image
+from torch import nn
 
 from core.config import Config
 from neuroscan.tasks.cli import Cli
@@ -77,10 +79,10 @@ class ClipTargets:
         ]
 
     @staticmethod
-    def _load_clip(target: str, device: str):
+    def _load_clip(target: str, device: str) -> tuple[nn.Module, Callable[[Image.Image], torch.Tensor]]:
         arch, pretrained = _TARGETS[target]
         model, _, preprocess = open_clip.create_model_and_transforms(arch, pretrained=pretrained)
-        return model.eval().to(device), preprocess
+        return model.eval().to(device), preprocess  # type: ignore[return-value]
 
     @staticmethod
     def compute(split: str, target: str = _DEFAULT_TARGET, *,
@@ -104,7 +106,7 @@ class ClipTargets:
             chunk = items[start:start + batch]
             pixels = torch.stack([preprocess(Image.open(item.path).convert("RGB")) for item in chunk]).to(device)
             with torch.no_grad():
-                encoded = model.encode_image(pixels).float()
+                encoded = model.encode_image(pixels).float()  # type: ignore[attr-defined]
                 encoded = encoded / encoded.norm(dim=-1, keepdim=True)
             chunks.append(encoded.cpu().numpy())
             logger.info(f"[clip:{target}:{split}] {start + len(chunk)}/{len(items)}")

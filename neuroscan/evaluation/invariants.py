@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import math
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class Invariants:
     and (from `train`) `chance_top1`. Keys may be ints (live) or strings (post-JSON) — both are accepted."""
 
     @staticmethod
-    def check(res: dict, *, strict: bool = False) -> list[str]:
+    def check(res: dict[str, Any], *, strict: bool = False) -> list[str]:
         """-> list of violation messages (empty = clean). Logs each loudly; raises AssertionError if `strict`."""
         violations = (Invariants._bounded(res) + Invariants._brackets(res)
                       + Invariants._ci_matches_mean(res) + Invariants._above_chance(res))
@@ -40,28 +41,28 @@ class Invariants:
         return all(math.isfinite(x) for x in xs)               # NaN/inf -> skip the undefined check
 
     @staticmethod
-    def _acc(res: dict) -> dict[int, float]:
+    def _acc(res: dict[str, Any]) -> dict[int, float]:
         return {int(k): float(v) for k, v in res.get("single_trial", {}).items()}
 
     @staticmethod
-    def _ci(res: dict) -> dict[int, tuple[float, float, float]]:
-        return {int(k): tuple(float(x) for x in v) for k, v in res.get("single_trial_ci", {}).items()}
+    def _ci(res: dict[str, Any]) -> dict[int, tuple[float, float, float]]:
+        return {int(k): (float(v[0]), float(v[1]), float(v[2])) for k, v in res.get("single_trial_ci", {}).items()}
 
     @staticmethod
-    def _bounded(res: dict) -> list[str]:
+    def _bounded(res: dict[str, Any]) -> list[str]:
         """Every reported accuracy must be a finite probability in [0, 1]."""
         return [f"single-trial top{k} = {a} not a finite [0,1] probability"
                 for k, a in Invariants._acc(res).items() if not (Invariants._finite(a) and 0.0 <= a <= 1.0)]
 
     @staticmethod
-    def _brackets(res: dict) -> list[str]:
+    def _brackets(res: dict[str, Any]) -> list[str]:
         """Every bootstrap bracket must contain its own point estimate."""
         return [f"top{k} bracket [{lo:.4f}, {hi:.4f}] excludes point {p:.4f}"
                 for k, (p, lo, hi) in Invariants._ci(res).items()
                 if Invariants._finite(p, lo, hi) and not lo <= p <= hi]
 
     @staticmethod
-    def _ci_matches_mean(res: dict) -> list[str]:
+    def _ci_matches_mean(res: dict[str, Any]) -> list[str]:
         """The CI point and the reported mean are the SAME statistic — they must agree (catches a hits-vector
         vs headline mismatch: the bootstrap resampling something other than what the table reports)."""
         acc = Invariants._acc(res)
@@ -70,7 +71,7 @@ class Invariants:
                 if k in acc and Invariants._finite(p, acc[k]) and abs(p - acc[k]) > _TOL]
 
     @staticmethod
-    def _above_chance(res: dict) -> list[str]:
+    def _above_chance(res: dict[str, Any]) -> list[str]:
         """A finished run scoring BELOW chance on top-1 is almost always a broken run (label misalignment,
         wrong candidate bank) — not a real result. Advisory, but loud: chance is the sanity floor."""
         acc, chance = Invariants._acc(res), res.get("chance_top1")

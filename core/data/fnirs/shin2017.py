@@ -12,6 +12,8 @@ Channels are HbO then HbR (72 total): [<36 oxy>, <36 deoxy>].
 """
 from __future__ import annotations
 
+from typing import Any, cast
+
 import numpy as np
 import polars as pl
 import scipy.io as sio
@@ -20,7 +22,7 @@ from scipy.signal import resample as _resample
 from core.config import Config
 from core.data.fnirs.base import CANONICAL_NBACK, FnirsCfg, FnirsEpochs
 from core.data.fnirs.clean import Clean
-from core.data.signal import Signal
+from core.data.signal import EpochBatch, Signal
 
 
 class Shin2017NirsAdapter:
@@ -66,7 +68,7 @@ class Shin2017NirsAdapter:
         """Epoch requested subjects -> (X [n,72,t] float32, y [n] canonical int, meta polars frame).
         meta: subject, session (chronological thirds ≈ the 3 recording series), run."""
         subs = subjects or self.subjects()
-        Xs, ys, subj, sess, run = [], [], [], [], []
+        batch = EpochBatch()
         for sub in subs:
             cont, fs, onsets, y = self._load_continuous(sub)
             cont = Signal.bandpass(cont, cfg.l_freq, cfg.h_freq, fs)
@@ -74,19 +76,14 @@ class Shin2017NirsAdapter:
             onsets, y = onsets[order], y[order]
             X, ye = FnirsEpochs.epoch_blocks(cont, onsets, y, fs, cfg)
             if cfg.clean is not None:                                                  # physiological-noise stage
-                X = Clean.make_cleaner(cfg.clean).transform(X).astype(np.float32)      # stateless -> leakage-free
+                # stateless -> leakage-free
+                X = cast(Any, Clean.make_cleaner(cfg.clean)).transform(X).astype(np.float32)
             if cfg.resample and cfg.resample != fs:
-                X = _resample(X, round(X.shape[2] * cfg.resample / fs), axis=2).astype(np.float32)
+                X = cast(np.ndarray, _resample(X, round(X.shape[2] * cfg.resample / fs), axis=2)).astype(np.float32)
             n = len(ye)
-            Xs.append(X)
-            ys.append(ye)
-            subj += [str(sub)] * n
-            sess += [str(i // 9) for i in range(n)]                                   # 27 blocks -> 3 sessions of 9
-            run += ["0"] * n
-        X = np.concatenate(Xs).astype(np.float32)
-        y = np.concatenate(ys).astype(np.int64)
-        meta = pl.DataFrame({"subject": subj, "session": sess, "run": run})
-        return X, y, meta
+            batch.add(X, ye, [str(sub)] * n,
+                      [str(i // 9) for i in range(n)], ["0"] * n)                      # 27 blocks -> 3 sessions
+        return batch.stack()
 
     @staticmethod
     def adapter(task: str = "nback") -> "Shin2017NirsAdapter":

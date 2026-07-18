@@ -14,6 +14,7 @@ import logging
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from jaxtyping import Float
 from matplotlib.animation import FuncAnimation
 
 from core.features import fusion as bc
@@ -32,7 +33,7 @@ def _maps(subject: int, block: int, band: str):
     return eeg, neural, inp.pos_e, inp.pos_f, int(inp.y[block])
 
 
-def _grid_nodes(pos, grid=16):
+def _grid_nodes(pos: Float[np.ndarray, "n 2"], grid: int = 16) -> tuple[np.ndarray, np.ndarray]:
     """Map unit-disk positions [-1,1] to grid pixel coords for overlay."""
     ok = np.isfinite(pos).all(1)
     xy = (pos[ok] + 1) / 2 * (grid - 1)
@@ -79,7 +80,7 @@ def main():
         a.scatter(nx, ny, s=8, c="cyan", edgecolors="k", linewidths=0.3)   # node overlay
     ax_fused.scatter(fxe, fye, s=8, c="lime", edgecolors="k", linewidths=0.3)
 
-    def update(t):
+    def update(t: int):
         im_e.set_data(eeg[:, :, t]); im_f.set_data(hbo[:, :, t])
         im_fa.set_data(eeg[:, :, t]); im_fb.set_data(hbo[:, :, t])
         return im_e, im_f, im_fa, im_fb

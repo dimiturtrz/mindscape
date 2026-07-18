@@ -17,6 +17,7 @@ derivable at the POPULATION level; use the pooled value as the argued constant, 
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
 import numpy as np
 
@@ -37,10 +38,12 @@ class CouplingProbe:
     """EEG->blood coupling-lag probe helpers — the free helpers folded in as staticmethods."""
 
     @classmethod
-    def _global_series(cls, subject_frames):
+    def _global_series(cls, subject_frames: list[tuple[Any, tuple[np.ndarray, np.ndarray]]]):
         """Whole-head-mean EEG-β envelope + zero-lag fNIRS CBSI per block, on the shared grid -> `[n, T]` each."""
         t_dst = np.arange(0, _TEND, 1.0 / _FPS)
-        drives, resps, groups = [], [], []
+        drives: list[np.ndarray] = []
+        resps: list[np.ndarray] = []
+        groups: list[list[Any]] = []
         for s, (Xe, Xf) in subject_frames:
             ch_f = Xf.shape[1] // 2
             te = np.arange(Xe.shape[2]) / _FS_E
@@ -57,7 +60,7 @@ class CouplingProbe:
     def main(cls):
         Cli.setup_logging()
         me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
-        mf = store.Store.load("shin2017_nback", FnirsCfg())
+        mf = store.Store.load("shin2017_nback", cast(EpochCfg, FnirsCfg()))
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
         frames = [(s, store.Store.gather_aligned(me, mf, s)[:2]) for s in subs]
         drives, resps, _ = cls._global_series(frames)

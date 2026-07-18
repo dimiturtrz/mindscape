@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from typing import Any, cast
 
 import mne
 from moabb.datasets import download as _dl
@@ -40,8 +41,8 @@ class Experiment(BaseModel):
     method: str | None = None
     regime: str | None = None
     test_session: str | None = None
-    recipe: dict = {}
-    params: dict = {}
+    recipe: dict[str, Any] = {}
+    params: dict[str, Any] = {}
 
 
 class Config:
@@ -70,7 +71,7 @@ class Config:
         node = doc.experiments[name]
         if overrides:
             node = OmegaConf.merge(node, OmegaConf.from_dotlist(overrides))
-        return Experiment(**OmegaConf.to_container(node, resolve=True))
+        return Experiment(**cast(dict[str, Any], OmegaConf.to_container(node, resolve=True)))
 
     @classmethod
     def to_native_path(cls, path_str: str) -> str:
@@ -161,12 +162,12 @@ class Config:
             return
         _bad = ':*?"<>|'
 
-        def _safe(path):
+        def _safe(path: Path | str) -> Path:
             s = str(path)
             if len(s) >= _DRIVE_PREFIX_LEN and s[1] == ":" and s[0].isalpha():     # 'D:...' -> keep 'D:', clean rest
                 drive, rest = s[:2], s[2:]
                 return Path(drive + rest.translate({ord(c): "-" for c in _bad}))
             return Path(s.translate({ord(c): "-" for c in _bad}))
 
-        _safe._mindscape_patched = True  # noqa: SLF001
+        cast(Any, _safe)._mindscape_patched = True  # noqa: SLF001
         _dl._sanitize_path = _safe  # noqa: SLF001

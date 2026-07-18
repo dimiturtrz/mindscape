@@ -32,7 +32,9 @@ class WorkloadConfusion:
         Cli.setup_logging()
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
         subs = sorted(me["subject"].unique().to_list())
-        Cs, ys, gs = [], [], []
+        Cs: list[np.ndarray] = []
+        ys: list[np.ndarray] = []
+        gs: list[np.ndarray] = []
         for s in subs:
             X, y = store.Store.gather(me.filter(me["subject"] == s))
             Cs.append(Riemann.cov(X))

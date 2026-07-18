@@ -11,7 +11,7 @@ Every adapter remaps its source event names to this via `label_map`. An epoch te
 """
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 import numpy as np
 import polars as pl
@@ -36,7 +36,7 @@ class EpochCfg(BaseModel):
 
     def key(self) -> str:
         """Cache key encoding the recipe -> processed/<dataset>/<key>/."""
-        def f(x):
+        def f(x: float) -> str:
             return str(x).replace(".", "p").replace("-", "m")
         tmax = "full" if self.tmax is None else f(self.tmax)
         return f"b{f(self.fmin)}-{f(self.fmax)}_t{f(self.tmin)}-{tmax}_r{f(self.resample)}"
@@ -53,7 +53,7 @@ class DatasetAdapter(Protocol):
     label_map: dict[str, int]   # source event name -> canonical id
 
     def subjects(self) -> list[int]: ...
-    def get_data(self, subjects: list[int] | None, cfg: EpochCfg
+    def get_data(self, subjects: list[int] | None, cfg: Any
                  ) -> tuple[np.ndarray, np.ndarray, pl.DataFrame]: ...
 
 
@@ -65,7 +65,7 @@ class MoabbMIAdapter:
     one file + one registry line.
     """
 
-    def __init__(self, name: str, dataset_cls, n_classes: int = 4,
+    def __init__(self, name: str, dataset_cls: type, n_classes: int = 4,
                  label_map: dict[str, int] | None = None):
         self.name = name
         self._dataset_cls = dataset_cls
@@ -92,4 +92,4 @@ class MoabbMIAdapter:
         X, labels, meta = paradigm.get_data(dataset=ds, subjects=subjects or self.subjects())
         y = np.array([self.label_map[str(label)] for label in labels], dtype=np.int64)
         m = pl.from_pandas(meta[["subject", "session", "run"]].astype(str))
-        return X.astype(np.float32), y, m
+        return cast(np.ndarray, X).astype(np.float32), y, m

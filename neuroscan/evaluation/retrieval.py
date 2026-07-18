@@ -8,6 +8,7 @@ gap. Both pure (numpy/sklearn on the [N, C] score matrix), testable without a tr
 from __future__ import annotations
 
 import itertools
+from typing import Any
 
 import numpy as np
 from jaxtyping import Float, Int
@@ -17,7 +18,7 @@ from sklearn.metrics import average_precision_score
 class Retrieval:
     @staticmethod
     def retrieval_metrics(scores: Float[np.ndarray, "n k"], labels: Int[np.ndarray, "n"],
-                          ks: tuple[int, ...] = (1, 5)) -> dict:
+                          ks: tuple[int, ...] = (1, 5)) -> dict[str, float]:
         """Full retrieval quality from the [N, C] candidate-score matrix + true label per trial — richer than
         top-k, which discards WHERE the true concept ranked (rank 2 vs rank C look identical at top-1).
 
@@ -46,7 +47,7 @@ class Retrieval:
 
     @staticmethod
     def retrieval_calibration(scores: Float[np.ndarray, "n k"], labels: Int[np.ndarray, "n"], *, scale: float = 1.0,
-                              n_bins: int = 10) -> dict:
+                              n_bins: int = 10) -> dict[str, Any]:
         """Confidence calibration of a retrieval head. `scores` [N, C] = per-trial similarity to each of C
         candidates (e.g. cosine); `labels` [N] = the true candidate index. Confidence = softmax(scale * scores)
         at the predicted candidate. Returns top-1 accuracy, ECE (equal-width confidence bins), the reliability

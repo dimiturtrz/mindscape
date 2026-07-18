@@ -38,7 +38,10 @@ class SourceDecode:
         meta = store.Store.load("shin2017_nback_eeg", _CFG)
         ch = eegmod.Shin2017NbackEegAdapter.adapter().channels()
         subs = sorted(meta["subject"].unique().to_list())
-        c_sensor, c_source, ys, gs = [], [], [], []
+        c_sensor: list[np.ndarray] = []
+        c_source: list[np.ndarray] = []
+        ys: list[np.ndarray] = []
+        gs: list[np.ndarray] = []
         for s in subs:
             x, y = store.Store.gather(meta.filter(meta["subject"] == s))
             c_sensor.append(Riemann.cov(x))

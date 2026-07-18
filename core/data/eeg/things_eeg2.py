@@ -29,6 +29,8 @@ import re
 import urllib.request
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
@@ -83,7 +85,7 @@ class ThingsEeg2:
         return out
 
     @staticmethod
-    def _stream(url: str, dest, chunk: int = 1 << 20) -> None:
+    def _stream(url: str, dest: Path, chunk: int = 1 << 20) -> None:
         """Stream a URL to `dest` (atomic via .part), following OSF's redirect to files.osf.io."""
         tmp = dest.with_suffix(dest.suffix + ".part")
         with urllib.request.urlopen(url, timeout=120) as r, tmp.open("wb") as fh:
@@ -135,9 +137,9 @@ class ThingsEeg2:
         logger.info(f"[things_eeg2] all done -> {base}")
 
     @staticmethod
-    def _index() -> dict[int, object]:
+    def _index() -> dict[int, Path]:
         """{subject int -> its dir}, discovered on disk under `<data>/raw/things_eeg2/raw/` (naming-robust)."""
-        out: dict[int, object] = {}
+        out: dict[int, Path] = {}
         for d in sorted((Config.raw_dir() / _ROOT / "raw").glob("sub-*")):
             m = re.search(r"sub-0*(\d+)", d.name)
             if m and d.is_dir():
@@ -159,7 +161,7 @@ class ThingsEeg2:
                 if str(kind) == "eeg"]
 
     @staticmethod
-    def meta() -> dict:
+    def meta() -> dict[str, Any]:
         global _META
         if _META is None:
             _META = np.load(Config.raw_dir() / _ROOT / "images" / "image_metadata.npy",
@@ -182,7 +184,7 @@ class ThingsEeg2:
         return concept_idx, files
 
     @staticmethod
-    def _session_epochs(path, cfg: ThingsEpochCfg):
+    def _session_epochs(path: Path | str, cfg: ThingsEpochCfg):
         """One session .npy -> (X [n,63,t] float32, concept[n], img_file[n]). Stim code -> image via metadata."""
         session = np.load(path, allow_pickle=True).item()
         raw = np.asarray(session["raw_eeg_data"])
@@ -204,7 +206,8 @@ class ThingsEeg2:
 
         epochs = np.stack([eeg[:, at + start:at + stop] for at in onset]).astype(np.float32)   # [n,63,t] raw volts
         if cfg.resample and cfg.resample != fs:
-            epochs = _resample(epochs, round(epochs.shape[2] * cfg.resample / fs), axis=2).astype(np.float32)
+            epochs = cast(np.ndarray, _resample(epochs, round(epochs.shape[2] * cfg.resample / fs),
+                                                axis=2)).astype(np.float32)
         return epochs, concept_by_code[codes - 1], file_by_code[codes - 1]
 
     @staticmethod
@@ -228,7 +231,7 @@ class ThingsEeg2:
         work = [(subject, path) for subject in chosen
                 for path in sorted(index[subject].glob(f"ses-*/raw_eeg_{cfg.split}.npy"))]
 
-        def _epoch(item):
+        def _epoch(item: tuple[int, Path]) -> tuple[int, Path, tuple[np.ndarray, np.ndarray, np.ndarray]]:
             subject, path = item
             return subject, path, ThingsEeg2._session_epochs(path, cfg)
 
@@ -238,7 +241,11 @@ class ThingsEeg2:
         else:
             results = [_epoch(item) for item in work]
 
-        eeg_parts, concept_parts, file_parts, subject_col, session_col = [], [], [], [], []
+        eeg_parts: list[np.ndarray] = []
+        concept_parts: list[np.ndarray] = []
+        file_parts: list[np.ndarray] = []
+        subject_col: list[str] = []
+        session_col: list[str] = []
         for subject, path, (eeg, concept, files) in results:
             eeg_parts.append(eeg)
             concept_parts.append(concept)

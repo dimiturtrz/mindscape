@@ -9,6 +9,7 @@ measured rather than asserted.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import torch
 
@@ -22,7 +23,8 @@ N_CHANS, N_TIMES, N_CLASSES = 22, 1125, 4
 
 class Profile:
     @classmethod
-    def profile(cls, model_cls: type[torch.nn.Module], n_chans=N_CHANS, n_times=N_TIMES, n_classes=N_CLASSES) -> dict:
+    def profile(cls, model_cls: type[torch.nn.Module], n_chans: int = N_CHANS, n_times: int = N_TIMES,
+                n_classes: int = N_CLASSES) -> dict[str, Any]:
         net = model_cls(n_chans=n_chans, n_outputs=n_classes, n_times=n_times).eval()
         params = sum(p.numel() for p in net.parameters() if p.requires_grad)
         dummy = torch.zeros(1, n_chans, n_times)
@@ -37,7 +39,7 @@ class Profile:
         return {"model": model_cls.__name__, "params": int(params), "flops": flops}
 
     @classmethod
-    def _fmt(cls, n):
+    def _fmt(cls, n: int | None) -> str:
         if n is None:
             return "—"
         for unit, div in (("G", 1e9), ("M", 1e6), ("K", 1e3)):

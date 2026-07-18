@@ -736,6 +736,26 @@
       "weight": 1
     },
     {
+      "source": "neuroscan.tasks.visual.reconstruct",
+      "target": "neuroscan.models.encoders",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.reconstruct",
+      "target": "neuroscan.tasks.cli",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.reconstruct",
+      "target": "neuroscan.tasks.visual.clip_targets",
+      "weight": 1
+    },
+    {
+      "source": "neuroscan.tasks.visual.reconstruct",
+      "target": "neuroscan.tasks.visual.train_nice",
+      "weight": 1
+    },
+    {
       "source": "neuroscan.tasks.visual.retrieval_audit",
       "target": "core.data.eeg.things_eeg2",
       "weight": 1
@@ -1680,7 +1700,7 @@
       "parent": "core"
     },
     {
-      "descendants": 65,
+      "descendants": 67,
       "id": "neuroscan",
       "label": "neuroscan",
       "parent": null
@@ -1818,7 +1838,7 @@
       "parent": "neuroscan.models"
     },
     {
-      "descendants": 41,
+      "descendants": 42,
       "id": "neuroscan.tasks",
       "label": "tasks",
       "parent": "neuroscan"
@@ -1866,7 +1886,7 @@
       "parent": "neuroscan.tasks"
     },
     {
-      "descendants": 9,
+      "descendants": 10,
       "id": "neuroscan.tasks.visual",
       "label": "visual",
       "parent": "neuroscan.tasks"
@@ -1899,6 +1919,12 @@
       "descendants": 0,
       "id": "neuroscan.tasks.visual.paired_delta",
       "label": "paired_delta",
+      "parent": "neuroscan.tasks.visual"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.tasks.visual.reconstruct",
+      "label": "reconstruct",
       "parent": "neuroscan.tasks.visual"
     },
     {
@@ -2073,6 +2099,12 @@
       "descendants": 0,
       "id": "neuroscan.tracking",
       "label": "tracking",
+      "parent": "neuroscan"
+    },
+    {
+      "descendants": 0,
+      "id": "neuroscan.training",
+      "label": "training",
       "parent": "neuroscan"
     }
   ]

@@ -15,6 +15,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -53,7 +54,7 @@ class CrossDatasetEval:
     on EEG2's test split; `_shared_prototypes` builds the name->CLIP bridge over both datasets."""
 
     @staticmethod
-    def _shared_prototypes() -> tuple[dict, list[str]]:
+    def _shared_prototypes() -> tuple[dict[str, Any], list[str]]:
         """{concept name -> shared CLIP prototype} over all 1,854 THINGS concepts (EEG2 train + test prototypes),
         and the 200 test-concept names in bank order (the retrieval candidate set)."""
         names_train = [path.name[6:] for path in clip_targets.ClipTargets.concept_dirs("training")]
@@ -66,13 +67,13 @@ class CrossDatasetEval:
 
     @staticmethod
     @torch.no_grad()
-    def _embed(encoder, eeg: Float[np.ndarray, "n ch t"], device: str) -> Float[np.ndarray, "n d"]:
+    def _embed(encoder: torch.nn.Module, eeg: Float[np.ndarray, "n ch t"], device: str) -> Float[np.ndarray, "n d"]:
         encoder.eval()
         return torch.cat([encoder(torch.tensor(eeg[i:i + _EVAL_BATCH]).to(device)).cpu()
                           for i in range(0, len(eeg), _EVAL_BATCH)]).numpy()
 
     @staticmethod
-    def run(cfg: CrossDatasetConfig) -> dict:
+    def run(cfg: CrossDatasetConfig) -> dict[str, Any]:
         """Train on EEG1 (zero-shot holdout of EEG2's test concepts), retrieve on EEG2's test split."""
         torch.manual_seed(cfg.seed)
         np.random.seed(cfg.seed)

@@ -14,6 +14,8 @@ pixels touch the net — only precomputed CLIP embeddings (see tasks/visual/clip
 """
 from __future__ import annotations
 
+from typing import Any, override
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -58,6 +60,7 @@ class NiceEncoder(nn.Module):
             nn.Linear(config.embed_dim, config.embed_dim),
         )
 
+    @override
     def forward(self, x: Float[torch.Tensor, "n ch t"]) -> Float[torch.Tensor, "n d"]:
         x = x.unsqueeze(1)                                 # [B,1,C,T]
         x = self.temporal(x)
@@ -169,12 +172,14 @@ class _GradReverse(torch.autograd.Function):
     subject while pushing the ENCODER to make that impossible (subject-invariant embedding)."""
 
     @staticmethod
-    def forward(ctx, x: Float[torch.Tensor, "n d"], lambd: float) -> Float[torch.Tensor, "n d"]:
+    @override
+    def forward(ctx: Any, x: Float[torch.Tensor, "n d"], lambd: float) -> Float[torch.Tensor, "n d"]:  # type: ignore[override]
         ctx.lambd = lambd
         return x.view_as(x)
 
     @staticmethod
-    def backward(ctx, grad: Float[torch.Tensor, "n d"]):
+    @override
+    def backward(ctx: Any, grad: Float[torch.Tensor, "n d"]):  # type: ignore[override]
         return -ctx.lambd * grad, None
 
 
@@ -187,5 +192,6 @@ class SubjectDiscriminator(nn.Module):
         super().__init__()
         self.net = nn.Sequential(nn.Linear(embed_dim, hidden), nn.ReLU(), nn.Linear(hidden, n_subjects))
 
+    @override
     def forward(self, z: Float[torch.Tensor, "n d"], lambd: float) -> Float[torch.Tensor, "n subj"]:
         return self.net(_GradReverse.apply(z, lambd))

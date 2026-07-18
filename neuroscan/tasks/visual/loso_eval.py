@@ -18,6 +18,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -35,14 +36,14 @@ class LosoEval:
     `_fold` runs one held-out-subject training run; `_summary` reduces folds to mean ± SE."""
 
     @classmethod
-    def _fold(cls, model: str, seed: int, test_subject: int, pool: list[int], base: dict) -> dict:
+    def _fold(cls, model: str, seed: int, test_subject: int, pool: list[int], base: dict[str, Any]) -> dict[str, Any]:
         """One LOSO fold: train on `pool \\ {test_subject}`, retrieve on the held-out subject."""
         train_subjects = [s for s in pool if s != test_subject]
-        cfg = TrainConfig(**{**base, "model": model, "seed": seed})
+        cfg = TrainConfig.model_validate({**base, "model": model, "seed": seed})
         return TrainNice.train(train_subjects, test_subject, cfg)
 
     @classmethod
-    def _summary(cls, folds: list[dict]) -> dict:
+    def _summary(cls, folds: list[dict[str, Any]]) -> dict[str, tuple[float, float]]:
         """Mean ± SE over folds for each reported metric (SE = std / √n_folds — the decision quantity)."""
         out = {}
         n = len(folds)
@@ -73,7 +74,7 @@ class LosoEval:
 
         logger.info(f"LOSO · pool {args.subjects} · models {args.models} · seeds {args.seeds} "
                     f"· {len(args.subjects) * len(args.seeds)} folds/model")
-        results = {}
+        results: dict[str, dict[str, Any]] = {}
         for model in args.models:
             folds = [cls._fold(model, seed, test, args.subjects, base)
                      for seed in args.seeds for test in args.subjects]

@@ -1,6 +1,8 @@
 """Constant-factor amplitude scaling — hand a pretrained backbone the input scale it was trained on."""
 from __future__ import annotations
 
+from typing import override
+
 import numpy as np
 from jaxtyping import Float, Int
 
@@ -16,6 +18,7 @@ class Scale(Normalizer):
     def __init__(self, factor: float):
         self.factor = factor
 
+    @override
     def apply(self, X: Float[np.ndarray, "n ch t"],
               groups: Int[np.ndarray, "n"] | None = None) -> Float[np.ndarray, "n ch t"]:
         return (X * self.factor).astype(np.float32)

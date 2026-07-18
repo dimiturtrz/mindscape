@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from core.config import REPO
 from neuroscan.tasks.cli import Cli
@@ -56,7 +57,7 @@ class Results:
         return stem, "", dataset
 
     @staticmethod
-    def read_metrics(agg: dict) -> dict | None:
+    def read_metrics(agg: dict[str, Any]) -> dict[str, Any] | None:
         """Pull (acc, kappa, ece) from either aggregate schema. None if neither present.
 
         The one place that knows both run-aggregate shapes; reused by tracking.backfill so the schema
@@ -69,7 +70,7 @@ class Results:
         return None
 
     @staticmethod
-    def _row(name: str, agg: dict) -> dict | None:
+    def _row(name: str, agg: dict[str, Any]) -> dict[str, Any] | None:
         """Normalize one aggregate.json -> a snapshot row, or None if it has no usable metrics."""
         m = Results.read_metrics(agg)
         if m is None:
@@ -90,9 +91,9 @@ class Results:
         }
 
     @staticmethod
-    def collect(runs_dir: Path = _RUNS) -> dict:
+    def collect(runs_dir: Path = _RUNS) -> dict[str, dict[str, Any]]:
         """Scan runs/*/aggregate.json -> {run_name: {method,regime,dataset,n_classes,acc,kappa,ece}}."""
-        out: dict[str, dict] = {}
+        out: dict[str, dict[str, Any]] = {}
         for agg_path in sorted(runs_dir.glob("*/aggregate.json")):
             row = Results._row(agg_path.parent.name, json.loads(agg_path.read_text()))
             if row is not None:
@@ -100,7 +101,7 @@ class Results:
         return out
 
     @staticmethod
-    def _dump(runs: dict, out_path: Path) -> Path:
+    def _dump(runs: dict[str, dict[str, Any]], out_path: Path) -> Path:
         out_path.write_text(json.dumps({"_note": _NOTE, "runs": dict(sorted(runs.items()))}, indent=2) + "\n")
         return out_path
 
@@ -125,7 +126,7 @@ class Results:
             if row is None:
                 return None
             payload = json.loads(out_path.read_text()) if out_path.exists() else {"runs": {}}
-            runs = payload.get("runs", {})
+            runs: dict[str, dict[str, Any]] = payload.get("runs", {})
             runs[run_dir.name] = row
             Results._dump(runs, out_path)
             return run_dir.name

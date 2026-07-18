@@ -28,6 +28,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -180,6 +181,8 @@ class FrozenHead:
             logger.info(f"cache hit {path.name}: {tuple(blob['feat'].shape)}")
             return blob["feat"], blob["concept"], blob["files"]
         loaded = extract.loaded
+        if loaded is None:
+            raise RuntimeError("backbone must be loaded when cache is missing")
         eeg, concept, files, _ = cls._load(subjects, split, loaded.sample_rate)
         feat = cls._features(loaded.module, eeg, extract.device, loaded.name, extract.normalize)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -210,7 +213,7 @@ class FrozenHead:
 
     @classmethod
     @torch.no_grad()
-    def _retrieval(cls, head, eval_set: _EvalSet, device: str) -> dict:
+    def _retrieval(cls, head: nn.Module, eval_set: _EvalSet, device: str) -> dict[str, Any]:
         head.eval()
         feat, concept, bank = eval_set.feat, eval_set.concept, eval_set.bank
         emb = torch.cat([F.normalize(head(feat[i:i + 4096].float().to(device)), dim=-1).cpu()
@@ -223,7 +226,7 @@ class FrozenHead:
                 "continuous": Nice.retrieval_continuous(emb, bank, labels)}   # angular-error extras (bd 2y7k)
 
     @classmethod
-    def _train_arm(cls, spec: HeadSpec, cache: Cache, device: str, cfg: FitCfg) -> dict:
+    def _train_arm(cls, spec: HeadSpec, cache: Cache, device: str, cfg: FitCfg) -> dict[str, Any]:
         torch.manual_seed(cfg.seed)
         fit_mask, val_mask, val_lab, val_bank = cls._val_concepts(
             cache.tr_concept, cache.tr_tgt.numpy(), cfg.seed, 0.1)
@@ -262,7 +265,8 @@ class FrozenHead:
             if ep % 15 == 0 or ep == cfg.epochs - 1:
                 logger.info(f"    {spec.name} ep {ep:2d}/{cfg.epochs}  loss {total_loss / max(1, n_batches):.3f}  "
                             f"val-top1 {val_top1*100:.2f}%  {elapsed:.0f}s  ~{eta:.0f}s left")
-        head.load_state_dict(best_state)
+        if best_state is not None:
+            head.load_state_dict(best_state)
         test = cls._retrieval(head, _EvalSet(cache.test_feat, cache.test_concept, cache.test_bank), device)
         return {"arm": spec.name, "best_val_epoch": best_ep, "val_top1": best_val, **test}
 

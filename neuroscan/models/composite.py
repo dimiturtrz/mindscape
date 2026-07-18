@@ -23,6 +23,7 @@ backbone swap opens — a later refinement, not baked in here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any, override
 
 import numpy as np
 import torch
@@ -43,6 +44,7 @@ class Backbone(nn.Module):
 
     d_model: int
 
+    @override
     def forward(self, x: Float[Tensor, "n ch t"]) -> Float[Tensor, "n ch s d"]:  # [B, C, T] -> [B, C, S, d]
         raise NotImplementedError
 
@@ -50,6 +52,7 @@ class Backbone(nn.Module):
 class Head(nn.Module):
     """[B, C, S, d] token grid -> [B, embed_dim] embedding (pre-normalization; `Model` L2-normalizes)."""
 
+    @override
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         raise NotImplementedError
 
@@ -70,16 +73,18 @@ class Model(nn.Module):
             for p in self.backbone.parameters():
                 p.requires_grad = False
 
-    def train(self, mode: bool = True):  # noqa: FBT001, FBT002
+    @override
+    def train(self, mode: bool = True):
         super().train(mode)
         if self.freeze_backbone:
             self.backbone.eval()
         return self
 
+    @override
     def forward(self, x: Float[Tensor, "n ch t"]) -> Float[Tensor, "n d_embed"]:
         return F.normalize(self.head(self.backbone(x)), dim=-1)
 
-    def param_groups(self, base_lr: float, backbone_lr_scale: float = 1.0) -> list[dict]:
+    def param_groups(self, base_lr: float, backbone_lr_scale: float = 1.0) -> list[dict[str, Any]]:
         """Optimizer groups: the trainable backbone params (if any) at `base_lr × backbone_lr_scale`, then the
         head at `base_lr`. One path covers all three regimes by reading `requires_grad`: frozen -> no backbone
         group (head only); full fine-tune -> the whole backbone; LoRA -> only the injected A/B adapters (the
@@ -143,6 +148,13 @@ class Heads:
         return tokens.mean(dim=2)
 
     @staticmethod
+    def require_pos(context: HeadContext) -> Float[np.ndarray, "ch 2"]:
+        """Geometry heads need electrode positions — one home for the shared invariant."""
+        if context.pos is None:
+            raise ValueError("this head requires electrode positions")
+        return context.pos
+
+    @staticmethod
     def topo_weights(pos: Float[np.ndarray, "ch 2"], grid: int, sigma: float) -> Float[Tensor, "hw ch"]:
         """Fixed RBF interpolation operator `[H·W, C]` mapping C electrode features onto a `grid×grid` scalp
         image (Bashivan 2016), RBF width `sigma`. Computed once from the montage; applied per batch as one einsum."""
@@ -184,11 +196,14 @@ class TokenHead(Head):
             in_dim = context.d                                   # mean/attn collapse the tokens to d
         self.mlp = Heads.mlp(in_dim, spec.hidden, spec.dropout, context.embed_dim)
 
+    @override
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         f = tokens.flatten(1, 2)                          # [B, C·S, d]
         if self.pool == "mean":
             z = f.mean(dim=1)
         elif self.pool == "attn":
+            if self.attn is None:
+                raise RuntimeError("attn pool head requires an attn module")
             z = (self.attn(f).softmax(dim=1) * f).sum(dim=1)
         else:                                            # flat: unordered bag of all tokens
             z = f.flatten(1)
@@ -206,6 +221,7 @@ class PosAttnHead(Head):
                                               dropout=spec.dropout, batch_first=True, activation="gelu")
         self.mlp = Heads.mlp(context.d, spec.hidden, spec.dropout, context.embed_dim)
 
+    @override
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         f = Heads.spatial(tokens)                         # [B, C, d]
         return self.mlp(self.enc(f + self.pos_proj(self.pos)).mean(dim=1))
@@ -216,13 +232,15 @@ class TopoHead(Head):
 
     def __init__(self, spec: HeadSpec, context: HeadContext):
         super().__init__()
+        pos = Heads.require_pos(context)
         self.grid = spec.grid
-        self.register_buffer("wtopo", Heads.topo_weights(context.pos, spec.grid, spec.rbf_sigma))   # [H·W, C]
+        self.register_buffer("wtopo", Heads.topo_weights(pos, spec.grid, spec.rbf_sigma))   # [H·W, C]
         self.conv = nn.Sequential(
             nn.Conv2d(context.d, 64, 3, padding=1), nn.GELU(),
             nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.GELU(), nn.AdaptiveAvgPool2d(1))
         self.mlp = Heads.mlp(64, spec.hidden, spec.dropout, context.embed_dim)
 
+    @override
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         f = Heads.spatial(tokens)                         # [B, C, d]
         b, _, d = f.shape
@@ -236,11 +254,13 @@ class GcnHead(Head):
 
     def __init__(self, spec: HeadSpec, context: HeadContext):
         super().__init__()
-        self.register_buffer("adj", Heads.adjacency(context.pos))                            # [C, C] normalized Â
+        pos = Heads.require_pos(context)
+        self.register_buffer("adj", Heads.adjacency(pos))                            # [C, C] normalized Â
         self.gcn1 = nn.Linear(context.d, context.d)
         self.gcn2 = nn.Linear(context.d, context.d)
         self.mlp = Heads.mlp(context.d, spec.hidden, spec.dropout, context.embed_dim)
 
+    @override
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         f = Heads.spatial(tokens)                         # [B, C, d]
         h = F.gelu(self.gcn1(torch.einsum("ck,bkd->bcd", self.adj, f)))              # Â X W₁
@@ -262,6 +282,7 @@ class TemporalConvHead(Head):
             nn.Conv1d(64, 64, 3, padding=1), nn.GELU(), nn.AdaptiveAvgPool1d(1))
         self.mlp = Heads.mlp(64, spec.hidden, spec.dropout, context.embed_dim)
 
+    @override
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
         x = tokens.flatten(1, 2)                          # [B, N·embed_num, d] — keep the summary tokens as
         z = self.conv(x.transpose(1, 2)).flatten(1)       # ordered positions; conv over the token sequence -> [B, 64]

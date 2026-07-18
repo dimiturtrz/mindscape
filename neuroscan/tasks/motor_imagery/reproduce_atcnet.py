@@ -13,6 +13,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
@@ -50,14 +51,16 @@ def main():
     logger.info(f"X {X.shape} · sessions {sorted(meta['session'].unique().to_list())}")
 
     fit, _ = decoders.BraindecodeClf.make(args.method)
-    rows, models = [], []
+    rows: list[dict[str, str | float | int]] = []
+    models: list[tuple[str, Any]] = []
     for s in sorted(meta["subject"].unique().to_list()):
         idx = (meta["subject"] == s).to_numpy()
         Xs, ys = X[idx], y[idx]
         sess = meta.filter(pl.col("subject") == s)["session"].to_numpy()
         a, b = sorted(set(sess.tolist()))                 # train session, test session
         tr, te = sess == a, sess == b
-        accs, kaps = [], []
+        accs: list[float] = []
+        kaps: list[float] = []
         for seed in range(args.seeds):
             clf = fit(Xs[tr], ys[tr], standardize=args.standardize, crop_frac=None, batch=args.batch,
                       epochs=args.epochs, patience=args.patience, log_every=0, seed=seed)
@@ -71,8 +74,8 @@ def main():
         spread = f"  (per-seed {min(accs):.3f}-{max(accs):.3f})" if args.seeds > 1 else ""
         logger.info(f"  s{r['subject']}  acc {r['acc']:.3f}  kappa {r['kappa']:.3f}{spread}")
 
-    acc = float(np.mean([r["acc"] for r in rows]))
-    kap = float(np.mean([r["kappa"] for r in rows]))
+    acc = float(np.mean(cast(list[float], [r["acc"] for r in rows])))
+    kap = float(np.mean(cast(list[float], [r["kappa"] for r in rows])))
     logger.info(f"\n=== {args.method} reproduction (braindecode EMS, {args.epochs}ep) ===")
     logger.info(f"  MEAN acc {acc:.3f}  kappa {kap:.3f}   (published ~0.81 / 0.76)")
 
@@ -87,7 +90,7 @@ def main():
                               "batch": args.batch, "epochs": args.epochs, "seeds": args.seeds},
                       tags={"kind": "reproduction"}, run_dir=out):
         tracking.Tracking.metrics({"acc_mean": acc, "kappa_mean": kap})
-        tracking.Tracking.per_group("acc_subject", {r["subject"]: r["acc"] for r in rows})
+        tracking.Tracking.per_group("acc_subject", {str(r["subject"]): r["acc"] for r in rows})
         tracking.Tracking.artifact(out / f"{args.method}.json")
         for subj, clf in models:                          # persist the trained net per subject
             tracking.Tracking.save_model(clf, f"model_{args.method}_s{subj}", run_dir=out)

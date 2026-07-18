@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
 import scipy.io as sio
+from jaxtyping import Float, Int
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
 from baselines.fnirs import features as ff
@@ -45,13 +47,14 @@ def _subject_epochs(subject: int):
     return X, y, names, pos, 10.0
 
 
-def _frames(X, y, chan_slice, n_frames=N_FRAMES):
+def _frames(X: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"], chan_slice: slice,
+            n_frames: int = N_FRAMES) -> tuple[dict[str, list[Any]], list[float]]:
     """Per-class time-resolved HbO (or HbR) topomap: mean over trials, downsampled to n_frames.
     Returns ({class: [frame][ch]}, frame_times) — the hemodynamic response building over the trial."""
     T = X.shape[2]
     edges = np.linspace(0, T, n_frames + 1).astype(int)
     widths = np.diff(edges)                                  # samples per frame-bin (uneven)
-    frames = {}
+    frames: dict[str, list[Any]] = {}
     for c in sorted(np.unique(y).tolist()):
         m = X[y == c][:, chan_slice, :].mean(0)             # [36, t] mean HbO/HbR
         frames[CLASS_NAMES[c]] = (np.add.reduceat(m, edges[:-1], axis=1) / widths).T.tolist()
@@ -59,28 +62,29 @@ def _frames(X, y, chan_slice, n_frames=N_FRAMES):
     return frames, ftimes
 
 
-def _lda_patterns(X, y):
+def _lda_patterns(X: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"]) -> dict[str, list[float]]:
     """Per-class LDA weight on the HbO MEAN feature (what the decoder reads), one value per channel."""
     lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto").fit(Amplitude.amplitude_features(X), y)
     coef = np.atleast_2d(lda.coef_)                         # [n_class, 216] (mean|slope|peak × 72)
     classes = sorted(np.unique(y).tolist())
     if coef.shape[0] == 1 and len(classes) == _BINARY:
         coef = np.vstack([-coef[0], coef[0]])
-    out = {}
+    out: dict[str, list[float]] = {}
     for c, row in zip(classes, coef, strict=True):
         w = np.asarray(row)[:36]                            # HbO mean-feature block
         out[CLASS_NAMES[c]] = (w / (np.abs(w).max() + 1e-9)).tolist()
     return out
 
 
-def _waveforms(X, y, names, n_t=300):
+def _waveforms(X: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"], names: list[str],
+               n_t: int = 300) -> dict[str, Any]:
     """One example trial per class — BOTH chromophores per optode (the raw data): {chan:{hbo,hbr}}.
     HbO = channels 0..35, HbR = 36..71 at the same optodes; showing both reveals the anti-correlation."""
     T = X.shape[2]
     step = max(1, T // n_t)
     ti = np.arange(0, T, step)
     t = (ti / 10.0 - 2.0).tolist()
-    out = {}
+    out: dict[str, Any] = {}
     for c in sorted(np.unique(y).tolist()):
         ei = int((y == c).argmax())
         out[CLASS_NAMES[c]] = {names[i]: {"hbo": X[ei, i, ti].tolist(), "hbr": X[ei, i + 36, ti].tolist()}
@@ -88,11 +92,12 @@ def _waveforms(X, y, names, n_t=300):
     return {"t": t, "trials": out, "chans": names}
 
 
-def _predictions(subject: int, X, y):
+def _predictions(subject: int, X: Float[np.ndarray, "n ch t"],
+                 y: Int[np.ndarray, "n"]) -> tuple[dict[str, Any], dict[str, Any]]:
     """Honest per-trial output: train the fNIRS decoder on the OTHER subjects (LOSO), predict THIS
     subject's trials. Returns ({class: {truth, pred, probs, correct}} for the shown example trial) and the
     subject's cross-subject fold accuracy — so the viewer shows ground truth vs prediction, not just signal."""
-    meta = store.Store.load("shin2017_nback", FnirsCfg(tmax=20.0))
+    meta = store.Store.load("shin2017_nback", cast(store.EpochCfg, FnirsCfg(tmax=20.0)))
     Xtr, ytr = store.Store.gather(meta.filter(pl.col("subject") != str(subject)))
     clf = ff.fit(Xtr, ytr)
     probs = ff.score(clf, X)

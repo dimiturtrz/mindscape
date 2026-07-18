@@ -18,6 +18,8 @@ the fsaverage template data) is the thin I/O shell.
 """
 from __future__ import annotations
 
+from typing import Sequence
+
 import mne
 import numpy as np
 from jaxtyping import Float, Int
@@ -137,7 +139,7 @@ class JointForward:
         return hbo.astype(np.float32), hbr.astype(np.float32)
 
     @classmethod
-    def _parcel_lead_field(cls, fwd, labels, src_pos: Float[np.ndarray, "s 3"]
+    def _parcel_lead_field(cls, fwd: object, labels: Sequence[mne.Label], src_pos: Float[np.ndarray, "s 3"]
                            ) -> tuple[Float[np.ndarray, "ch p"], Float[np.ndarray, "p 3"]]:
         """Reduce the fixed-orientation per-vertex lead field to per-parcel by averaging each label's source
         columns; parcel position = its vertices' mean. Returns `(lead[ch, P], parcel_xyz[P, 3])`."""
@@ -145,7 +147,8 @@ class JointForward:
         gain = fixed["sol"]["data"]                                    # [n_ch, n_src]
         vertno = [s["vertno"] for s in fixed["src"]]
         offsets = np.cumsum([0, *[len(v) for v in vertno]])
-        lead_cols, parcel_pos = [], []
+        lead_cols: list[np.ndarray] = []
+        parcel_pos: list[np.ndarray] = []
         for lbl in labels:
             hemi = 0 if lbl.hemi == "lh" else 1
             idx = np.searchsorted(vertno[hemi], np.intersect1d(lbl.vertices, vertno[hemi]))
@@ -158,7 +161,7 @@ class JointForward:
 
     @classmethod
     def generate(cls, montage: tuple[list[str], float], fnirs_xyz: Float[np.ndarray, "c 3"], grid: Grid,
-                 cfg: JointConfig | None = None, seed: int = 0) -> dict:  # pragma: no cover — fsaverage template
+                 cfg: JointConfig | None = None, seed: int = 0) -> dict[str, np.ndarray]:  # pragma: no cover
         """Compose the pure forwards onto the real fsaverage template lead field (bd 728). `montage` = the EEG
         `(ch_names, sfreq)`; `grid` = the trial/time shape (its `n_parcels` is overridden by the actual DK count).
         Returns `{eeg[n,ch,t], hbo, hbr [n,C,t], source[n,P,t], active}` — paired observations + shared ground
