@@ -12,7 +12,6 @@ ONNX-exportable (the Stage-2 edge path rides on it). RTX 5090 + bf16 autocast: m
 """
 from __future__ import annotations
 
-import copy
 import logging
 from dataclasses import dataclass
 
@@ -24,6 +23,7 @@ from pydantic import BaseModel
 # standardizers + crops live in transforms.py (independently testable); re-exported under the legacy
 # private names so callers (e.g. tasks/motor_imagery/quantize.py) keep working.
 from neuroscan.models.transforms import Transforms
+from neuroscan.training import EarlyStopper, TorchPerf  # shared TF32 + early-stop scaffold (bd 1eca)
 
 # method -> (braindecode class, training + crop hparams). crop_frac=0.5 + 16 train crops is the standard
 # 2a recipe; strong nets get more epochs (cheap on the 5090, capped by early stopping).
@@ -131,18 +131,8 @@ class BraindecodeClf:
         Xva, yva = BraindecodeClf._take(Xs, y, vi, cl, self.n_test_crops)     # vi is None when no val -> (None, None)
         return Xtr, ytr, Xva, yva
 
-    @staticmethod
-    def _enable_fast_matmul(device: str) -> None:
-        """TF32 for the residual fp32 matmuls (bd 62ak: ~-22% step, the win is in backward) — parity-safe since the
-        loop already runs bf16 autocast, so TF32's 10-bit mantissa is more precise than the bf16 already in use."""
-        if device != "cuda":
-            return
-        torch.set_float32_matmul_precision("high")
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
-
     def fit(self, X, y):
-        BraindecodeClf._enable_fast_matmul(self.device)
+        TorchPerf.enable_fast_matmul(self.device)
         Xs = self.std.fit(X)(X)
         Xtr, ytr, Xva, yva = self._make_train_val(Xs, y)
         xt = torch.tensor(Xtr, device=self.device)
@@ -157,7 +147,7 @@ class BraindecodeClf:
         lossf = torch.nn.CrossEntropyLoss()
         amp = self.device == "cuda"
         n = len(xt)
-        best_loss, best_state, bad = float("inf"), None, 0
+        stopper = EarlyStopper(self.patience, mode="min", min_delta=1e-4)   # minimize val loss (bd 1eca)
         for ep in range(self.epochs):
             self.net.train()
             perm = torch.randperm(n, device=self.device)
@@ -174,21 +164,17 @@ class BraindecodeClf:
                 self.net.eval()
                 with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16, enabled=amp):
                     vl = float(lossf(self.net(xv), yv))
-                if vl < best_loss - 1e-4:
-                    best_loss, bad, best_state = vl, 0, copy.deepcopy(self.net.state_dict())
-                else:
-                    bad += 1
+                stop = stopper.update(vl, self.net, ep)
                 if self.log_every and (ep + 1) % self.log_every == 0:
                     logger.info(f"    ep {ep + 1}/{self.epochs}  lr {sched.get_last_lr()[0]:.2e}  "
-                                f"val {vl:.3f}  (best {best_loss:.3f}, bad {bad})")
-                if bad >= self.patience:
-                    logger.info(f"    early stop @ ep {ep + 1} (val {best_loss:.3f})")
+                                f"val {vl:.3f}  (best {stopper.best_metric:.3f}, bad {stopper.bad})")
+                if stop:
+                    logger.info(f"    early stop @ ep {ep + 1} (val {stopper.best_metric:.3f})")
                     break
             elif self.log_every and (ep + 1) % self.log_every == 0:
                 logger.info(f"    ep {ep + 1}/{self.epochs}  lr {sched.get_last_lr()[0]:.2e}")
 
-        if best_state is not None:
-            self.net.load_state_dict(best_state)
+        stopper.restore(self.net)
         return self
 
     def _trial_outputs(self, X, *, softmax: bool):
