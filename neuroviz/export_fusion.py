@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import cast
 
 import numpy as np
 import polars as pl
@@ -43,7 +42,7 @@ def _gather(meta: pl.DataFrame, subs: np.ndarray):
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     me = store.Store.load(_EEG, _EEG_CFG)
-    mf = store.Store.load(_FNIRS, cast(EpochCfg, FnirsCfg()))
+    mf = store.Store.load(_FNIRS, FnirsCfg())
     subs = np.array(sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list())))
     classes = sorted(me["label"].unique().to_list())
     id2lab = dict(enumerate(sorted(me["label"].unique().to_list())))     # label_id -> name (matches gather order)

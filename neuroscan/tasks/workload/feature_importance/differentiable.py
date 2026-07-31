@@ -38,7 +38,6 @@ from sklearn.model_selection import GroupShuffleSplit
 
 from core.config import REPO
 from core.data import store
-from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from core.features import DescriptorBank
 from neuroscan.tasks.cli import Cli
@@ -183,7 +182,7 @@ class Differentiable:
             "fold_seeds": list(cfg.fold_seeds),
         }
 
-        meta = store.Store.load(cfg.dataset, cast(EpochCfg, FnirsCfg()))
+        meta = store.Store.load(cfg.dataset, FnirsCfg())
         X, y = store.Store.gather(meta)
         groups = meta["subject"].to_numpy()
         Fb, fam = DescriptorBank.extract_bank(X)

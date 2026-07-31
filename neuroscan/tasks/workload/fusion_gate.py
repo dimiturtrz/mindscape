@@ -55,7 +55,7 @@ class FusionGate:
         """Return per-block EEG band-power + fNIRS mean/slope/peak features, the label, and the subject id —
         block-aligned across the two modalities (hard guard on the label sequence)."""
         me = store.Store.load(_EEG, _EEG_CFG)
-        mf = store.Store.load(_FNIRS, cast(EpochCfg, _FNIRS_CFG))
+        mf = store.Store.load(_FNIRS, _FNIRS_CFG)
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
         qe = me.filter(me["subject"].is_in(subs))
         qf = mf.filter(mf["subject"].is_in(subs))

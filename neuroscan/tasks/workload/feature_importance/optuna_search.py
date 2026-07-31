@@ -32,7 +32,6 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
 from core.config import REPO
 from core.data import store
-from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from core.features import DescriptorBank, WeightedFamilyScaler
 from neuroscan.tasks.cli import Cli
@@ -147,7 +146,7 @@ class OptunaSearch:
         if args.trials:
             cfg.n_trials = args.trials
 
-        meta = store.Store.load(cfg.dataset, cast(EpochCfg, FnirsCfg()))
+        meta = store.Store.load(cfg.dataset, FnirsCfg())
         X, y = store.Store.gather(meta)
         groups = meta["subject"].to_numpy()
         F, fam = DescriptorBank.extract_bank(X)

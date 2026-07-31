@@ -10,7 +10,6 @@ captured something flat fusion destroyed; ~0.58 = another measured null (but now
 from __future__ import annotations
 
 import logging
-from typing import cast
 
 import numpy as np
 from sklearn.model_selection import StratifiedGroupKFold
@@ -40,7 +39,7 @@ class FusionCameraEval:
     def _build_all(cls):
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
         # past _TEND so read-forward (τ+lag) fills the tail
-        mf = store.Store.load("shin2017_nback", cast(EpochCfg, FnirsCfg(tmax=32.0)))
+        mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=32.0))
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
         pos_e = bc.EegMontage.eeg_positions(eegmod.Shin2017NbackEegAdapter.adapter().channels())
         Xs: list[np.ndarray] = []

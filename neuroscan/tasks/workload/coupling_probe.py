@@ -17,7 +17,6 @@ derivable at the POPULATION level; use the pooled value as the argued constant, 
 from __future__ import annotations
 
 import logging
-from typing import cast
 
 import numpy as np
 
@@ -60,7 +59,7 @@ class CouplingProbe:
     def main(cls):
         Cli.setup_logging()
         me = store.Store.load("shin2017_nback_eeg", EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=_FS_E))
-        mf = store.Store.load("shin2017_nback", cast(EpochCfg, FnirsCfg()))
+        mf = store.Store.load("shin2017_nback", FnirsCfg())
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
         frames = [(s, store.Store.gather_aligned(me, mf, s)[:2]) for s in subs]
         drives, resps, _ = cls._global_series(frames)
