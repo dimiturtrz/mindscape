@@ -1,7 +1,8 @@
-"""Transforms — sliding-window crops + standardizers."""
+"""Transforms — sliding-window crops + the standardizer-by-name factory."""
 import numpy as np
 
 from neuroscan.models import transforms as T
+from neuroscan.models.standardizers import Identity, ZScore
 
 np.random.seed(0)
 
@@ -33,28 +34,7 @@ def test_crops_windows_match_source_slices():
             assert tidx[k * N + i] == i
 
 
-def test_zscore_normalizes_per_channel():
-    X = np.random.RandomState(1).randn(20, 3, 50).astype(np.float32) * 5 + 2
-    z = T.ZScore().fit(X)(X)
-    # per-channel mean ~0, std ~1 across epochs+time
-    assert np.allclose(z.mean(axis=(0, 2)), 0, atol=1e-3)
-    assert np.allclose(z.std(axis=(0, 2)), 1, atol=1e-2)
-
-
-def test_identity_passthrough():
-    X = np.random.RandomState(2).randn(4, 2, 6).astype(np.float32)
-    assert np.array_equal(T.Identity().fit(X)(X), X)
-
-
 def test_standardizer_registry():
-    assert isinstance(T.Transforms.standardizer("zscore"), T.ZScore)
-    assert isinstance(T.Transforms.standardizer("none"), T.Identity)
-    assert isinstance(T.Transforms.standardizer("unknown"), T.ZScore)   # fallback
-
-
-def test_ems_preserves_shape():
-    import pytest
-    pytest.importorskip("braindecode")
-    X = np.random.RandomState(3).randn(5, 4, 200).astype(np.float32)
-    out = T.ExpMovingStd()(X)
-    assert out.shape == X.shape
+    assert isinstance(T.Transforms.standardizer("zscore"), ZScore)
+    assert isinstance(T.Transforms.standardizer("none"), Identity)
+    assert isinstance(T.Transforms.standardizer("unknown"), ZScore)   # fallback

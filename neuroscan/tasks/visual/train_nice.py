@@ -46,7 +46,8 @@ from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tasks.visual.sampling import BatchSpec, Sampling
 from neuroscan.tracking import Tracking
-from neuroscan.training import EarlyStopper, TorchPerf  # shared TF32 + early-stop scaffold (bd 1eca)
+from neuroscan.perf import TorchPerf
+from neuroscan.training import EarlyStopper
 
 logger = logging.getLogger(__name__)
 

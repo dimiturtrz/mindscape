@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 import polars as pl
@@ -48,13 +48,13 @@ def _subject_epochs(subject: int):
 
 
 def _frames(X: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"], chan_slice: slice,
-            n_frames: int = N_FRAMES) -> tuple[dict[str, list[Any]], list[float]]:
+            n_frames: int = N_FRAMES) -> tuple[dict[str, list[list[float]]], list[float]]:
     """Per-class time-resolved HbO (or HbR) topomap: mean over trials, downsampled to n_frames.
     Returns ({class: [frame][ch]}, frame_times) — the hemodynamic response building over the trial."""
     T = X.shape[2]
     edges = np.linspace(0, T, n_frames + 1).astype(int)
     widths = np.diff(edges)                                  # samples per frame-bin (uneven)
-    frames: dict[str, list[Any]] = {}
+    frames: dict[str, list[list[float]]] = {}
     for c in sorted(np.unique(y).tolist()):
         m = X[y == c][:, chan_slice, :].mean(0)             # [36, t] mean HbO/HbR
         frames[CLASS_NAMES[c]] = (np.add.reduceat(m, edges[:-1], axis=1) / widths).T.tolist()
@@ -77,14 +77,14 @@ def _lda_patterns(X: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"]) -> di
 
 
 def _waveforms(X: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"], names: list[str],
-               n_t: int = 300) -> dict[str, Any]:
+               n_t: int = 300) -> dict[str, object]:
     """One example trial per class — BOTH chromophores per optode (the raw data): {chan:{hbo,hbr}}.
     HbO = channels 0..35, HbR = 36..71 at the same optodes; showing both reveals the anti-correlation."""
     T = X.shape[2]
     step = max(1, T // n_t)
     ti = np.arange(0, T, step)
     t = (ti / 10.0 - 2.0).tolist()
-    out: dict[str, Any] = {}
+    out: dict[str, object] = {}
     for c in sorted(np.unique(y).tolist()):
         ei = int((y == c).argmax())
         out[CLASS_NAMES[c]] = {names[i]: {"hbo": X[ei, i, ti].tolist(), "hbr": X[ei, i + 36, ti].tolist()}
@@ -93,7 +93,7 @@ def _waveforms(X: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"], names: l
 
 
 def _predictions(subject: int, X: Float[np.ndarray, "n ch t"],
-                 y: Int[np.ndarray, "n"]) -> tuple[dict[str, Any], dict[str, Any]]:
+                 y: Int[np.ndarray, "n"]) -> tuple[dict[str, dict[str, str | list[float] | bool]], dict[str, float | str]]:
     """Honest per-trial output: train the fNIRS decoder on the OTHER subjects (LOSO), predict THIS
     subject's trials. Returns ({class: {truth, pred, probs, correct}} for the shown example trial) and the
     subject's cross-subject fold accuracy — so the viewer shows ground truth vs prediction, not just signal."""

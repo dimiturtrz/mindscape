@@ -30,7 +30,7 @@ import urllib.request
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 import polars as pl
@@ -161,7 +161,7 @@ class ThingsEeg2:
                 if str(kind) == "eeg"]
 
     @staticmethod
-    def meta() -> dict[str, Any]:
+    def meta() -> dict[str, object]:
         global _META
         if _META is None:
             _META = np.load(Config.raw_dir() / _ROOT / "images" / "image_metadata.npy",

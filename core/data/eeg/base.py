@@ -11,7 +11,7 @@ Every adapter remaps its source event names to this via `label_map`. An epoch te
 """
 from __future__ import annotations
 
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 import numpy as np
 import polars as pl
@@ -53,7 +53,7 @@ class DatasetAdapter(Protocol):
     label_map: dict[str, int]   # source event name -> canonical id
 
     def subjects(self) -> list[int]: ...
-    def get_data(self, subjects: list[int] | None, cfg: Any
+    def get_data(self, subjects: list[int] | None, cfg: EpochCfg
                  ) -> tuple[np.ndarray, np.ndarray, pl.DataFrame]: ...
 
 

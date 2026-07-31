@@ -23,7 +23,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import cast, TypedDict
 
 import numpy as np
 import optuna
@@ -41,6 +41,11 @@ logger = logging.getLogger(__name__)
 
 _CFG = Path(__file__).with_name("optuna.yaml")            # study config lives beside the code (config-as-data)
 _STABLE_JACCARD = 0.6   # top-family sets agree across seeds at/above this Jaccard -> trust the ranking
+
+
+class OptunaConfig:
+    """Placeholder type for Optuna study configuration (from OmegaConf)."""
+    pass
 
 
 @dataclass
@@ -82,7 +87,7 @@ class OptunaSearch:
         return optuna.storages.JournalStorage(backend)
 
     @classmethod
-    def _run_one_study(cls, bank: Bank, families: list[str], cfg: Any, tpe_seed: int,
+    def _run_one_study(cls, bank: Bank, families: list[str], cfg: OptunaConfig, tpe_seed: int,
                        storage: optuna.storages.BaseStorage):
         """One Optuna study (one TPE seed): returns (importances, top_weight_means, best_value, best_params)."""
         def objective(trial: optuna.Trial) -> float:
@@ -132,7 +137,7 @@ class OptunaSearch:
         if args.trials:
             cfg.n_trials = args.trials
 
-        meta = store.Store.load(cfg.dataset, cast(Any, FnirsCfg()))
+        meta = store.Store.load(cfg.dataset, cast(object, FnirsCfg()))
         X, y = store.Store.gather(meta)
         groups = meta["subject"].to_numpy()
         F, fam = DescriptorBank.extract_bank(X)
@@ -151,7 +156,7 @@ class OptunaSearch:
         per_seed_imp: list[dict[str, float]] = []
         per_seed_topw: list[dict[str, float]] = []
         peaks: list[float] = []
-        bests: list[dict[str, Any]] = []
+        bests: list[dict[str, object]] = []
         for s in cfg.tpe_seeds:
             imp, topw, best, bparams = cls._run_one_study(bank, families, cfg, int(s), storage)
             per_seed_imp.append(imp)

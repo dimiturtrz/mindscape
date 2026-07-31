@@ -15,7 +15,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
 
 import numpy as np
 import torch
@@ -33,6 +33,19 @@ from neuroscan.tasks.visual.train_nice import RetrievalSet, TrainConfig, TrainDa
 logger = logging.getLogger(__name__)
 
 _EVAL_BATCH = 512
+
+
+class CrossDatasetResult(TypedDict, total=False):
+    """Cross-dataset retrieval evaluation result."""
+    direction: str
+    eeg1_subjects: list[int]
+    eeg2_subjects: list[int]
+    n_candidates: int
+    chance_top1: float
+    single_trial: dict[int, float]
+    concept_avg: dict[int, float]
+    retrieval_metrics: dict[str, float]
+    calibration: dict[str, float]
 _LOGIT_SCALE = float(np.log(1 / 0.07))   # the CLIP temperature the encoder trains with — reuse for calibration
 
 
@@ -54,7 +67,7 @@ class CrossDatasetEval:
     on EEG2's test split; `_shared_prototypes` builds the name->CLIP bridge over both datasets."""
 
     @staticmethod
-    def _shared_prototypes() -> tuple[dict[str, Any], list[str]]:
+    def _shared_prototypes() -> tuple[dict[str, np.ndarray], list[str]]:
         """{concept name -> shared CLIP prototype} over all 1,854 THINGS concepts (EEG2 train + test prototypes),
         and the 200 test-concept names in bank order (the retrieval candidate set)."""
         names_train = [path.name[6:] for path in clip_targets.ClipTargets.concept_dirs("training")]
@@ -73,7 +86,7 @@ class CrossDatasetEval:
                           for i in range(0, len(eeg), _EVAL_BATCH)]).numpy()
 
     @staticmethod
-    def run(cfg: CrossDatasetConfig) -> dict[str, Any]:
+    def run(cfg: CrossDatasetConfig) -> dict[str, object]:
         """Train on EEG1 (zero-shot holdout of EEG2's test concepts), retrieve on EEG2's test split."""
         torch.manual_seed(cfg.seed)
         np.random.seed(cfg.seed)

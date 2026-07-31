@@ -8,7 +8,6 @@ gap. Both pure (numpy/sklearn on the [N, C] score matrix), testable without a tr
 from __future__ import annotations
 
 import itertools
-from typing import Any
 
 import numpy as np
 from jaxtyping import Float, Int
@@ -47,7 +46,7 @@ class Retrieval:
 
     @staticmethod
     def retrieval_calibration(scores: Float[np.ndarray, "n k"], labels: Int[np.ndarray, "n"], *, scale: float = 1.0,
-                              n_bins: int = 10) -> dict[str, Any]:
+                              n_bins: int = 10) -> dict[str, object]:
         """Confidence calibration of a retrieval head. `scores` [N, C] = per-trial similarity to each of C
         candidates (e.g. cosine); `labels` [N] = the true candidate index. Confidence = softmax(scale * scores)
         at the predicted candidate. Returns top-1 accuracy, ECE (equal-width confidence bins), the reliability

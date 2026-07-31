@@ -13,7 +13,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 import polars as pl
@@ -52,7 +52,7 @@ def main():
 
     fit, _ = decoders.BraindecodeClf.make(args.method)
     rows: list[dict[str, str | float | int]] = []
-    models: list[tuple[str, Any]] = []
+    models: list[tuple[str, object]] = []
     for s in sorted(meta["subject"].unique().to_list()):
         idx = (meta["subject"] == s).to_numpy()
         Xs, ys = X[idx], y[idx]

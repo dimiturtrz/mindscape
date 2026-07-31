@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 
@@ -36,8 +35,8 @@ class ViewData:
         return ap.parse_args()
 
     @staticmethod
-    def prediction_report(id2name: dict[int, str], d: Decode) -> tuple[dict[str, dict[str, Any]],
-                                                                        dict[str, Any]]:
+    def prediction_report(id2name: dict[int, str], d: Decode) -> tuple[dict[str, dict[str, str | list[float] | bool]],
+                                                                        dict[str, float | str]]:
         """Per-class `{truth, pred, probs, correct}` for one shown example trial + the honest
         cross-subject `{acc, chance, regime, decoder}` score. `id2name` maps class id -> display name."""
         per = {}

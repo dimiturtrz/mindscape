@@ -6,7 +6,7 @@ the CV plumbing.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Callable
 
 import numpy as np
 from pydantic import BaseModel
@@ -41,7 +41,7 @@ class CvConfig(BaseModel):
 
 class Eval:
     @staticmethod
-    def cv_score(build: Callable[[], Any] | None, data: CvData, config: CvConfig) -> tuple[float, float, float]:
+    def cv_score(build: Callable[[], object] | None, data: CvData, config: CvConfig) -> tuple[float, float, float]:
         """Mean (acc, sd, kappa) over repeated seeded k-fold. `build` is a `() -> decoder` thunk (None ->
         `FnirsLda`)."""
         X, y, groups = np.asarray(data.X), np.asarray(data.y), np.asarray(data.groups)

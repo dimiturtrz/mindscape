@@ -24,7 +24,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 import polars as pl
@@ -49,17 +49,17 @@ logger = logging.getLogger(__name__)
 class _RunnerModels:
     """The four modality callables the fold loop needs: the EEG probability + tangent-feature functions
     (both re-centered, so both take subject groups) and the fNIRS fit/score."""
-    eeg_probs: Callable[..., Any]
-    eeg_feats: Callable[..., Any]
-    fnirs_fit: Callable[..., Any]
-    fnirs_score: Callable[..., Any]
+    eeg_probs: Callable[..., np.ndarray]
+    eeg_feats: Callable[..., np.ndarray]
+    fnirs_fit: Callable[..., object]
+    fnirs_score: Callable[..., np.ndarray]
 
 
 @dataclass
 class _Analysis:
     """The two fusion diagnostics reported together: complementarity/oracle-headroom + the aggregation sweep."""
-    complementarity: dict[str, Any]
-    aggregation: dict[str, Any]
+    complementarity: dict[str, object]
+    aggregation: dict[str, object]
 
 _EEG, _FNIRS = "shin2017_nback_eeg", "shin2017_nback"
 # the recipes each modality decodes best at (from the unimodal runs)
@@ -95,7 +95,7 @@ class RunFusion:
 
     @classmethod
     def _run_folds(cls, fold_subs: list[list[str]], meta_e: pl.DataFrame, meta_f: pl.DataFrame,
-                   subs: list[int], models: _RunnerModels) -> tuple[list[dict[str, Any]], PooledProbs]:
+                   subs: list[int], models: _RunnerModels) -> tuple[list[dict[str, object]], PooledProbs]:
         """Run every fold: unimodal + fused predictions per fold. Returns (rows, PooledProbs) — the pooled probs
         hold the concatenated correct-masks and probability stacks used for the oracle + aggregation-sweep."""
         field_names = ("eeg", "fnirs", "stacking", "cal_eeg", "cal_fnirs", "y", "eeg_correct", "fnirs_correct")
@@ -136,7 +136,7 @@ class RunFusion:
         return rows, PooledProbs(**{name: np.concatenate(values) for name, values in pooled.items()})
 
     @classmethod
-    def _report(cls, regime: str | None, n_classes: int, rows: list[dict[str, Any]], mean: dict[str, float],
+    def _report(cls, regime: str | None, n_classes: int, rows: list[dict[str, object]], mean: dict[str, float],
                 analysis: _Analysis) -> None:
         """Print the per-role means, fusion-vs-unimodal deltas, oracle headroom, and the aggregation sweep."""
         comp, agg = analysis.complementarity, analysis.aggregation

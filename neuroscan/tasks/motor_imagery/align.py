@@ -29,9 +29,10 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
+import polars as pl
 from jaxtyping import Float, Int
 from joblib import Parallel, delayed
 from pydantic import BaseModel
@@ -78,7 +79,7 @@ class Align:
 
     @classmethod
     def _zero_shot_fold(
-        cls, s: Any, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig
+        cls, s: int | str, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig
     ):
         """Zero-shot: delegate the alignment + classifier to the transfer method, score ALL target."""
         if test.labels is None:
@@ -89,7 +90,7 @@ class Align:
 
     @classmethod
     def _calibrated_fold(
-        cls, s: Any, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig
+        cls, s: int | str, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig
     ):
         """Calibrated: carve a stratified `calib_frac` of the held-out subject as the *only* labelled target data
         (the rest is the disjoint test set), hand it to the transfer method, score the disjoint remainder. Test
@@ -107,14 +108,14 @@ class Align:
         return row, None, yev
 
     @classmethod
-    def _row(cls, s: Any, yte: Int[np.ndarray, "n"], probs: Float[np.ndarray, "n k"]):
+    def _row(cls, s: int | str, yte: Int[np.ndarray, "n"], probs: Float[np.ndarray, "n k"]):
         pred = probs.argmax(1)
         row = {"fold": str(s), "n": len(yte), "acc": metrics.Metrics.accuracy(yte, pred),
                "kappa": metrics.Metrics.kappa(yte, pred), "ece": metrics.Metrics.ece_from_probs(probs, yte)}
         return row, probs, yte
 
     @classmethod
-    def _run_fold(cls, s: Any, tr: Any, te: Any, cfg: AlignConfig):
+    def _run_fold(cls, s: int | str, tr: pl.DataFrame, te: pl.DataFrame, cfg: AlignConfig):
         """One LOSO fold — module-level so joblib ships it to a worker (folds are independent)."""
         Xtr, ytr = store.Store.gather(tr)
         Xte, yte = store.Store.gather(te)
@@ -161,7 +162,7 @@ class Align:
         out_folds = Parallel(n_jobs=args.jobs)(
             delayed(cls._run_fold)(s, tr, te, fold_cfg) for s, tr, te in folds)
 
-        rows: list[dict[str, Any]] = []
+        rows: list[dict[str, object]] = []
         P: list[np.ndarray] = []
         Y: list[np.ndarray] = []
         for row, probs, yte in sorted(out_folds, key=lambda r: r[0]["fold"]):

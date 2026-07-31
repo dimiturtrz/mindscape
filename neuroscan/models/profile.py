@@ -9,7 +9,7 @@ measured rather than asserted.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import cast
 
 import torch
 
@@ -24,7 +24,7 @@ N_CHANS, N_TIMES, N_CLASSES = 22, 1125, 4
 class Profile:
     @classmethod
     def profile(cls, model_cls: type[torch.nn.Module], n_chans: int = N_CHANS, n_times: int = N_TIMES,
-                n_classes: int = N_CLASSES) -> dict[str, Any]:
+                n_classes: int = N_CLASSES) -> dict[str, object]:
         net = model_cls(n_chans=n_chans, n_outputs=n_classes, n_times=n_times).eval()
         params = sum(p.numel() for p in net.parameters() if p.requires_grad)
         dummy = torch.zeros(1, n_chans, n_times)
@@ -51,11 +51,11 @@ class Profile:
     @classmethod
     def main(cls):
         Cli.setup_logging()
-        rows = [cls.profile(cfg["cls"]) for cfg in MODELS.values()]
+        rows = [cls.profile(cast(type[torch.nn.Module], cfg["cls"])) for cfg in MODELS.values()]
         logger.info(f"\n=== params + FLOPs (input {N_CHANS}ch x {N_TIMES} samples, batch 1) ===")
         logger.info(f"{'model':16} {'params':>10} {'FLOPs':>10}")
         for r in rows:
-            logger.info(f"{r['model']:16} {cls._fmt(r['params']):>10} {cls._fmt(r['flops']):>10}")
+            logger.info(f"{r['model']:16} {cls._fmt(cast(int | None, r['params'])):>10} {cls._fmt(cast(int | None, r['flops'])):>10}")
         return rows
 
 

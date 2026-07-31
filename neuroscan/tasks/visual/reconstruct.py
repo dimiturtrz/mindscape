@@ -20,7 +20,7 @@ import argparse
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 import torch
@@ -61,7 +61,7 @@ class Reconstruct:
     """EEG->image via unCLIP decode of a predicted CLIP embedding — op-namespace of staticmethods (bd 71n)."""
 
     @staticmethod
-    def _pipe(device: str) -> Any:
+    def _pipe(device: str) -> object:
         """StableUnCLIP image-variation pipeline, fp16 on cuda. Lazy import: diffusers is the `recon` extra."""
         from diffusers import StableUnCLIPImg2ImgPipeline  # noqa: PLC0415 — heavy optional dep, load on use
         dtype = torch.float16 if device == "cuda" else torch.float32
@@ -73,7 +73,7 @@ class Reconstruct:
         return pipe
 
     @staticmethod
-    def decode(pipe: Any, embeds: Float[np.ndarray, "n d"], device: str,
+    def decode(pipe: object, embeds: Float[np.ndarray, "n d"], device: str,
                steps: int = 20, noise_level: int = 0) -> list[Image.Image]:
         """Decode CLIP image embeddings [n, 768] -> PIL images via `image_embeds` injection (skips the encoder)."""
         dtype = torch.float16 if device == "cuda" else torch.float32
@@ -86,16 +86,16 @@ class Reconstruct:
         return images
 
     @staticmethod
-    def _load_encoder(ckpt_path: Path, device: str) -> tuple[Any, dict[str, Any]]:
+    def _load_encoder(ckpt_path: Path, device: str) -> tuple[object, dict[str, object]]:
         """Rebuild the encoder from its saved spec and load the trained weights (train_nice save_encoder)."""
         ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
         spec = EncoderSpec(n_channels=ckpt["n_channels"], n_times=ckpt["n_times"], embed_dim=ckpt["embed_dim"])
-        encoder: Any = cast(Any, EncoderRegistry.build_encoder(ckpt["model"], spec)).to(device)
+        encoder: object = cast(object, EncoderRegistry.build_encoder(ckpt["model"], spec)).to(device)
         encoder.load_state_dict(ckpt["state_dict"])
         return encoder.eval(), ckpt
 
     @staticmethod
-    def _predict(encoder: Any, eeg: Float[np.ndarray, "n ch t"], device: str) -> Float[np.ndarray, "n d"]:
+    def _predict(encoder: object, eeg: Float[np.ndarray, "n ch t"], device: str) -> Float[np.ndarray, "n d"]:
         """EEG [n, ch, t] -> L2-normalized CLIP-space embeddings [n, d] (the encoder's forward, batched).
 
         `no_grad` is load-bearing: without it the forward retains the autograd graph across every batch of the

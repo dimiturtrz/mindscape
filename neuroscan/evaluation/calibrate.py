@@ -16,17 +16,16 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable, TypedDict
 
 import numpy as np
 import polars as pl
-import torch
-from jaxtyping import Float, Int
 
 from core.data import splits, store
 from core.data.eeg.base import EpochCfg
 from neuroscan import tracking
 from neuroscan.evaluation import metrics
+from neuroscan.evaluation.temperature_scaler import TemperatureScaler
 from neuroscan.models import decoders
 from neuroscan.tasks.cli import Cli
 
@@ -37,43 +36,23 @@ _TRANSFER_LIMITED = 0.5  # transfer ratio below this: calibration is domain-shif
 _TRANSFER_GOOD = 1.2     # transfer ratio at/above this: calibration transfers well cross-session
 
 
-class TemperatureScaler:
-    """Post-hoc temperature scaling (Guo 2017): one scalar T (logits -> logits/T), fit on a held-out val
-    set by minimizing NLL with the model frozen. The object OWNS T and the two operations that use it —
-    `.fit` sets T, `.ece` reports ECE at the fitted T (or an override). Softmax argmax is unchanged, so
-    accuracy is untouched; only confidence (ECE) moves."""
+class EcePair(TypedDict):
+    """Uncalibrated vs temperature-scaled ECE, the pair reported for each of val / test."""
+    uncal: float
+    temp: float
 
-    def __init__(self, T: float = 1.0):
-        self.T = T
 
-    def fit(self, logits: Float[np.ndarray, "n c"], labels: Int[np.ndarray, "n"]) -> "TemperatureScaler":
-        z = torch.tensor(logits, dtype=torch.float32)
-        y = torch.tensor(labels, dtype=torch.long)
-        log_t = torch.zeros(1, requires_grad=True)
-        opt = torch.optim.LBFGS([log_t], lr=0.05, max_iter=80)
-        nll = torch.nn.CrossEntropyLoss()
-
-        def closure():                                       # LBFGS requires a closure
-            opt.zero_grad()
-            loss = nll(z / log_t.exp(), y)
-            loss.backward()
-            return loss
-
-        opt.step(closure)
-        self.T = float(log_t.exp().detach())
-        return self
-
-    def probs(self, logits: Float[np.ndarray, "n c"], T: float | None = None) -> Float[np.ndarray, "n c"]:
-        """Numerically-stable softmax(logits / T); T defaults to the fitted self.T."""
-        z = logits / (self.T if T is None else T)
-        z = z - z.max(1, keepdims=True)
-        p = np.exp(z)
-        return p / p.sum(1, keepdims=True)
-
-    def ece(self, logits: Float[np.ndarray, "n c"], labels: Int[np.ndarray, "n"], T: float | None = None) -> float:
-        p = self.probs(logits, T)
-        conf, pred = p.max(1), p.argmax(1)
-        return metrics.Metrics.ece(conf, (pred == labels).astype(float))[0]
+class CalibSummary(TypedDict):
+    """The calibration run's aggregate record (written to calibration.json)."""
+    method: str
+    regime: str
+    n: int
+    T_mean: float
+    val_ece: EcePair
+    test_ece: EcePair
+    per_subject: list[dict[str, str | float]]
+    transfer_ratio: float | None
+    verdict: str
 
 
 class Calibrate:
@@ -90,7 +69,7 @@ class Calibrate:
         return ap.parse_args()
 
     @classmethod
-    def _per_subject_rows(cls, meta: pl.DataFrame, fit: Callable[..., Any],
+    def _per_subject_rows(cls, meta: pl.DataFrame, fit: Callable[..., object],
                           test_session: str) -> list[dict[str, str | float]]:
         """One temperature-scaling row per subject: fit T on the in-session val, report val + cross-session ECE."""
         rows: list[dict[str, str | float]] = []
@@ -116,23 +95,25 @@ class Calibrate:
         return rows
 
     @classmethod
-    def _summarize(cls, rows: list[dict[str, str | float]], method: str) -> tuple[dict[str, Any], float, float]:
+    def _summarize(cls, rows: list[dict[str, str | float]], method: str) -> tuple[CalibSummary, float, float]:
         """Aggregate per-subject rows into the summary dict; returns (summary, val_fix, test_fix)."""
         m = {k: float(np.mean([float(r[k]) for r in rows]))
              for k in ("T", "val_ece_uncal", "val_ece_temp", "test_ece_uncal", "test_ece_temp")}
-        summary: dict[str, Any] = {"method": method, "regime": "within_calibration", "n": len(rows),
-                   "T_mean": m["T"],
-                   "val_ece": {"uncal": m["val_ece_uncal"], "temp": m["val_ece_temp"]},
-                   "test_ece": {"uncal": m["test_ece_uncal"], "temp": m["test_ece_temp"]},
-                   "per_subject": rows}
         # the headline read: how much of the val-ECE fix transfers to the cross-session test
-        val_fix = summary["val_ece"]["uncal"] - summary["val_ece"]["temp"]
-        test_fix = summary["test_ece"]["uncal"] - summary["test_ece"]["temp"]
-        summary["transfer_ratio"] = round(test_fix / val_fix, 3) if val_fix > _EPS else None
+        val_fix = m["val_ece_uncal"] - m["val_ece_temp"]
+        test_fix = m["test_ece_uncal"] - m["test_ece_temp"]
+        summary: CalibSummary = {
+            "method": method, "regime": "within_calibration", "n": len(rows), "T_mean": m["T"],
+            "val_ece": {"uncal": m["val_ece_uncal"], "temp": m["val_ece_temp"]},
+            "test_ece": {"uncal": m["test_ece_uncal"], "temp": m["test_ece_temp"]},
+            "per_subject": rows,
+            "transfer_ratio": round(test_fix / val_fix, 3) if val_fix > _EPS else None,
+            "verdict": "",
+        }
         return summary, val_fix, test_fix
 
     @classmethod
-    def _report(cls, summary: dict[str, Any], method: str, val_fix: float, test_fix: float) -> None:
+    def _report(cls, summary: CalibSummary, method: str, val_fix: float, test_fix: float) -> None:
         """Log the val->test ECE transfer and store the verdict on `summary`."""
         logger.info(f"\n=== {method} temperature scaling (in-session val -> cross-session test) ===")
         logger.info(f"  val  ECE {summary['val_ece']['uncal']:.3f} -> "

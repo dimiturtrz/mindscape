@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Any, cast
+from typing import cast
 
 import mne
 from moabb.datasets import download as _dl
@@ -41,8 +41,8 @@ class Experiment(BaseModel):
     method: str | None = None
     regime: str | None = None
     test_session: str | None = None
-    recipe: dict[str, Any] = {}
-    params: dict[str, Any] = {}
+    recipe: dict[str, str | int | float | bool] = {}
+    params: dict[str, str | int | float | bool] = {}
 
 
 class Config:
@@ -71,7 +71,7 @@ class Config:
         node = doc.experiments[name]
         if overrides:
             node = OmegaConf.merge(node, OmegaConf.from_dotlist(overrides))
-        return Experiment(**cast(dict[str, Any], OmegaConf.to_container(node, resolve=True)))
+        return Experiment(**cast(dict, OmegaConf.to_container(node, resolve=True)))
 
     @classmethod
     def to_native_path(cls, path_str: str) -> str:
@@ -169,5 +169,5 @@ class Config:
                 return Path(drive + rest.translate({ord(c): "-" for c in _bad}))
             return Path(s.translate({ord(c): "-" for c in _bad}))
 
-        cast(Any, _safe)._mindscape_patched = True  # noqa: SLF001
+        _safe._mindscape_patched = True  # noqa: SLF001
         _dl._sanitize_path = _safe  # noqa: SLF001

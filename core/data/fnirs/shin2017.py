@@ -12,7 +12,7 @@ Channels are HbO then HbR (72 total): [<36 oxy>, <36 deoxy>].
 """
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Protocol, cast
 
 import numpy as np
 import polars as pl
@@ -21,8 +21,13 @@ from scipy.signal import resample as _resample
 
 from core.config import Config
 from core.data.fnirs.base import CANONICAL_NBACK, FnirsCfg, FnirsEpochs
-from core.data.fnirs.clean import Clean
+from core.data.fnirs.clean import Chain
 from core.data.signal import EpochBatch, Signal
+
+
+class _Cleaner(Protocol):
+    """Stateless signal cleaner with a transform method."""
+    def transform(self, X: np.ndarray) -> np.ndarray: ...
 
 
 class Shin2017NirsAdapter:
@@ -77,7 +82,7 @@ class Shin2017NirsAdapter:
             X, ye = FnirsEpochs.epoch_blocks(cont, onsets, y, fs, cfg)
             if cfg.clean is not None:                                                  # physiological-noise stage
                 # stateless -> leakage-free
-                X = cast(Any, Clean.make_cleaner(cfg.clean)).transform(X).astype(np.float32)
+                X = cast(_Cleaner, Chain.make_cleaner(cfg.clean)).transform(X).astype(np.float32)
             if cfg.resample and cfg.resample != fs:
                 X = cast(np.ndarray, _resample(X, round(X.shape[2] * cfg.resample / fs), axis=2)).astype(np.float32)
             n = len(ye)

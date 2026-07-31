@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
 
 from core.config import REPO
 from neuroscan.tasks.cli import Cli
@@ -44,6 +44,29 @@ _NOTE = ("Committed snapshot of local run aggregates. Do not hand-edit — it is
 _DATASETS = ("bnci2014_001", "shin2017_nback", "shin2017")
 
 
+class Metrics(TypedDict, total=False):
+    """Metrics dict with acc, kappa, ece fields."""
+    acc: float | None
+    kappa: float | None
+    ece: float | None
+
+
+class RunRow(TypedDict, total=False):
+    """A single run snapshot row in results.json, with optional per-role and aggregation fields."""
+    method: str
+    regime: str
+    dataset: str
+    n_classes: int | None
+    acc: float | None
+    kappa: float | None
+    ece: float | None
+    # Optional per-role breakdown and aggregation fields for fusion runs
+    eeg: float
+    fnirs: float
+    late: float
+    feature: float
+
+
 class Results:
     @staticmethod
     def _split_name(name: str) -> tuple[str, str, str]:
@@ -57,21 +80,25 @@ class Results:
         return stem, "", dataset
 
     @staticmethod
-    def read_metrics(agg: dict[str, Any]) -> dict[str, Any] | None:
+    def read_metrics(agg: dict[str, object]) -> Metrics | None:
         """Pull (acc, kappa, ece) from either aggregate schema. None if neither present.
 
         The one place that knows both run-aggregate shapes; reused by tracking.backfill so the schema
         knowledge isn't duplicated."""
+        from typing import cast as type_cast
         fm = agg.get("fold_mean")                                # harness schema: {"acc","kappa","ece"} or absent
-        if fm and "acc" in fm:
-            return {"acc": fm["acc"], "kappa": fm.get("kappa"), "ece": fm.get("ece")}
+        if fm is not None:
+            fm_dict = type_cast(dict[str, object], fm)
+            if "acc" in fm_dict:
+                return {"acc": type_cast(float, fm_dict["acc"]), "kappa": type_cast(float | None, fm_dict.get("kappa")), "ece": type_cast(float | None, fm_dict.get("ece"))}
         if "acc_mean" in agg:                                    # align.py schema
-            return {"acc": agg["acc_mean"], "kappa": agg.get("kappa_mean"), "ece": agg.get("ece_mean")}
+            return {"acc": type_cast(float, agg["acc_mean"]), "kappa": type_cast(float | None, agg.get("kappa_mean")), "ece": type_cast(float | None, agg.get("ece_mean"))}
         return None
 
     @staticmethod
-    def _row(name: str, agg: dict[str, Any]) -> dict[str, Any] | None:
+    def _row(name: str, agg: dict[str, object]) -> RunRow | None:
         """Normalize one aggregate.json -> a snapshot row, or None if it has no usable metrics."""
+        from typing import cast as type_cast
         m = Results.read_metrics(agg)
         if m is None:
             return None
@@ -79,21 +106,27 @@ class Results:
         # fusion runs add dict[str, float] blocks — a per-role breakdown (eeg/fnirs/late/feature) and the
         # complementarity + aggregation-sweep scalars — pass them through as flat marker fields. Absent on
         # non-fusion runs (-> {}); comp wins on any key overlap with the sweep.
-        extra = {**agg.get("per_role_mean", {}), **agg.get("aggregation", {}), **agg.get("complementarity", {})}
-        return {
-            "method": agg.get("method", method),
-            "regime": agg.get("regime", regime),
+        extra_a = agg.get("per_role_mean", {})
+        extra_b = agg.get("aggregation", {})
+        extra_c = agg.get("complementarity", {})
+        extra = {**(type_cast(dict[str, object], extra_a) if extra_a else {}),
+                 **(type_cast(dict[str, object], extra_b) if extra_b else {}),
+                 **(type_cast(dict[str, object], extra_c) if extra_c else {})}
+        result: dict[str, float | int | str | None] = {
+            "method": type_cast(str, agg.get("method", method)),
+            "regime": type_cast(str, agg.get("regime", regime)),
             "dataset": dataset,
-            "n_classes": agg.get("n_classes"),
+            "n_classes": type_cast(int | None, agg.get("n_classes")),
             # metrics: kappa/ece are None on fusion runs (no per-fold kappa) — keep None, round the rest
-            **{k: (round(v, _PRECISION) if v is not None else None) for k, v in m.items()},
-            **{k: round(v, _PRECISION) for k, v in extra.items()},
+            **{k: (round(type_cast(float, v), _PRECISION) if v is not None else None) for k, v in m.items()},
+            **{k: round(type_cast(float, v), _PRECISION) for k, v in extra.items()},
         }
+        return type_cast(RunRow, result)
 
     @staticmethod
-    def collect(runs_dir: Path = _RUNS) -> dict[str, dict[str, Any]]:
+    def collect(runs_dir: Path = _RUNS) -> dict[str, RunRow]:
         """Scan runs/*/aggregate.json -> {run_name: {method,regime,dataset,n_classes,acc,kappa,ece}}."""
-        out: dict[str, dict[str, Any]] = {}
+        out: dict[str, RunRow] = {}
         for agg_path in sorted(runs_dir.glob("*/aggregate.json")):
             row = Results._row(agg_path.parent.name, json.loads(agg_path.read_text()))
             if row is not None:
@@ -101,7 +134,7 @@ class Results:
         return out
 
     @staticmethod
-    def _dump(runs: dict[str, dict[str, Any]], out_path: Path) -> Path:
+    def _dump(runs: dict[str, RunRow], out_path: Path) -> Path:
         out_path.write_text(json.dumps({"_note": _NOTE, "runs": dict(sorted(runs.items()))}, indent=2) + "\n")
         return out_path
 
@@ -125,8 +158,10 @@ class Results:
             row = Results._row(run_dir.name, json.loads(agg_path.read_text()))
             if row is None:
                 return None
+            from typing import cast as type_cast
+            empty_dict: dict[str, RunRow] = {}
             payload = json.loads(out_path.read_text()) if out_path.exists() else {"runs": {}}
-            runs: dict[str, dict[str, Any]] = payload.get("runs", {})
+            runs: dict[str, RunRow] = type_cast(dict[str, RunRow], payload.get("runs", empty_dict))
             runs[run_dir.name] = row
             Results._dump(runs, out_path)
             return run_dir.name

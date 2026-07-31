@@ -22,7 +22,7 @@ null (the prior regularizes, doesn't inform the discriminant) — complementarit
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 from jaxtyping import Float
@@ -53,7 +53,7 @@ class SourcePriorDecode:
     """fNIRS-informed source-space fusion decode helpers (bd 4so) — the free helpers folded in as staticmethods."""
 
     @classmethod
-    def _fnirs_prior(cls, x_fnirs: Float[np.ndarray, "n ch_f t"], subject_dir: Any,
+    def _fnirs_prior(cls, x_fnirs: Float[np.ndarray, "n ch_f t"], subject_dir: str | Path,
                      src2d: Float[np.ndarray, "src 2"]) -> Float[np.ndarray, "src"]:
         """Per-source prior `w [n_src]` from a subject's fNIRS: per-channel HbO response magnitude (std over time,
         mean over epochs — unsupervised) RBF-interpolated from the optode disk onto the source-space vertices."""

@@ -13,12 +13,14 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 from sklearn.model_selection import GroupKFold
 
-from baselines.eeg import transfer
+import polars as pl
+
+from baselines.eeg import transfer  # noqa: F401
 from baselines.fusion import combine
 from core.data import store
 from core.data.eeg.base import EpochCfg
@@ -33,7 +35,7 @@ _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
 _OUT = Path(__file__).parent / "web" / "data" / "fusion.json"
 
 
-def _gather(meta: Any, subs: np.ndarray):
+def _gather(meta: pl.DataFrame, subs: np.ndarray):
     q = meta.filter(meta["subject"].is_in([str(s) for s in subs]))
     X, y = store.Store.gather(q)
     return X, y, q["subject"].to_numpy()
@@ -91,7 +93,7 @@ def main():
     # add a fusion flag to the manifest so the viewer shows the third mode (create it if the single-modality
     # exporters haven't run yet — they merge their own keys in later)
     man_path = _OUT.parent / "manifest.json"
-    man: dict[str, Any] = json.loads(man_path.read_text()) if man_path.exists() else {"modalities": {}}
+    man: dict[str, object] = json.loads(man_path.read_text()) if man_path.exists() else {"modalities": {}}
     man["fusion"] = True
     man_path.write_text(json.dumps(man))
     logger.info(f"updated {man_path.name}: fusion=true")

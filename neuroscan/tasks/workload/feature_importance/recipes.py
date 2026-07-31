@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
 
 import numpy as np
 from jaxtyping import Float, Int
@@ -51,7 +50,7 @@ class Recipes:
     kept)."""
 
     @classmethod
-    def _cv(cls, F: Float[np.ndarray, "n f"], fam: Any, y: Int[np.ndarray, "n"],
+    def _cv(cls, F: Float[np.ndarray, "n f"], fam: np.ndarray, y: Int[np.ndarray, "n"],
             groups: Int[np.ndarray, "n"], families: list[str]):
         Fr = F[:, np.isin(fam, families)]
         accs: list[float] = []

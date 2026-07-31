@@ -18,7 +18,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
 
 import numpy as np
 
@@ -28,6 +28,12 @@ from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
 logger = logging.getLogger(__name__)
 
 _METRICS = [("single_trial", "1"), ("single_trial", "5"), ("concept_avg", "1")]
+
+
+class TrainResult(TypedDict):
+    """Training result with fold and accuracy metrics."""
+    single_trial: dict[int, float]
+    concept_avg: dict[int, float]
 _N_PAIR = 2   # print the A−B delta only when exactly two models are compared
 
 
@@ -36,14 +42,14 @@ class LosoEval:
     `_fold` runs one held-out-subject training run; `_summary` reduces folds to mean ± SE."""
 
     @classmethod
-    def _fold(cls, model: str, seed: int, test_subject: int, pool: list[int], base: dict[str, Any]) -> dict[str, Any]:
+    def _fold(cls, model: str, seed: int, test_subject: int, pool: list[int], base: dict[str, object]) -> TrainResult:
         """One LOSO fold: train on `pool \\ {test_subject}`, retrieve on the held-out subject."""
         train_subjects = [s for s in pool if s != test_subject]
         cfg = TrainConfig.model_validate({**base, "model": model, "seed": seed})
         return TrainNice.train(train_subjects, test_subject, cfg)
 
     @classmethod
-    def _summary(cls, folds: list[dict[str, Any]]) -> dict[str, tuple[float, float]]:
+    def _summary(cls, folds: list[TrainResult]) -> dict[str, tuple[float, float]]:
         """Mean ± SE over folds for each reported metric (SE = std / √n_folds — the decision quantity)."""
         out = {}
         n = len(folds)
@@ -74,7 +80,7 @@ class LosoEval:
 
         logger.info(f"LOSO · pool {args.subjects} · models {args.models} · seeds {args.seeds} "
                     f"· {len(args.subjects) * len(args.seeds)} folds/model")
-        results: dict[str, dict[str, Any]] = {}
+        results: dict[str, dict[str, object]] = {}
         for model in args.models:
             folds = [cls._fold(model, seed, test, args.subjects, base)
                      for seed in args.seeds for test in args.subjects]

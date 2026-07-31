@@ -93,14 +93,6 @@ class Chain:
             X = c.transform(X)
         return X
 
-
-_CLEANERS = {"cbsi": Cbsi, "detrend": Detrend}
-
-
-class Clean:
-    """fNIRS cleaner construction + cache-keying — the free helpers folded in as staticmethods (public names
-    kept). The stateful cleaners (Cbsi/Detrend/Chain) stay their own classes."""
-
     @staticmethod
     def make_cleaner(spec: str | list[str] | None):
         """`str | list[str] | None` -> a `Cleaner` (single = one-element `Chain`) or `None`. Unknown name errors."""
@@ -121,3 +113,6 @@ class Clean:
             return "none"
         names = [spec] if isinstance(spec, str) else list(spec)
         return "+".join(names) if names else "none"
+
+
+_CLEANERS = {"cbsi": Cbsi, "detrend": Detrend}

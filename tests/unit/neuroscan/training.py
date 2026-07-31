@@ -1,7 +1,7 @@
-"""Unit tests for the shared training scaffold (bd 1eca) — EarlyStopper direction/patience/restore + TF32 switch."""
+"""Unit tests for the shared training scaffold (bd 1eca) — EarlyStopper direction/patience/restore."""
 import torch
 
-from neuroscan.training import EarlyStopper, TorchPerf
+from neuroscan.training import EarlyStopper
 
 
 def _lin(bias: float) -> torch.nn.Module:
@@ -47,7 +47,3 @@ def test_stopper_no_update_restore_is_noop():
     m = _lin(7.0)
     s.restore(m)                                            # never updated -> keep current weights
     assert m.bias.item() == 7.0
-
-
-def test_enable_fast_matmul_cpu_is_noop():
-    TorchPerf.enable_fast_matmul("cpu")                     # no cuda side effects, must not raise

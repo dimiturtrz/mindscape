@@ -7,7 +7,7 @@ re-implement the csp-vs-net branch. The harness contract is the same for all: `f
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Protocol, cast
 
 import numpy as np
 from jaxtyping import Float
@@ -28,14 +28,20 @@ _FS_METHODS = {"eeg_bandpower", "fbcsp", "fnirs_windowed", "fnirs_glm"}
 _FS_CONFIG = {"fbcsp": FbcspConfig, "fnirs_windowed": WindowedConfig}
 
 
+class _Classifier(Protocol):
+    """A classifier that has a predict_proba method (duck-type protocol)."""
+
+    def predict_proba(self, X: Float[np.ndarray, "n ..."]) -> Float[np.ndarray, "n k"]: ...
+
+
 class Methods:
     @staticmethod
-    def _proba(clf: Any, X: Float[np.ndarray, "n ..."]) -> Float[np.ndarray, "n k"]:
+    def _proba(clf: _Classifier, X: Float[np.ndarray, "n ..."]) -> Float[np.ndarray, "n k"]:
         """The single scorer for every Decoder — classical baseline or braindecode net both expose it."""
         return clf.predict_proba(X)
 
     @staticmethod
-    def _baseline_classes() -> dict[str, type[Any]]:
+    def _baseline_classes() -> dict[str, type]:
         """name -> Baseline class."""
         return {"csp_lda": CspLda, "riemann": TangentSpace, "riemann_acm": Acm, "riemann_mdm": Mdm,
                 "riemann_fgmdm": Fgmdm, "fbcsp": Fbcsp, "fnirs_lda": FnirsLda, "fnirs_windowed": WindowedFnirs,

@@ -17,7 +17,7 @@ derivable at the POPULATION level; use the pooled value as the argued constant, 
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 
@@ -38,12 +38,12 @@ class CouplingProbe:
     """EEG->blood coupling-lag probe helpers — the free helpers folded in as staticmethods."""
 
     @classmethod
-    def _global_series(cls, subject_frames: list[tuple[Any, tuple[np.ndarray, np.ndarray]]]):
+    def _global_series(cls, subject_frames: list[tuple[int | str, tuple[np.ndarray, np.ndarray]]]):
         """Whole-head-mean EEG-β envelope + zero-lag fNIRS CBSI per block, on the shared grid -> `[n, T]` each."""
         t_dst = np.arange(0, _TEND, 1.0 / _FPS)
         drives: list[np.ndarray] = []
         resps: list[np.ndarray] = []
-        groups: list[list[Any]] = []
+        groups: list[list[int | str]] = []
         for s, (Xe, Xf) in subject_frames:
             ch_f = Xf.shape[1] // 2
             te = np.arange(Xe.shape[2]) / _FS_E

@@ -28,7 +28,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
 
 import numpy as np
 import torch
@@ -49,6 +49,23 @@ from neuroscan.tracking import Tracking
 logger = logging.getLogger(__name__)
 
 _FEAT_BATCH = 256     # backbone forward batch for the one-time precompute
+
+
+class RetrievalResult(TypedDict):
+    """Retrieval evaluation result with top-k metrics."""
+    single_trial: dict[int, float]
+    concept_avg: dict[int, float]
+    continuous: dict[str, float]
+
+
+class ArmResult(TypedDict):
+    """Result from training one arm with arm name, epoch, and retrieval metrics."""
+    arm: str
+    best_val_epoch: int
+    val_top1: float
+    single_trial: dict[int, float]
+    concept_avg: dict[int, float]
+    continuous: dict[str, float]
 _TOPO_GRIDS = (12, 16, 24)         # topo mini-sweep (bd m69x.2): scalp-image resolution
 _TOPO_SIGMAS = (0.1, 0.2, 0.35)    # topo mini-sweep: RBF interpolation width on the unit-disk montage
 
@@ -213,7 +230,7 @@ class FrozenHead:
 
     @classmethod
     @torch.no_grad()
-    def _retrieval(cls, head: nn.Module, eval_set: _EvalSet, device: str) -> dict[str, Any]:
+    def _retrieval(cls, head: nn.Module, eval_set: _EvalSet, device: str) -> RetrievalResult:
         head.eval()
         feat, concept, bank = eval_set.feat, eval_set.concept, eval_set.bank
         emb = torch.cat([F.normalize(head(feat[i:i + 4096].float().to(device)), dim=-1).cpu()
@@ -226,7 +243,7 @@ class FrozenHead:
                 "continuous": Nice.retrieval_continuous(emb, bank, labels)}   # angular-error extras (bd 2y7k)
 
     @classmethod
-    def _train_arm(cls, spec: HeadSpec, cache: Cache, device: str, cfg: FitCfg) -> dict[str, Any]:
+    def _train_arm(cls, spec: HeadSpec, cache: Cache, device: str, cfg: FitCfg) -> ArmResult:
         torch.manual_seed(cfg.seed)
         fit_mask, val_mask, val_lab, val_bank = cls._val_concepts(
             cache.tr_concept, cache.tr_tgt.numpy(), cfg.seed, 0.1)

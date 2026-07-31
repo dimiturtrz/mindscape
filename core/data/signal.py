@@ -7,7 +7,7 @@ it). `core/data/eeg/*` and `core/data/fnirs/*` both depend on this; it depends o
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import cast
 
 import numpy as np
@@ -28,17 +28,17 @@ class BlockedRecording:
     labels: np.ndarray
 
 
+@dataclass
 class EpochBatch:
     """Accumulate per-subject epochs + their meta columns, then stack into the common
     (X[n,ch,t] float32, y[n] int64, subject/session/run frame) triple every dataset adapter returns — the
     one home for the assemble-and-frame contract (the Store schema), shared across the EEG + fNIRS adapters."""
 
-    def __init__(self):
-        self.Xs: list[np.ndarray] = []
-        self.ys: list[np.ndarray] = []
-        self.subj: list[str] = []
-        self.sess: list[str] = []
-        self.run: list[str] = []
+    Xs: list[np.ndarray] = field(default_factory=list)
+    ys: list[np.ndarray] = field(default_factory=list)
+    subj: list[str] = field(default_factory=list)
+    sess: list[str] = field(default_factory=list)
+    run: list[str] = field(default_factory=list)
 
     def add(self, X: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"],
             subj: list[str], sess: list[str], run: list[str]) -> None:

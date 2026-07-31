@@ -14,8 +14,6 @@ The fNIRS-activation → per-source weight mapping (optode co-registration) is t
 """
 from __future__ import annotations
 
-from typing import Any
-
 import mne
 import numpy as np
 from jaxtyping import Float
@@ -48,7 +46,7 @@ class SourcePrior:
         return r_gt @ np.linalg.inv(grgt + lam2 * np.eye(grgt.shape[0]))
 
     @staticmethod
-    def _parcel_aggregator(src: list[dict[str, Any]], labels: list[Any]) -> Float[np.ndarray, "p s"]:
+    def _parcel_aggregator(src: list[dict[str, np.ndarray]], labels: list[mne.Label]) -> Float[np.ndarray, "p s"]:
         """`A [n_labels, n_src]` averaging each label's sources — source order = concat of `src[h]["vertno"]`.
         Maps the fixed-orientation source estimate onto the same Desikan-Killiany parcels the dSPM path uses
         (`source.to_parcels`), so fNIRS-priored and plain-dSPM decodes are compared on one representation."""

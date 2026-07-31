@@ -14,7 +14,8 @@ from jaxtyping import Float, Int
 from core.features.eeg.bandpower import CANONICAL_BANDS, BandPower
 from core.features.eeg.covariance import Covariance
 from core.features.fnirs.amplitude import Amplitude
-from core.features.fnirs.bank import FNIRS_FEATURE_FNS, DescriptorBank, WeightedFamilyScaler
+from core.features.fnirs.bank import FNIRS_FEATURE_FNS, DescriptorBank
+from core.features.fnirs.weighted_family_scaler import WeightedFamilyScaler
 
 
 class SubjectNorm:

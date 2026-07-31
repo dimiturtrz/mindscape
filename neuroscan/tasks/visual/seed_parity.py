@@ -17,7 +17,7 @@ import json
 import logging
 import statistics
 from pathlib import Path
-from typing import Any, cast
+from typing import cast, TypedDict
 
 from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
@@ -25,6 +25,13 @@ from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
 logger = logging.getLogger(__name__)
 
 _CFG_DIR = Path(__file__).parent / "configs"
+
+
+class AggStats(TypedDict):
+    """Aggregated statistics: mean, std, and individual values."""
+    mean: float
+    std: float
+    vals: list[float]
 _ARMS = {"naive": "perception_naive.json", "optimized": "perception_optimized.json"}
 
 
@@ -33,21 +40,21 @@ class SeedParity:
     (public names kept). `run` trains both arms across seeds; `_agg` reduces the per-seed runs to mean/std."""
 
     @staticmethod
-    def _agg(runs: list[dict[str, Any]], metric: str, k: str) -> dict[str, Any]:
+    def _agg(runs: list[dict[str, object]], metric: str, k: str) -> AggStats:
         """mean/std of `runs[i][metric][k]` across seeds (metric = single_trial | concept_avg)."""
         vals = [r[metric][k] for r in runs]
         return {"mean": statistics.fmean(vals), "std": statistics.pstdev(vals) if len(vals) > 1 else 0.0,
                 "vals": vals}
 
     @staticmethod
-    def run(train_subjects: list[int], test_subject: int, seeds: list[int]) -> dict[str, Any]:
-        out: dict[str, Any] = {"train": train_subjects, "test": test_subject, "seeds": seeds,
+    def run(train_subjects: list[int], test_subject: int, seeds: list[int]) -> dict[str, object]:
+        out: dict[str, object] = {"train": train_subjects, "test": test_subject, "seeds": seeds,
                                "arms": {}}
         for arm, fname in _ARMS.items():
             base = json.loads((_CFG_DIR / fname).read_text())
             runs = []
             for seed in seeds:
-                cfg = TrainConfig(**cast(dict[str, Any], {**base, "seed": seed}))
+                cfg = TrainConfig(**cast(dict[str, object], {**base, "seed": seed}))
                 logger.info(f"[{arm}] seed {seed} — {fname}")
                 runs.append(TrainNice.train(train_subjects, test_subject, cfg))
             out["arms"][arm] = {

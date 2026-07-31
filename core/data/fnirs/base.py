@@ -17,7 +17,7 @@ from pydantic import BaseModel
 # Cross-modality primitives (block epoching, n-back labels) live in the neutral data layer
 # (core/data/signal) so the EEG adapter doesn't import "up" into fNIRS. CANONICAL_NBACK is re-exported here
 # so existing `from core.data.fnirs.base import CANONICAL_NBACK` call sites keep working.
-from core.data.fnirs.clean import Clean
+from core.data.fnirs.clean import Chain
 from core.data.signal import (  # noqa: F401
     CANONICAL_NBACK,
     BlockedRecording,
@@ -46,7 +46,7 @@ class FnirsCfg(BaseModel):
             return str(x).replace(".", "p").replace("-", "m")
         rs = "native" if self.resample is None else f(self.resample)
         return (f"b{f(self.l_freq)}-{f(self.h_freq)}_t{f(self.tmin)}-{f(self.tmax)}"
-                f"_r{rs}_c{Clean.clean_key(self.clean)}")
+                f"_r{rs}_c{Chain.clean_key(self.clean)}")
 
 
 class FnirsEpochs:

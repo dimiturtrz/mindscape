@@ -13,9 +13,9 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Any
 
 import numpy as np
+from typing import TypedDict
 import polars as pl
 from jaxtyping import Float
 from scipy.special import softmax
@@ -32,6 +32,19 @@ from neuroscan.tasks.cli import Cli
 logger = logging.getLogger(__name__)
 
 _ONNX_PARITY_TOL = 1e-3   # max |Δlogit| allowed between the torch net and its exported ONNX before quantizing
+
+
+class QuantizeReport(TypedDict, total=False):
+    """Quantization report: accuracy, model size, and latency metrics."""
+    method: str
+    subject: str
+    n_chans: int
+    crop_len: int | None
+    parity_max_dlogit: float
+    accuracy: dict[str, float]
+    size_mb: dict[str, float]
+    latency_ms_cpu: dict[str, float]
+    int8_error: str
 
 
 class Quantize:
@@ -63,7 +76,7 @@ class Quantize:
         return ap.parse_args()
 
     @classmethod
-    def _track_run(cls, rep: dict[str, Any], method: str, sub: int | str, gap: float, rep_dir: Path):
+    def _track_run(cls, rep: QuantizeReport, method: str, sub: int | str, gap: float, rep_dir: Path):
         """Log the deployment triad (accuracy / size / latency) to MLflow (guarded)."""
         with tracking.Tracking.run("mindscape", f"quantize_{method}",
                           params={"method": method, "subject": str(sub)},
@@ -77,7 +90,7 @@ class Quantize:
             tracking.Tracking.metrics(record)
 
     @classmethod
-    def _report(cls, rep: dict[str, Any], method: str, sub: int | str, gap: float, out: str | Path):
+    def _report(cls, rep: QuantizeReport, method: str, sub: int | str, gap: float, out: str | Path):
         """Print the fp32-vs-int8 accuracy / size / latency summary for one subject."""
         logger.info(f"\n=== {method} edge quantization (subject {sub}) ===")
         logger.info(f"  parity max|Δlogit| {gap:.2e}  (gate < 1e-3) OK")

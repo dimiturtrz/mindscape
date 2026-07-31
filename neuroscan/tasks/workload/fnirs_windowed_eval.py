@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any, cast
+from typing import cast
 
 from baselines.fnirs.windowed import WindowedConfig, WindowedFnirs
 from core.data import store
@@ -34,7 +34,7 @@ _DATASET = "shin2017_nback"
 # concat carried the only within-subject gain; trace it across a granularity ladder (very-coarse -> fine) to
 # see if fewer windows (less to overfit) let the gain survive transfer. Keep one pooled tier as the ruled-out
 # control (mean/max/lse were all a wash below collapse). One assignment (no import-time side effect).
-_ARMS: list[tuple[str, Callable[[], Any] | None]] = [
+_ARMS: list[tuple[str, Callable[[], object] | None]] = [
     ("collapse (baseline)", None),
     *((f"windowed concat · {_label}",
        lambda win_s=_win_s, hop_s=_hop_s:
