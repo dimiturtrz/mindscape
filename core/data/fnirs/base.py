@@ -10,22 +10,24 @@ Canonical n-back workload labels (fixed so a decoder's classes mean the same eve
 """
 from __future__ import annotations
 
+from typing import override
+
 import numpy as np
 from jaxtyping import Float, Shaped
-from pydantic import BaseModel
 
-# Cross-modality primitives (block epoching, n-back labels) live in the neutral data layer
+# Cross-modality primitives (block epoching, n-back labels, the Recipe base) live in the neutral data layer
 # (core/data/signal) so the EEG adapter doesn't import "up" into fNIRS. CANONICAL_NBACK is re-exported here
 # so existing `from core.data.fnirs.base import CANONICAL_NBACK` call sites keep working.
 from core.data.fnirs.clean import Chain
 from core.data.signal import (  # noqa: F401
     CANONICAL_NBACK,
     BlockedRecording,
+    Recipe,
     Signal,
 )
 
 
-class FnirsCfg(BaseModel):
+class FnirsCfg(Recipe):
     """Preprocessing params that define an epoched fNIRS cache. Two recipes never collide (see `key`).
 
     Defaults = a standard hemodynamic block-design recipe: 0.01-0.2 Hz band (kill drift + pulse/Mayer),
@@ -41,12 +43,11 @@ class FnirsCfg(BaseModel):
     # | a list (composite chain). Stateless cleaners only here (leakage-free at load); see fnirs/clean.py.
     clean: str | list[str] | None = None
 
+    @override
     def key(self) -> str:
-        def f(x: float) -> str:
-            return str(x).replace(".", "p").replace("-", "m")
-        rs = "native" if self.resample is None else f(self.resample)
-        return (f"b{f(self.l_freq)}-{f(self.h_freq)}_t{f(self.tmin)}-{f(self.tmax)}"
-                f"_r{rs}_c{Chain.clean_key(self.clean)}")
+        rs = "native" if self.resample is None else self._fmt(self.resample)
+        return (f"b{self._fmt(self.l_freq)}-{self._fmt(self.h_freq)}"
+                f"_t{self._fmt(self.tmin)}-{self._fmt(self.tmax)}_r{rs}_c{Chain.clean_key(self.clean)}")
 
 
 class FnirsEpochs:

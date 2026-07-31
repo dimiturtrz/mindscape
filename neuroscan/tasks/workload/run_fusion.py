@@ -210,7 +210,7 @@ class RunFusion:
         exp = config.Config.load_experiment(args.exp, args.overrides)
         regime = exp.regime
         meta_e = store.Store.load(_EEG, _EEG_CFG)
-        meta_f = store.Store.load(_FNIRS, cast(EpochCfg, _FNIRS_CFG))
+        meta_f = store.Store.load(_FNIRS, _FNIRS_CFG)
         subs = sorted(set(meta_e["subject"].unique().to_list()) & set(meta_f["subject"].unique().to_list()))
         n_classes = int(cast(int, meta_e["label_id"].max())) + 1
         recenter = not exp.params.get("plain_eeg", False)

@@ -15,11 +15,9 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import cast
 
 from baselines.fnirs.windowed import WindowedConfig, WindowedFnirs
 from core.data import store
-from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.workload._eval import CvConfig, CvData, Eval
@@ -49,7 +47,7 @@ _ARMS: list[tuple[str, Callable[[], object] | None]] = [
 
 def main():
     Cli.setup_logging()
-    meta = store.Store.load(_DATASET, cast(EpochCfg, FnirsCfg()))
+    meta = store.Store.load(_DATASET, FnirsCfg())
     X, y = store.Store.gather(meta)
     groups = meta["subject"].to_numpy()
     chance = 1.0 / (int(y.max()) + 1)

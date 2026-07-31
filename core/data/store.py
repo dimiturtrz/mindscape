@@ -24,6 +24,7 @@ import polars as pl
 from core.config import Config
 from core.data.eeg.base import EpochCfg
 from core.data.registry import Registry
+from core.data.signal import Recipe
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class Store:
     raw adapters into a cached, common-schema cloud (per-subject npz + meta.csv), query-able as one thing."""
 
     @staticmethod
-    def dataset_dir(name: str, cfg: EpochCfg) -> Path:
+    def dataset_dir(name: str, cfg: Recipe) -> Path:
         return Config.processed_dir() / name / cfg.key()
 
     @staticmethod
@@ -53,7 +54,7 @@ class Store:
                  "epoch": i, "file": npz.name} for i in range(len(y))]
 
     @staticmethod
-    def build(name: str, cfg: EpochCfg, *, rebuild: bool = False) -> Path:
+    def build(name: str, cfg: Recipe, *, rebuild: bool = False) -> Path:
         """Consolidate one dataset into processed/<name>/<epochkey>/ (per-subject npz + meta.csv).
 
         Process-if-missing: epochs each subject only if its npz is absent; re-emits meta.csv each call.
@@ -75,7 +76,10 @@ class Store:
         for sub in adapter.subjects():
             npz = data / f"sub{sub}.npz"
             if rebuild or not npz.exists():
-                X, y, m = adapter.get_data([sub], cfg)
+                # the registry pairs each dataset with its own Recipe subtype (EpochCfg for EEG,
+                # FnirsCfg for fNIRS); the DatasetAdapter interface is typed on EpochCfg, so narrow here —
+                # the one place the modality-agnostic Store hands a recipe back to a concrete adapter.
+                X, y, m = adapter.get_data([sub], cast(EpochCfg, cfg))
                 np.savez_compressed(npz, X=X, y=y,
                                     session=m["session"].to_numpy(), run=m["run"].to_numpy())
             rows.extend(Store._rows_for_subject(name, sub, npz, label_names))
@@ -84,7 +88,7 @@ class Store:
         return out
 
     @staticmethod
-    def load(names: list[str] | str, cfg: EpochCfg) -> pl.DataFrame:
+    def load(names: list[str] | str, cfg: Recipe) -> pl.DataFrame:
         """Ensure each dataset is consolidated, then return ONE polars frame over all of them (the cloud
         for this recipe). Adds an absolute `path` column pointing at each subject npz."""
         names = [names] if isinstance(names, str) else list(names)
@@ -99,7 +103,7 @@ class Store:
         return pl.concat(frames, how="vertical_relaxed")
 
     @staticmethod
-    def channels(name: str, cfg: EpochCfg) -> list[str] | None:
+    def channels(name: str, cfg: Recipe) -> list[str] | None:
         """The dataset's channel names, from the processed cache (built by `build`). None if the adapter
         doesn't expose them. Ensures the dataset is consolidated first, so the channels.json exists."""
         out = Store.dataset_dir(name, cfg)
