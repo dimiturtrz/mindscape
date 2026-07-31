@@ -266,6 +266,7 @@ omit = [
     # one-off decode/probe RUNNERS (load -> decode-arms -> log; the shared decode logic is in workload/riemann.py, tested)
     "neuroscan/tasks/workload/augment_probe.py", "neuroscan/tasks/workload/source_decode.py",
     "neuroscan/tasks/workload/source_prior_decode.py", "neuroscan/tasks/workload/validate_coupling.py",
+    "neuroscan/tasks/workload/fusion_cca_probe.py",
     "neuroscan/tasks/cli.py",   # runner glue: logging.basicConfig + quiet-libs (side-effect setup, like tracking.py)
     "core/data/eeg/bnci2014_001.py",   # MOABB BNCI2014_001 adapter (download/disk, like the things_eeg*/shin2017 adapters)
 ]
