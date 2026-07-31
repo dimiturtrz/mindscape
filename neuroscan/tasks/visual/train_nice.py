@@ -155,11 +155,11 @@ class _StepCtx:
     encoder + its optimizer + learned logit-scale, plus the optional subject-adversary (bd 36g) and geo-prior
     Laplacian (bd 1x0). None for either aux term = that term is off."""
 
-    encoder: object
-    optimizer: object
-    logit_scale: object
-    discriminator: object | None
-    geo_lap: object | None
+    encoder: torch.nn.Module
+    optimizer: torch.optim.Optimizer
+    logit_scale: torch.Tensor
+    discriminator: SubjectDiscriminator | None
+    geo_lap: torch.Tensor | None
 
 
 @dataclass
@@ -351,7 +351,9 @@ class TrainNice:
         AdamW, plus a linear LR-warmup scheduler (opt-in, bd 07m: scales every group equally so the discriminative
         backbone/head ratio survives the ramp; warmup_epochs=0 -> a no-op constant-1.0 schedule)."""
         TorchPerf.enable_fast_matmul(device)  # every training path builds an optimizer here (bd 62ak)
-        encoder = EncoderRegistry.build_encoder(cfg.model, spec).to(device)  # type: ignore[attr-defined]
+        # build_encoder returns the thin ImageEncoder forward-contract; every concrete encoder IS an nn.Module,
+        # so narrow to it (same cast reconstruct.py makes) — then the _StepCtx it fills is fully typed.
+        encoder = cast(torch.nn.Module, EncoderRegistry.build_encoder(cfg.model, spec)).to(device)
         logit_scale = torch.nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
         # per-encoder optimizer groups if the encoder defines them (foundation: discriminative backbone/head LR),
         # else one group at cfg.lr (NICE — unchanged).
@@ -395,29 +397,31 @@ class TrainNice:
         """One training epoch over `steps`; returns (summed batch loss, n_batches). Keeps the per-step loss
         assembly in one place — InfoNCE (bd, CLIP loss) + optional subject-adversary term (GRL, bd 36g) +
         optional graph-Laplacian spatial-smoothness prior (bd 1x0) — with the mutable components carried by `tr`."""
-        tr.encoder.train()  # type: ignore[attr-defined]
+        tr.encoder.train()
         total_loss, n_batches = 0.0, 0
         for eeg_batch, target_batch, subj_batch in steps:
             eeg_batch = eeg_batch.to(device)
             target_batch = torch.nn.functional.normalize(target_batch.to(device), dim=-1)
-            tr.optimizer.zero_grad()  # type: ignore[attr-defined]
+            tr.optimizer.zero_grad()
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device == "cuda" and cfg.amp)):
-                z = tr.encoder(eeg_batch)  # type: ignore[operator]
+                z = tr.encoder(eeg_batch)
                 loss = Nice.clip_infonce(
                     z,
                     target_batch,
-                    tr.logit_scale.exp().clamp(max=100),  # type: ignore[attr-defined]
+                    tr.logit_scale.exp().clamp(max=100),
                     hard_beta=cfg.hard_beta,
                     soft_tau=cfg.soft_tau,
                 )
                 if cfg.mse_weight > 0:  # hit the CLIP embedding, not only its direction (bd ooi)
                     loss = loss + cfg.mse_weight * F.mse_loss(z, target_batch)  # both L2-normed: MSE on the sphere
                 if tr.discriminator is not None:  # push encoder to be subject-invariant (GRL, bd 36g)
-                    loss = loss + cfg.adv_weight * F.cross_entropy(tr.discriminator(z, lam), subj_batch.to(device))  # type: ignore[operator]
+                    loss = loss + cfg.adv_weight * F.cross_entropy(tr.discriminator(z, lam), subj_batch.to(device))
                 if tr.geo_lap is not None:  # montage-adjacency smoothness prior (bd 1x0)
+                    # geo_penalty is a NICE-only capability; geo_lap is non-None only when the encoder has it
+                    # (_geo_laplacian gates on hasattr), so this branch is unreachable for encoders without it.
                     loss = loss + cfg.geo_lambda * tr.encoder.geo_penalty(tr.geo_lap)  # type: ignore[attr-defined]
             loss.backward()  # bf16 autocast needs no GradScaler (unlike fp16)
-            tr.optimizer.step()  # type: ignore[attr-defined]
+            tr.optimizer.step()
             total_loss += loss.item()
             n_batches += 1
         return total_loss, n_batches
