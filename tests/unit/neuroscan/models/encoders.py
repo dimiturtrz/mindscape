@@ -12,6 +12,8 @@ from core.normalization.scale import Scale
 from core.normalization.zscore import ZScore
 from neuroscan.models.encoders import EncoderRegistry, EncoderSpec
 
+torch.manual_seed(0)
+
 
 def test_nice_builds_and_honours_the_contract():
     spec = EncoderSpec(n_channels=17, n_times=100, embed_dim=64)

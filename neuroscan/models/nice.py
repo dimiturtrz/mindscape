@@ -75,7 +75,8 @@ class NiceEncoder(nn.Module):
         channels with a per-channel weight; reshaped to W = [C, F·F], tr(Wᵀ L W) = ½ Σ_ij A_ij ‖w_i − w_j‖²
         pushes neighbouring electrodes toward similar mixing weights — the montage adjacency injected as a
         small-data prior (knowledge > data). `laplacian` from EegMontage.channel_laplacian, on the same device."""
-        w = self.spatial.weight.reshape(-1, self.spatial.weight.shape[2]).t()   # [C, F·F]
+        weight = self.spatial.weight
+        w = weight.reshape(-1, weight.shape[2]).t()   # [C, F·F]
         return (w * (laplacian @ w)).sum()
 
 

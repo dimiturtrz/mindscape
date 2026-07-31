@@ -3,6 +3,8 @@ import numpy as np
 
 from neuroscan.models import transforms as T
 
+np.random.seed(0)
+
 
 def test_crops_shape_and_trial_index():
     X = np.arange(4 * 2 * 10).reshape(4, 2, 10).astype(np.float32)

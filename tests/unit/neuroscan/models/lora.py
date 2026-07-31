@@ -11,6 +11,8 @@ from torch import nn
 
 from neuroscan.models.lora import _RANK, _TARGETS, Lora, LoraLinear
 
+torch.manual_seed(0)
+
 
 def test_fresh_adapter_reproduces_base_and_freezes_it():
     """Class: zero-init residual — B is zero so `LoraLinear` == base at step 0 (pretrained forward preserved);

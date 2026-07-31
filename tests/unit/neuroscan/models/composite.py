@@ -8,6 +8,9 @@ import torch
 
 from neuroscan.models.composite import Backbone, Head, HeadContext, Heads, HeadSpec, Model
 
+np.random.seed(0)
+torch.manual_seed(0)
+
 _C, _S, _D, _EMBED = 8, 3, 16, 32
 
 

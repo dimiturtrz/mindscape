@@ -11,6 +11,8 @@ from core.config import Config
 from neuroscan.models import foundation
 from neuroscan.models.encoders import EncoderRegistry, EncoderSpec
 
+torch.manual_seed(0)
+
 _CKPT = Config.data_root("pretrained") / "CBraMod" / "pretrained_weights.pth"
 _AVAILABLE = foundation._CBRAMOD_ROOT.exists() and _CKPT.exists()
 pytestmark = pytest.mark.skipif(not _AVAILABLE, reason="CBraMod checkout + weights not present (out-of-repo)")

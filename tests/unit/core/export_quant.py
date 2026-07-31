@@ -10,6 +10,8 @@ import pytest
 pytest.importorskip("onnxruntime")
 pytest.importorskip("onnxscript")
 
+np.random.seed(0)
+
 
 def _tiny_net():
     import torch  # noqa: F401
