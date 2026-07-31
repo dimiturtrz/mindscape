@@ -234,7 +234,8 @@ omit = [
     "core/decoder.py",   # typing.Protocol decoder contract (structural interface, no body)
     "core/data/registry.py",   # top-level dataset registry map (sibling core/data/*/registry.py already omitted)
     # GPU training entrypoints + torch models/trainers (device + data, not logic)
-    "neuroscan/tasks/visual/train_nice.py", "neuroscan/tasks/visual/retrieval_audit.py",
+    "neuroscan/tasks/visual/train_nice.py", "neuroscan/tasks/visual/epoch_dataset.py",
+    "neuroscan/tasks/visual/retrieval_audit.py",
     "neuroscan/tasks/visual/cross_dataset_eval.py",   # cross-dataset EEG1->EEG2 GPU runner
     "neuroscan/tasks/visual/loso_eval.py",   # leave-one-subject-out GPU runner (loops train_nice.train)
     "neuroscan/tasks/visual/frozen_head.py",   # frozen-backbone head sweep (external backbone + device, bd nm5)
@@ -244,6 +245,7 @@ omit = [
     "neuroscan/models/profile.py",   # fvcore params+FLOPs (model on device)
     "neuroscan/tasks/workload/feature_importance/optuna_search.py",   # Optuna study runner (entrypoint)
     "neuroscan/tasks/workload/feature_importance/differentiable.py",  # torch/GPU differentiable feature-selection runner
+    "neuroscan/tasks/workload/feature_importance/weighted_linear.py",  # torch model for the differentiable search
     "baselines/fusion/gate.py", "baselines/fusion/spatiotemporal.py", "core/data/eeg/braindecode_pre.py",
     # data adapters: filesystem read / OSF+OpenNeuro download
     "core/data/*/registry.py", "core/data/eeg/things_eeg2.py", "core/data/fnirs/shin2017.py",

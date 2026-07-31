@@ -21,7 +21,7 @@ from jaxtyping import Float
 from torch import nn
 
 from core.config import REPO, Config
-from neuroscan.models.composite import Backbone
+from neuroscan.models.backbone import Backbone
 
 _EEGPT_MODELS = REPO / "external" / "EEGPT" / "downstream" / "Modules" / "models"   # checked out @ a0e0a8f (Apache-2.0)
 _EEGPT_PATCH = 64          # EEGPT points/patch (checkpoint-fixed); 0.25 s at its rate

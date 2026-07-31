@@ -7,7 +7,7 @@ re-implement the csp-vs-net branch. The harness contract is the same for all: `f
 """
 from __future__ import annotations
 
-from typing import Protocol, cast
+from typing import cast
 
 import numpy as np
 from jaxtyping import Float
@@ -19,6 +19,7 @@ from baselines.eeg.riemann import Acm, Fgmdm, Mdm, TangentSpace
 from baselines.fnirs.features import FnirsLda
 from baselines.fnirs.glm import GlmBeta
 from baselines.fnirs.windowed import WindowedConfig, WindowedFnirs
+from core.decoder import Decoder
 from neuroscan.models.decoders import MODELS, BraindecodeClf
 
 # baselines that need the epoch sample rate: filter-designers (band-power, FBCSP) to build their filters,
@@ -28,15 +29,9 @@ _FS_METHODS = {"eeg_bandpower", "fbcsp", "fnirs_windowed", "fnirs_glm"}
 _FS_CONFIG = {"fbcsp": FbcspConfig, "fnirs_windowed": WindowedConfig}
 
 
-class _Classifier(Protocol):
-    """A classifier that has a predict_proba method (duck-type protocol)."""
-
-    def predict_proba(self, X: Float[np.ndarray, "n ..."]) -> Float[np.ndarray, "n k"]: ...
-
-
 class Methods:
     @staticmethod
-    def _proba(clf: _Classifier, X: Float[np.ndarray, "n ..."]) -> Float[np.ndarray, "n k"]:
+    def _proba(clf: Decoder, X: Float[np.ndarray, "n ..."]) -> Float[np.ndarray, "n k"]:
         """The single scorer for every Decoder — classical baseline or braindecode net both expose it."""
         return clf.predict_proba(X)
 

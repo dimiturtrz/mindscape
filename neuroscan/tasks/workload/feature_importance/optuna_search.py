@@ -43,9 +43,17 @@ _CFG = Path(__file__).with_name("optuna.yaml")            # study config lives b
 _STABLE_JACCARD = 0.6   # top-family sets agree across seeds at/above this Jaccard -> trust the ranking
 
 
+@dataclass
 class OptunaConfig:
-    """Placeholder type for Optuna study configuration (from OmegaConf)."""
-    pass
+    """The study config loaded from `optuna.yaml` (via OmegaConf) — the fields the search reads."""
+    dataset: str
+    out: str
+    n_trials: int
+    top_frac: float
+    weight_low: float
+    weight_high: float
+    fold_seeds: list[int]
+    k: int
 
 
 @dataclass
@@ -133,7 +141,7 @@ class OptunaSearch:
 
         optuna.logging.set_verbosity(optuna.logging.WARNING)                  # no per-trial spam
 
-        cfg = OmegaConf.load(args.config or _CFG)
+        cfg = cast(OptunaConfig, OmegaConf.load(args.config or _CFG))
         if args.trials:
             cfg.n_trials = args.trials
 

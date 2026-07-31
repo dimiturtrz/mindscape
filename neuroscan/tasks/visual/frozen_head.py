@@ -39,10 +39,10 @@ from torch import Tensor, nn
 from core.config import Config
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.montage import EegMontage
-from neuroscan.models.composite import HeadContext, Heads, HeadSpec
+from neuroscan.models.head import Head, HeadContext, HeadSpec
 from neuroscan.models.encoders import NORMALIZE_CHOICES, EncoderRegistry
 from neuroscan.models.foundation import Foundation, LoadedBackbone
-from neuroscan.models.nice import Nice
+from neuroscan.models.nice_loss import Nice
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tracking import Tracking
 
@@ -250,7 +250,7 @@ class FrozenHead:
         fit_idx = np.where(fit_mask)[0]
         val_feat, val_bank_t = cache.tr_feat[val_mask], torch.tensor(val_bank)
         n_tok = cache.tr_feat.shape[1] * cache.tr_feat.shape[2]   # C·S tokens (for the flat head's MLP in-dim)
-        head = Heads.build(spec, HeadContext(cache.d, cache.pos), n_tok=n_tok).to(device)
+        head = Head.build(spec, HeadContext(cache.d, cache.pos), n_tok=n_tok).to(device)
         logit_scale = nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
         opt = torch.optim.AdamW([*head.parameters(), logit_scale], lr=cfg.lr, weight_decay=1e-4)
         rng = np.random.default_rng(cfg.seed)

@@ -23,7 +23,7 @@ from jaxtyping import Float
 from torch import nn
 
 from core.config import REPO, Config
-from neuroscan.models.composite import Backbone
+from neuroscan.models.backbone import Backbone
 
 _CBRAMOD_ROOT = REPO / "external" / "CBraMod"   # checked out @ 0ff6be91 (MIT); see the fetch step above
 
