@@ -15,7 +15,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
 import numpy as np
 from jaxtyping import Float
@@ -40,7 +40,7 @@ class PairedDelta:
     @classmethod
     def _hits(cls, result: dict[str, object], k: int) -> Float[np.ndarray, "n"]:
         """The per-trial 0/1 hit vector at top-k from a `train --out` result (JSON keys are strings)."""
-        return np.asarray(result["single_trial_hits"][str(k)], dtype=float)  # type: ignore[index]
+        return np.asarray(cast("dict[str, object]", result["single_trial_hits"])[str(k)], dtype=float)
 
     @classmethod
     def compare(cls, hits_a: dict[int, np.ndarray], hits_b: dict[int, np.ndarray],

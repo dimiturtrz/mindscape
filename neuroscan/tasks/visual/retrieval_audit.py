@@ -75,7 +75,7 @@ class RetrievalAudit:
     @classmethod
     def _cells_from_result(cls, result: _TrainResult, regime: str) -> dict[str, dict[int, float]]:
         """Pull the (single-trial, concept-avg) top-1/5 out of one train() result into flat `{regime}_{avg}` keys."""
-        return {f"{regime}_single": dict(result["single_trial"]), f"{regime}_avg": dict(result["concept_avg"])}  # type: ignore[index]
+        return {f"{regime}_single": dict(result["single_trial"]), f"{regime}_avg": dict(result["concept_avg"])}
 
     @classmethod
     def summarize(cls, rows: list[AuditRowData], ks: tuple[int, ...] = (1, 5)) -> dict[str, object]:

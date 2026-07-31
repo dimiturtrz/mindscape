@@ -30,14 +30,17 @@ def test_montage_info_builds_average_referenced_eeg_info():
 
 
 def test_build_forward():
-    """Forward solution construction requires fsaverage; skip if unavailable."""
+    """The fsaverage template forward carries the montage it was built for. Skip ONLY when the template data /
+    network is unavailable (that's an environment gap, not a code defect) — any other error must surface."""
     pytest.importorskip("mne.datasets")
+    pytest.importorskip("nibabel")            # the `source` extra — source-space ops need it
     src = Source(["C3", "Cz", "C4"], 250.0)
     try:
         fwd, info = src.build_forward()
-        assert fwd is not None and info is not None
-    except Exception:
-        pytest.skip("fsaverage template not available")
+    except (FileNotFoundError, RuntimeError, OSError):
+        pytest.skip("fsaverage template / network not available")
+    assert info["ch_names"] == ["C3", "Cz", "C4"]                # the forward is built for our 3-electrode montage
+    assert fwd["nchan"] == 3                                      # one lead-field column-block per channel
 
 
 def test_cortical_labels():

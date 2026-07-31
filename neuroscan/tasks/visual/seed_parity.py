@@ -17,7 +17,7 @@ import json
 import logging
 import statistics
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice, _TrainResult
@@ -59,7 +59,7 @@ class SeedParity:
     @staticmethod
     def _agg(runs: list[_TrainResult], metric: str, k: str) -> AggStats:
         """mean/std of `runs[i][metric][k]` across seeds (metric = single_trial | concept_avg)."""
-        vals = [float(r[metric][k]) for r in runs]  # type: ignore[index]
+        vals = [float(cast("dict[str, dict[str, float]]", r)[metric][k]) for r in runs]   # metric/k are runtime keys
         return {"mean": statistics.fmean(vals), "std": statistics.pstdev(vals) if len(vals) > 1 else 0.0,
                 "vals": vals}
 
@@ -67,12 +67,12 @@ class SeedParity:
     def run(train_subjects: list[int], test_subject: int, seeds: list[int]) -> _PurityResult:
         out: _PurityResult = {
             "train": train_subjects, "test": test_subject, "seeds": seeds,
-            "arms": {}, "gap_naive_minus_optimized": {}}  # type: ignore[typeddict-unknown-key]
+            "arms": {}, "gap_naive_minus_optimized": {}}
         for arm, fname in _ARMS.items():
             base = json.loads((_CFG_DIR / fname).read_text())
             runs: list[_TrainResult] = []
             for seed in seeds:
-                cfg = TrainConfig(**{**base, "seed": seed})  # type: ignore[call-overload]
+                cfg = TrainConfig.model_validate({**base, "seed": seed})
                 logger.info(f"[{arm}] seed {seed} — {fname}")
                 runs.append(TrainNice.train(train_subjects, test_subject, cfg))
             out["arms"][arm] = {

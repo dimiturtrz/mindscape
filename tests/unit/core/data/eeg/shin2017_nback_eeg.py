@@ -72,26 +72,7 @@ def test_subjects(synthetic_mat, monkeypatch):
 
 
 def test_channels(synthetic_mat, monkeypatch):
-    """Test that channels() returns the EEG channel names."""
-    from types import SimpleNamespace
-    from unittest.mock import patch
-
-    # Create a mock adapter with _index that returns test data
-    adapter = mod.Shin2017NbackEegAdapter()
-
-    # Mock the loadmat to return synthetic channel data
-    mock_cnt = SimpleNamespace(
-        clab=np.array([f"E{i}" for i in range(28)] + ["HEOG", "VEOG"]),
-        fs=200.0,
-        x=np.zeros((200, 30))
-    )
-
-    with patch('core.data.eeg.shin2017_nback_eeg.sio.loadmat') as mock_loadmat:
-        mock_loadmat.return_value = {"cnt_nback": mock_cnt}
-        # Mock _index to return test data
-        monkeypatch.setattr(adapter, "_index", lambda: {1: Path("dummy")})
-        channels = adapter.channels()
-        assert channels is not None
-        assert isinstance(channels, list)
-        assert len(channels) == 28
-        assert all(isinstance(c, str) for c in channels)
+    """channels() reads the montage from the .mat and returns the 28 EEG names — the HEOG/VEOG pair dropped."""
+    monkeypatch.setattr(mod.Shin2017NbackEegAdapter, "_index", lambda self: {1: Path("dummy")})
+    channels = mod.Shin2017NbackEegAdapter().channels()
+    assert channels == [f"E{i}" for i in range(28)]              # 28 EEG, EOG pair excluded, in file order

@@ -67,32 +67,31 @@ def test_gather_aligned_raises_on_misaligned_labels(tmp_path):
         store.Store.gather_aligned(me, mf, "7")
 
 
-def test_build(tmp_path, monkeypatch):
-    """Test that build creates output directory and metadata."""
-    from core.data.eeg.base import EpochCfg
-    from unittest.mock import MagicMock, patch
-    import json
+class _FakeAdapter:
+    """A minimal in-memory DatasetAdapter: 2 subjects × 1 epoch, so build() has real arrays to cache/frame."""
+    label_map = {"class_a": 0, "class_b": 1}
 
+    def subjects(self):
+        return [1, 2]
+
+    def get_data(self, subs, cfg):
+        n = len(subs)
+        return (np.zeros((n, 2, 10), dtype=np.float32), np.array([0] * n),
+                pl.DataFrame({"session": ["s1"] * n, "run": ["0"] * n}))
+
+
+def test_build(tmp_path, monkeypatch):
+    """build() resolves the adapter, epochs every subject, and writes the per-dataset cache + meta index."""
+    from core.data.eeg.base import EpochCfg
     monkeypatch.setenv("MINDSCAPE_DATA", str(tmp_path / "data"))
     (tmp_path / "data").mkdir()
+    monkeypatch.setattr(store.Registry, "get_adapter", lambda name: _FakeAdapter())
 
-    # Mock the registry to avoid needing real datasets
-    with patch('core.data.store.Registry.get_adapter') as mock_get_adapter:
-        mock_adapter = MagicMock()
-        mock_adapter.subjects.return_value = [1]
-        mock_adapter.label_map = {0: "class_a", 1: "class_b"}
-        mock_adapter.channels.return_value = ["ch1", "ch2"]
-        mock_adapter.get_data.return_value = (
-            np.zeros((1, 2, 10), dtype=np.float32),
-            np.array([0]),
-            pl.DataFrame({"session": ["s1"], "run": ["0"]})
-        )
-        mock_get_adapter.return_value = mock_adapter
-
-        cfg = EpochCfg()
-        out = store.Store.build("test_dataset", cfg)
-        assert out.exists()
-        assert (out / "meta.csv").exists()
+    out = store.Store.build("test_dataset", EpochCfg())
+    assert (out / "meta.csv").exists()
+    meta = pl.read_csv(out / "meta.csv")
+    assert [str(s) for s in meta["subject"].to_list()] == ["1", "2"]   # one epoch per fake subject, in order
+    assert set(meta["label"].to_list()) == {"class_a"}                 # y=0 -> the id->name mapping applied
 
 
 def test_dataset_dir(tmp_path, monkeypatch):

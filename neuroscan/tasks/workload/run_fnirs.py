@@ -46,7 +46,7 @@ def main():
     method, regime = cast(str, exp.method), cast(str, exp.regime)
     cfg = FnirsCfg.model_validate(exp.recipe)
     meta = store.Store.load(dataset, cfg)  # type: ignore[arg-type]
-    n_classes = int(meta["label_id"].max()) + 1  # type: ignore[arg-type]
+    n_classes = int(cast(int, meta["label_id"].max())) + 1
     chance = 1.0 / n_classes
     logger.info(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · "
           f"{n_classes} classes {sorted(meta['label'].unique().to_list())} · recipe {cfg.key()}")

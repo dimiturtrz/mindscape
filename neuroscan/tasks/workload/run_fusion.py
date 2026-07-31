@@ -212,8 +212,7 @@ class RunFusion:
         meta_e = store.Store.load(_EEG, _EEG_CFG)
         meta_f = store.Store.load(_FNIRS, cast(EpochCfg, _FNIRS_CFG))
         subs = sorted(set(meta_e["subject"].unique().to_list()) & set(meta_f["subject"].unique().to_list()))
-        n_classes = int(meta_e["label_id"].max()  # type: ignore[arg-type]
-                        ) + 1
+        n_classes = int(cast(int, meta_e["label_id"].max())) + 1
         recenter = not exp.params.get("plain_eeg", False)
         logger.info(f"fusion cloud: {len(subs)} paired subjects · {n_classes} classes · chance {1/n_classes:.3f} · "
               f"EEG {'re-centered' if recenter else 'plain'} Riemann")
