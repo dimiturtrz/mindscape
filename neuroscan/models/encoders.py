@@ -67,6 +67,8 @@ class EncoderRegistry:
         if override == "scale":
             return CompositeNormalization([Scale(_CBRAMOD_SCALE)])
         if override == "mvnn":
+            if groups is None or conditions is None:
+                raise ValueError("mvnn normalization requires both groups and conditions to be provided")
             return CompositeNormalization([Mvnn(groups, conditions)])
         return CompositeNormalization([ZScore()])   # _AUTO for every encoder + explicit 'zscore'
 

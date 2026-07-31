@@ -12,6 +12,7 @@ make_split holds out whole datasets/vendors; ours holds out subjects/sessions â€
 """
 from __future__ import annotations
 
+import numpy as np
 import polars as pl
 from pydantic import BaseModel
 from sklearn.model_selection import GroupKFold
@@ -22,9 +23,9 @@ class SplitSpec(BaseModel):
     OR session); `val_subjects` = a held-out subject for tuning (not test) â€” if empty, a random `val_frac` is
     carved from the non-test rows instead; `seed` makes that carve deterministic."""
     model_config = {"arbitrary_types_allowed": True}
-    test_subjects: tuple = ()
-    test_sessions: tuple = ()
-    val_subjects: tuple = ()
+    test_subjects: tuple[int | str, ...] = ()
+    test_sessions: tuple[int | str, ...] = ()
+    val_subjects: tuple[int | str, ...] = ()
     val_frac: float = 0.2
     seed: int = 0
 
@@ -82,14 +83,14 @@ class Splits:
         see leave_one_subject_out)."""
         subs = sorted(meta["subject"].unique().to_list())
         gkf = GroupKFold(n_splits=k)
-        for i, (_tr, te) in enumerate(gkf.split(list(range(len(subs))), groups=subs)):
+        for i, (_tr, te) in enumerate(gkf.split(np.arange(len(subs)), groups=subs)):
             test_subs = [subs[j] for j in te]
             in_test = pl.col("subject").is_in(test_subs)
             yield f"fold{i}", meta.filter(~in_test), meta.filter(in_test)   # full train (no val carve)
 
     @staticmethod
-    def within_subject(meta: pl.DataFrame, subject: str, test_sessions=(), val_frac: float = 0.2,
-                       seed: int = 0) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    def within_subject(meta: pl.DataFrame, subject: str, test_sessions: tuple[int | str, ...] = (),
+                       val_frac: float = 0.2, seed: int = 0) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
         """One subject in isolation. If the dataset has distinct train/eval sessions, pass the eval
         session(s) as `test_sessions` (the standard 2a protocol); else a random `val_frac`/test carve."""
         one = meta.filter(pl.col("subject") == str(subject))

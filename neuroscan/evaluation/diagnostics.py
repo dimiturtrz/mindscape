@@ -10,7 +10,7 @@ import numpy as np
 
 class Diagnostics:
     @staticmethod
-    def spread(rows: list[dict], key: str = "acc") -> dict:
+    def spread(rows: list[dict[str, object]], key: str = "acc") -> dict[str, float]:
         """Summary of a per-group metric: mean / std / min / max — the cross-subject variability that the
         single mean number hides."""
         vals = np.array([r[key] for r in rows], float)

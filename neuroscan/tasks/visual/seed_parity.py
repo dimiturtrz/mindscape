@@ -17,13 +17,38 @@ import json
 import logging
 import statistics
 from pathlib import Path
+from typing import TypedDict, cast
 
 from neuroscan.tasks.cli import Cli
-from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
+from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice, _TrainResult
 
 logger = logging.getLogger(__name__)
 
 _CFG_DIR = Path(__file__).parent / "configs"
+
+
+class AggStats(TypedDict):
+    """Aggregated statistics: mean, std, and individual values."""
+    mean: float
+    std: float
+    vals: list[float]
+
+
+class _ArmResult(TypedDict):
+    """Results for one arm (naive or optimized), keyed by top-k (int, as retrieval_topk keys it)."""
+    single_trial: dict[int, AggStats]
+    concept_avg: dict[int, AggStats]
+
+
+class _PurityResult(TypedDict):
+    """Top-level result structure for the parity run."""
+    train: list[int]
+    test: int
+    seeds: list[int]
+    arms: dict[str, _ArmResult]
+    gap_naive_minus_optimized: dict[str, float]
+
+
 _ARMS = {"naive": "perception_naive.json", "optimized": "perception_optimized.json"}
 
 
@@ -32,30 +57,33 @@ class SeedParity:
     (public names kept). `run` trains both arms across seeds; `_agg` reduces the per-seed runs to mean/std."""
 
     @staticmethod
-    def _agg(runs: list[dict], metric: str, k: str) -> dict:
-        """mean/std of `runs[i][metric][k]` across seeds (metric = single_trial | concept_avg)."""
-        vals = [r[metric][k] for r in runs]
+    def _agg(runs: list[_TrainResult], metric: str, k: int) -> AggStats:
+        """mean/std of `runs[i][metric][k]` across seeds (metric = single_trial | concept_avg; k = top-k, int
+        as `retrieval_topk` keys it — NOT a string)."""
+        vals = [float(cast("dict[str, dict[int, float]]", r)[metric][k]) for r in runs]   # metric is a runtime key
         return {"mean": statistics.fmean(vals), "std": statistics.pstdev(vals) if len(vals) > 1 else 0.0,
                 "vals": vals}
 
     @staticmethod
-    def run(train_subjects: list[int], test_subject: int, seeds: list[int]) -> dict:
-        out: dict = {"train": train_subjects, "test": test_subject, "seeds": seeds, "arms": {}}
+    def run(train_subjects: list[int], test_subject: int, seeds: list[int]) -> _PurityResult:
+        out: _PurityResult = {
+            "train": train_subjects, "test": test_subject, "seeds": seeds,
+            "arms": {}, "gap_naive_minus_optimized": {}}
         for arm, fname in _ARMS.items():
             base = json.loads((_CFG_DIR / fname).read_text())
-            runs = []
+            runs: list[_TrainResult] = []
             for seed in seeds:
-                cfg = TrainConfig(**{**base, "seed": seed})
+                cfg = TrainConfig.model_validate({**base, "seed": seed})
                 logger.info(f"[{arm}] seed {seed} — {fname}")
                 runs.append(TrainNice.train(train_subjects, test_subject, cfg))
             out["arms"][arm] = {
-                "single_trial": {k: SeedParity._agg(runs, "single_trial", k) for k in ("1", "5")},
-                "concept_avg": {k: SeedParity._agg(runs, "concept_avg", k) for k in ("1", "5")},
+                "single_trial": {k: SeedParity._agg(runs, "single_trial", k) for k in (1, 5)},
+                "concept_avg": {k: SeedParity._agg(runs, "concept_avg", k) for k in (1, 5)},
             }
         n, o = out["arms"]["naive"], out["arms"]["optimized"]
         out["gap_naive_minus_optimized"] = {
-            "single_trial_top1": n["single_trial"]["1"]["mean"] - o["single_trial"]["1"]["mean"],
-            "concept_avg_top1": n["concept_avg"]["1"]["mean"] - o["concept_avg"]["1"]["mean"],
+            "single_trial_top1": n["single_trial"][1]["mean"] - o["single_trial"][1]["mean"],
+            "concept_avg_top1": n["concept_avg"][1]["mean"] - o["concept_avg"][1]["mean"],
         }
         return out
 

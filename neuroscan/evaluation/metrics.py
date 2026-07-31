@@ -6,6 +6,7 @@ the gap between confidence and accuracy that domain shift blows open (the siblin
 from __future__ import annotations
 
 import itertools
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -20,9 +21,9 @@ class BootCfg:
 
     n_boot: int = 1000
     alpha: float = 0.05
-    rng: object = None
+    rng: np.random.Generator | None = None
 
-    def gen(self):
+    def gen(self) -> np.random.Generator:
         return np.random.default_rng(0) if self.rng is None else self.rng
 
 
@@ -39,12 +40,12 @@ class Metrics:
     `np.mean` over a per-trial hit vector (`Nice.retrieval_hits`); the fold-free answer to bd 5s3l/s1t2."""
 
     @staticmethod
-    def _resample(arrays, idx):
+    def _resample(arrays: list[np.ndarray], idx: Int[np.ndarray, "n"]) -> list[np.ndarray]:
         """Index the first axis (= trial) of every metric-input array by one bootstrap draw."""
         return [np.asarray(a)[idx] for a in arrays]
 
     @staticmethod
-    def _interval(point, samples, alpha):
+    def _interval(point: float, samples: Sequence[float], alpha: float) -> tuple[float, float, float]:
         """(point, lo, hi) — percentile interval over the finite bootstrap samples (NaNs dropped)."""
         s = np.asarray(samples, dtype=np.float64)
         s = s[np.isfinite(s)]
@@ -54,19 +55,22 @@ class Metrics:
         return (point, float(lo), float(hi))
 
     @staticmethod
-    def boot_ci(metric_fn, *arrays, cfg: BootCfg = _DEFAULT_BOOT) -> tuple[float, float, float]:
+    def boot_ci(metric_fn: Callable[..., float], *arrays: np.ndarray,
+                cfg: BootCfg = _DEFAULT_BOOT) -> tuple[float, float, float]:
         """(point, lo, hi) for `metric_fn(*arrays)` — percentile bootstrap over the test trials. `metric_fn`
         takes the arrays in order (retrieval: `np.mean` over one hit vector); every array's first axis is the
         trial, resampled by a shared index."""
-        arrays = [np.asarray(a) for a in arrays]
-        n = len(arrays[0])
-        point = float(metric_fn(*arrays))
+        arrays_list: list[np.ndarray] = [np.asarray(a) for a in arrays]
+        n = len(arrays_list[0])
+        point = float(metric_fn(*arrays_list))
         draws = cfg.gen().integers(0, n, size=(cfg.n_boot, n))
-        samples = [metric_fn(*Metrics._resample(arrays, idx)) for idx in draws]
+        samples = [metric_fn(*Metrics._resample(arrays_list, idx)) for idx in draws]
         return Metrics._interval(point, samples, cfg.alpha)
 
     @staticmethod
-    def boot_delta_ci(metric_fn, arrays_a, arrays_b, cfg: BootCfg = _DEFAULT_BOOT) -> tuple[float, float, float]:
+    def boot_delta_ci(metric_fn: Callable[..., float], arrays_a: Sequence[np.ndarray],
+                      arrays_b: Sequence[np.ndarray],
+                      cfg: BootCfg = _DEFAULT_BOOT) -> tuple[float, float, float]:
         """(delta, lo, hi) for metric(B) − metric(A), PAIRED bootstrap. Same resampled trial indices hit both
         runs each draw, so shared test-set noise cancels — a CI that excludes 0 is an honest 'B differs from A'.
         Requires A and B scored on the SAME test trials in the SAME order."""
@@ -89,12 +93,14 @@ class Metrics:
         return float(cohen_kappa_score(y_true, y_pred))
 
     @staticmethod
-    def ece(conf: Float[np.ndarray, "n"], correct: Bool[np.ndarray, "n"], n_bins: int = 15) -> tuple[float, list]:
+    def ece(conf: Float[np.ndarray, "n"], correct: Bool[np.ndarray, "n"],
+            n_bins: int = 15) -> tuple[float, list[tuple[float, float, float]]]:
         """Expected Calibration Error + per-bin (conf, acc, weight) for a reliability diagram.
         `conf` = max-softmax confidence per sample; `correct` = 1.0/0.0 whether the argmax was right."""
         conf, correct = np.asarray(conf, float), np.asarray(correct, float)
         edges = np.linspace(0, 1, n_bins + 1)
-        e, bins = 0.0, []
+        e: float = 0.0
+        bins: list[tuple[float, float, float]] = []
         for lo, hi in itertools.pairwise(edges):
             m = (conf > lo) & (conf <= hi)
             if m.sum() == 0:

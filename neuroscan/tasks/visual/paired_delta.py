@@ -15,6 +15,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import TypedDict, cast
 
 import numpy as np
 from jaxtyping import Float
@@ -26,20 +27,27 @@ from neuroscan.tasks.cli import Cli
 logger = logging.getLogger(__name__)
 
 
+class ComparisonResult(TypedDict):
+    """Per-k comparison result with CIs for both arms and delta."""
+    a: tuple[float, float, float]
+    b: tuple[float, float, float]
+    delta: tuple[float, float, float]
+
+
 class PairedDelta:
     """Paired bootstrap delta-CI between two persisted retrieval runs (their per-trial hit vectors)."""
 
     @classmethod
-    def _hits(cls, result: dict, k: int) -> Float[np.ndarray, "n"]:
+    def _hits(cls, result: dict[str, object], k: int) -> Float[np.ndarray, "n"]:
         """The per-trial 0/1 hit vector at top-k from a `train --out` result (JSON keys are strings)."""
-        return np.asarray(result["single_trial_hits"][str(k)], dtype=float)
+        return np.asarray(cast("dict[str, object]", result["single_trial_hits"])[str(k)], dtype=float)
 
     @classmethod
     def compare(cls, hits_a: dict[int, np.ndarray], hits_b: dict[int, np.ndarray],
-                cfg: BootCfg) -> dict[int, dict]:
+                cfg: BootCfg) -> dict[int, ComparisonResult]:
         """Per-k: CI on each arm + the PAIRED delta CI (b − a). Requires the two arms scored on the same
         trials in the same order (asserts equal length). Returns {k: {a, b, delta}} of (point, lo, hi)."""
-        out: dict[int, dict] = {}
+        out: dict[int, ComparisonResult] = {}
         for k in sorted(hits_a):
             a, b = hits_a[k], hits_b[k]
             if len(a) != len(b):
@@ -57,7 +65,7 @@ class PairedDelta:
         return f"{p:.2f}% [{lo:.2f}, {hi:.2f}]"
 
     @classmethod
-    def report(cls, name_a: str, name_b: str, comparison: dict[int, dict]) -> None:
+    def _report(cls, name_a: str, name_b: str, comparison: dict[int, ComparisonResult]) -> None:
         for k, r in comparison.items():
             verdict = "REAL (CI excludes 0)" if r["delta"][1] > 0 else \
                       "noise (CI straddles 0)" if r["delta"][2] >= 0 else "REVERSED"
@@ -80,7 +88,7 @@ class PairedDelta:
         hits_a = {k: cls._hits(res_a, k) for k in ks}
         hits_b = {k: cls._hits(res_b, k) for k in ks}
         comparison = cls.compare(hits_a, hits_b, BootCfg(n_boot=args.n_boot, alpha=args.alpha))
-        cls.report(Path(args.a).stem, Path(args.b).stem, comparison)
+        cls._report(Path(args.a).stem, Path(args.b).stem, comparison)
 
 
 if __name__ == "__main__":

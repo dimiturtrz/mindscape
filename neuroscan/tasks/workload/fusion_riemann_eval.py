@@ -13,6 +13,7 @@ representation, right model, per-subject re-centered) — retire the brain-camer
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import numpy as np
 
@@ -39,13 +40,15 @@ class FusionRiemannEval:
     """Brain-camera fusion Riemann-eval helpers — the free helpers folded in as staticmethods."""
 
     @classmethod
-    def _build_all(cls, band="sum"):
+    def _build_all(cls, band: str = "sum") -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
-        mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=_FN_TMAX))
+        mf = store.Store.load("shin2017_nback", cast(EpochCfg, FnirsCfg(tmax=_FN_TMAX)))
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
         ch_e = eegmod.Shin2017NbackEegAdapter.adapter().channels()
         pos_e = bc.EegMontage.eeg_positions(ch_e)
-        Cs, ys, gs = [], [], []
+        Cs: list[np.ndarray] = []
+        ys: list[np.ndarray] = []
+        gs: list[np.ndarray] = []
         for s in subs:
             Xe, Xf, ye = store.Store.gather_aligned(me, mf, s)
             if _CSD:
@@ -64,7 +67,8 @@ class FusionRiemannEval:
         C, y, g = cls._build_all()
         logger.info(f"fused-only riemann · {C.shape[0]} blocks · {len(set(g))} subj · "
                     f"cov {C.shape[1:]} · chance {1/(y.max()+1):.3f}")
-        accs, kaps = [], []
+        accs: list[float] = []
+        kaps: list[float] = []
         for yte, proba in Riemann.cross_subject_folds(C, y, g, _SEEDS, _K):
             pred = proba.argmax(1)
             accs.append(metrics.Metrics.accuracy(yte, pred))

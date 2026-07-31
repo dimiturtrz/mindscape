@@ -7,6 +7,11 @@ re-implement the csp-vs-net branch. The harness contract is the same for all: `f
 """
 from __future__ import annotations
 
+from typing import cast
+
+import numpy as np
+from jaxtyping import Float
+
 from baselines.eeg.bandpower import EegBandpower
 from baselines.eeg.csp_lda import CspLda
 from baselines.eeg.fbcsp import Fbcsp, FbcspConfig
@@ -14,6 +19,7 @@ from baselines.eeg.riemann import Acm, Fgmdm, Mdm, TangentSpace
 from baselines.fnirs.features import FnirsLda
 from baselines.fnirs.glm import GlmBeta
 from baselines.fnirs.windowed import WindowedConfig, WindowedFnirs
+from core.decoder import Decoder
 from neuroscan.models.decoders import MODELS, BraindecodeClf
 
 # baselines that need the epoch sample rate: filter-designers (band-power, FBCSP) to build their filters,
@@ -25,12 +31,12 @@ _FS_CONFIG = {"fbcsp": FbcspConfig, "fnirs_windowed": WindowedConfig}
 
 class Methods:
     @staticmethod
-    def _proba(clf, X):
+    def _proba(clf: Decoder, X: Float[np.ndarray, "n ..."]) -> Float[np.ndarray, "n k"]:
         """The single scorer for every Decoder — classical baseline or braindecode net both expose it."""
         return clf.predict_proba(X)
 
     @staticmethod
-    def _baseline_classes() -> dict:
+    def _baseline_classes() -> dict[str, type]:
         """name -> Baseline class."""
         return {"csp_lda": CspLda, "riemann": TangentSpace, "riemann_acm": Acm, "riemann_mdm": Mdm,
                 "riemann_fgmdm": Fgmdm, "fbcsp": Fbcsp, "fnirs_lda": FnirsLda, "fnirs_windowed": WindowedFnirs,
@@ -48,7 +54,7 @@ class Methods:
             if name in _FS_CONFIG and fs is not None:
                 config = _FS_CONFIG[name](fs=fs)                  # fs is a config field, ctor takes the config
                 return (lambda X, y: cls(config).fit(X, y), Methods._proba)
-            kw = {"fs": fs} if (name in _FS_METHODS and fs is not None) else {}
+            kw: dict[str, float] = {"fs": fs} if (name in _FS_METHODS and fs is not None) else {}
             return (lambda X, y: cls(**kw).fit(X, y), Methods._proba)
         fit, _ = BraindecodeClf.make(name)       # net builds its own cfg; its scorer is predict_proba too
         return (fit, Methods._proba)

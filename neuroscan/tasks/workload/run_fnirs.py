@@ -17,6 +17,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import cast
 
 from core import config
 from core.data import store
@@ -40,16 +41,17 @@ def main():
                     help="skip updating the committed results.json snapshot (scratch/experimental runs)")
     args = ap.parse_args()
 
-    exp = config.load_experiment(args.exp, args.overrides)
-    dataset, method, regime = exp.dataset, exp.method, exp.regime
-    cfg = FnirsCfg(**exp.recipe)
-    meta = store.Store.load(dataset, cfg)
-    n_classes = int(meta["label_id"].max()) + 1
+    exp = config.Config.load_experiment(args.exp, args.overrides)
+    dataset = cast(str, exp.dataset)
+    method, regime = cast(str, exp.method), cast(str, exp.regime)
+    cfg = FnirsCfg.model_validate(exp.recipe)
+    meta = store.Store.load(dataset, cfg)  # type: ignore[arg-type]
+    n_classes = int(cast(int, meta["label_id"].max())) + 1
     chance = 1.0 / n_classes
     logger.info(f"cloud: {len(meta)} epochs · {meta['subject'].n_unique()} subjects · "
           f"{n_classes} classes {sorted(meta['label'].unique().to_list())} · recipe {cfg.key()}")
 
-    test_sessions = [exp.test_session] if (regime == "within" and exp.test_session) else ()
+    test_sessions = tuple([exp.test_session]) if (regime == "within" and exp.test_session) else ()
     folds = harness.Harness.folds_for(meta, regime, test_sessions=test_sessions)
     fit_fn, score_fn = models.Methods.get_method(method)
 

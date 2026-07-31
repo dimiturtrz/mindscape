@@ -24,8 +24,10 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict, cast
 
 import numpy as np
+import polars as pl
 from sklearn.model_selection import GroupKFold
 
 from baselines.eeg import transfer
@@ -43,21 +45,58 @@ from neuroscan.tasks.workload.riemann import Riemann
 logger = logging.getLogger(__name__)
 
 
+class _FoldResult(TypedDict):
+    """Per-fold results from fusion: accuracy metrics for each modality and fusion strategy."""
+    fold: str
+    n: int
+    eeg: float
+    fnirs: float
+    late: float
+    feature: float
+
+
+class _ComplementarityDict(TypedDict):
+    """Complementarity analysis between modalities."""
+    best_single: float
+    oracle_either: float
+    err_corr: float
+    both_wrong: float
+
+
+class _AggregationDict(TypedDict, total=False):
+    """Aggregation sweep results for different combiners."""
+    eeg: float
+    fnirs: float
+    late: float
+    feature: float
+    stacking: float
+    cal_eeg: float
+    cal_fnirs: float
+    eeg_conf_gap: float
+    fnirs_conf_gap: float
+    mean: float
+    product: float
+    conf_weight: float
+    maxconf_pick: float
+    cal_mean: float
+    cal_conf_weight: float
+
+
 @dataclass
 class _RunnerModels:
     """The four modality callables the fold loop needs: the EEG probability + tangent-feature functions
     (both re-centered, so both take subject groups) and the fNIRS fit/score."""
-    eeg_probs: Callable
-    eeg_feats: Callable
-    fnirs_fit: Callable
-    fnirs_score: Callable
+    eeg_probs: Callable[..., np.ndarray]
+    eeg_feats: Callable[..., np.ndarray]
+    fnirs_fit: Callable[..., object]
+    fnirs_score: Callable[..., np.ndarray]
 
 
 @dataclass
 class _Analysis:
     """The two fusion diagnostics reported together: complementarity/oracle-headroom + the aggregation sweep."""
-    complementarity: dict
-    aggregation: dict
+    complementarity: _ComplementarityDict
+    aggregation: _AggregationDict
 
 _EEG, _FNIRS = "shin2017_nback_eeg", "shin2017_nback"
 # the recipes each modality decodes best at (from the unimodal runs)
@@ -69,7 +108,7 @@ class RunFusion:
     """Stage-3 EEG+fNIRS fusion helpers — the free helpers folded in as staticmethods."""
 
     @classmethod
-    def _gather_aligned(cls, meta_e, meta_f, subs) -> FusionData:
+    def _gather_aligned(cls, meta_e: pl.DataFrame, meta_f: pl.DataFrame, subs: list[str]) -> FusionData:
         """Gather EEG + fNIRS epochs for `subs`, block-aligned, as a FusionData (with per-block subject groups).
         Hard guard that the two label sequences match — catches any silent misalignment before it can fake a
         fusion gain."""
@@ -92,7 +131,8 @@ class RunFusion:
         return ap.parse_args()
 
     @classmethod
-    def _run_folds(cls, fold_subs, meta_e, meta_f, subs, models: _RunnerModels):
+    def _run_folds(cls, fold_subs: list[list[str]], meta_e: pl.DataFrame, meta_f: pl.DataFrame,
+                   subs: list[int], models: _RunnerModels) -> tuple[list[_FoldResult], PooledProbs]:
         """Run every fold: unimodal + fused predictions per fold. Returns (rows, PooledProbs) — the pooled probs
         hold the concatenated correct-masks and probability stacks used for the oracle + aggregation-sweep."""
         field_names = ("eeg", "fnirs", "stacking", "cal_eeg", "cal_fnirs", "y", "eeg_correct", "fnirs_correct")
@@ -120,20 +160,21 @@ class RunFusion:
                                 ("eeg_correct", eeg_probs.argmax(1) == test.y),
                                 ("fnirs_correct", fnirs_probs.argmax(1) == test.y)):
                 pooled[name].append(value)
-            rows.append({
+            rows.append(cast(_FoldResult, {
                 "fold": str(fold), "n": len(test.y),
                 "eeg": metrics.Metrics.accuracy(test.y, eeg_probs.argmax(1)),
                 "fnirs": metrics.Metrics.accuracy(test.y, fnirs_probs.argmax(1)),
                 "late": metrics.Metrics.accuracy(test.y, late.argmax(1)),
                 "feature": metrics.Metrics.accuracy(test.y, feature.argmax(1)),
-            })
+            }))
             logger.info(f"  fold{fold}: eeg {rows[-1]['eeg']:.3f} | fnirs {rows[-1]['fnirs']:.3f} | "
                   f"late {rows[-1]['late']:.3f} | feature {rows[-1]['feature']:.3f}")
 
         return rows, PooledProbs(**{name: np.concatenate(values) for name, values in pooled.items()})
 
     @classmethod
-    def _report(cls, regime, n_classes, rows, mean, analysis: _Analysis):
+    def _report(cls, regime: str | None, n_classes: int, rows: list[_FoldResult], mean: dict[str, float],
+                analysis: _Analysis) -> None:
         """Print the per-role means, fusion-vs-unimodal deltas, oracle headroom, and the aggregation sweep."""
         comp, agg = analysis.complementarity, analysis.aggregation
         logger.info(f"\n=== fusion · {regime} · shin n-back ({len(rows)} folds, chance {1/n_classes:.3f}) ===")
@@ -154,11 +195,11 @@ class RunFusion:
               "  <- ~0 => confidence does not predict correctness => output-space fusion cannot select")
 
     @classmethod
-    def _subject_folds(cls, subs, k):
+    def _subject_folds(cls, subs: list[int | str], k: int):
         """GroupKFold over the subject list (each subject in one test fold)."""
         subs = list(map(str, subs))
         gkf = GroupKFold(n_splits=k)
-        for i, (tr, te) in enumerate(gkf.split(list(range(len(subs))), groups=subs)):
+        for i, (tr, te) in enumerate(gkf.split(np.arange(len(subs)), groups=subs)):
             yield f"fold{i}", [subs[j] for j in tr], None, [subs[j] for j in te]
 
     @classmethod
@@ -166,12 +207,12 @@ class RunFusion:
         Cli.setup_logging()
         args = cls._parse_args()
 
-        exp = config.load_experiment(args.exp, args.overrides)
+        exp = config.Config.load_experiment(args.exp, args.overrides)
         regime = exp.regime
         meta_e = store.Store.load(_EEG, _EEG_CFG)
-        meta_f = store.Store.load(_FNIRS, _FNIRS_CFG)
+        meta_f = store.Store.load(_FNIRS, cast(EpochCfg, _FNIRS_CFG))
         subs = sorted(set(meta_e["subject"].unique().to_list()) & set(meta_f["subject"].unique().to_list()))
-        n_classes = int(meta_e["label_id"].max()) + 1
+        n_classes = int(cast(int, meta_e["label_id"].max())) + 1
         recenter = not exp.params.get("plain_eeg", False)
         logger.info(f"fusion cloud: {len(subs)} paired subjects · {n_classes} classes · chance {1/n_classes:.3f} · "
               f"EEG {'re-centered' if recenter else 'plain'} Riemann")
@@ -179,7 +220,8 @@ class RunFusion:
         eeg_fit, eeg_score = models.Methods.get_method("riemann")   # plain-EEG fallback (fusion EEG is Riemann)
         fn_fit, fn_score = models.Methods.get_method("fnirs_lda")
 
-        def eeg_probs(Xtr, ytr, gtr, Xte, gte):
+        def eeg_probs(Xtr: np.ndarray, ytr: np.ndarray, gtr: np.ndarray, Xte: np.ndarray,
+                      gte: np.ndarray) -> np.ndarray:
             """EEG decoder as a probability fn. Default = zero-shot RE-CENTERED Riemann (recenter each subject —
             train AND test — to the identity, unsupervised); needs the subject groups, so it can't be a plain
             get_method decoder. The `nback_fusion_plain` config (params.plain_eeg) falls back to plain Riemann."""
@@ -188,7 +230,7 @@ class RunFusion:
             return transfer.zero_shot_predict(transfer.Domain(Riemann.cov(Xtr), ytr, gtr),
                                               transfer.Domain(Riemann.cov(Xte), groups=gte), scale=False)
 
-        def eeg_feats(X, g):
+        def eeg_feats(X: np.ndarray, g: np.ndarray) -> np.ndarray:
             """EEG feature vector for feature-level fusion — the re-centered tangent-space rep, so its EEG side
             matches the strong probs-side EEG (not a crude log-variance)."""
             return transfer.recentered_tangent_features(Riemann.cov(X), g)
@@ -210,7 +252,8 @@ class RunFusion:
         agg = combine.aggregation_sweep(pooled)                  # every output-space combiner
         comp["best_aggregator"] = float(max(agg[k] for k in combine.SWEEP_KEYS))
         comp["oracle_gap_captured"] = comp["best_aggregator"] - comp["best_single"]
-        cls._report(regime, n_classes, rows, mean, _Analysis(comp, agg))
+        cls._report(regime, n_classes, rows, mean,
+                    _Analysis(cast(_ComplementarityDict, comp), cast(_AggregationDict, agg)))
 
         run_dir = Path(args.out) if args.out else Path("runs") / f"fusion_{regime}_shin2017_nback"
         run_dir.mkdir(parents=True, exist_ok=True)

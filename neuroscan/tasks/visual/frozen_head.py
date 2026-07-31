@@ -28,6 +28,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict
 
 import numpy as np
 import torch
@@ -38,16 +39,33 @@ from torch import Tensor, nn
 from core.config import Config
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.montage import EegMontage
-from neuroscan.models.composite import HeadContext, Heads, HeadSpec
 from neuroscan.models.encoders import NORMALIZE_CHOICES, EncoderRegistry
 from neuroscan.models.foundation import Foundation, LoadedBackbone
-from neuroscan.models.nice import Nice
+from neuroscan.models.head import Head, HeadContext, HeadSpec
+from neuroscan.models.nice_loss import Nice
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tracking import Tracking
 
 logger = logging.getLogger(__name__)
 
 _FEAT_BATCH = 256     # backbone forward batch for the one-time precompute
+
+
+class RetrievalResult(TypedDict):
+    """Retrieval evaluation result with top-k metrics."""
+    single_trial: dict[int, float]
+    concept_avg: dict[int, float]
+    continuous: dict[str, float]
+
+
+class ArmResult(TypedDict):
+    """Result from training one arm with arm name, epoch, and retrieval metrics."""
+    arm: str
+    best_val_epoch: int
+    val_top1: float
+    single_trial: dict[int, float]
+    concept_avg: dict[int, float]
+    continuous: dict[str, float]
 _TOPO_GRIDS = (12, 16, 24)         # topo mini-sweep (bd m69x.2): scalp-image resolution
 _TOPO_SIGMAS = (0.1, 0.2, 0.35)    # topo mini-sweep: RBF interpolation width on the unit-disk montage
 
@@ -180,6 +198,8 @@ class FrozenHead:
             logger.info(f"cache hit {path.name}: {tuple(blob['feat'].shape)}")
             return blob["feat"], blob["concept"], blob["files"]
         loaded = extract.loaded
+        if loaded is None:
+            raise RuntimeError("backbone must be loaded when cache is missing")
         eeg, concept, files, _ = cls._load(subjects, split, loaded.sample_rate)
         feat = cls._features(loaded.module, eeg, extract.device, loaded.name, extract.normalize)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -210,7 +230,7 @@ class FrozenHead:
 
     @classmethod
     @torch.no_grad()
-    def _retrieval(cls, head, eval_set: _EvalSet, device: str) -> dict:
+    def _retrieval(cls, head: nn.Module, eval_set: _EvalSet, device: str) -> RetrievalResult:
         head.eval()
         feat, concept, bank = eval_set.feat, eval_set.concept, eval_set.bank
         emb = torch.cat([F.normalize(head(feat[i:i + 4096].float().to(device)), dim=-1).cpu()
@@ -223,14 +243,14 @@ class FrozenHead:
                 "continuous": Nice.retrieval_continuous(emb, bank, labels)}   # angular-error extras (bd 2y7k)
 
     @classmethod
-    def _train_arm(cls, spec: HeadSpec, cache: Cache, device: str, cfg: FitCfg) -> dict:
+    def _train_arm(cls, spec: HeadSpec, cache: Cache, device: str, cfg: FitCfg) -> ArmResult:
         torch.manual_seed(cfg.seed)
         fit_mask, val_mask, val_lab, val_bank = cls._val_concepts(
             cache.tr_concept, cache.tr_tgt.numpy(), cfg.seed, 0.1)
         fit_idx = np.where(fit_mask)[0]
         val_feat, val_bank_t = cache.tr_feat[val_mask], torch.tensor(val_bank)
         n_tok = cache.tr_feat.shape[1] * cache.tr_feat.shape[2]   # C·S tokens (for the flat head's MLP in-dim)
-        head = Heads.build(spec, HeadContext(cache.d, cache.pos), n_tok=n_tok).to(device)
+        head = Head.build(spec, HeadContext(cache.d, cache.pos), n_tok=n_tok).to(device)
         logit_scale = nn.Parameter(torch.tensor(np.log(1 / 0.07), dtype=torch.float32, device=device))
         opt = torch.optim.AdamW([*head.parameters(), logit_scale], lr=cfg.lr, weight_decay=1e-4)
         rng = np.random.default_rng(cfg.seed)
@@ -262,7 +282,8 @@ class FrozenHead:
             if ep % 15 == 0 or ep == cfg.epochs - 1:
                 logger.info(f"    {spec.name} ep {ep:2d}/{cfg.epochs}  loss {total_loss / max(1, n_batches):.3f}  "
                             f"val-top1 {val_top1*100:.2f}%  {elapsed:.0f}s  ~{eta:.0f}s left")
-        head.load_state_dict(best_state)
+        if best_state is not None:
+            head.load_state_dict(best_state)
         test = cls._retrieval(head, _EvalSet(cache.test_feat, cache.test_concept, cache.test_bank), device)
         return {"arm": spec.name, "best_val_epoch": best_ep, "val_top1": best_val, **test}
 

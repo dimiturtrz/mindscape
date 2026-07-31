@@ -20,6 +20,7 @@ fused attention either, so the 20-line hand-roll here is the lighter equal — n
 from __future__ import annotations
 
 import math
+from typing import override
 
 from jaxtyping import Float
 from torch import Tensor, nn
@@ -45,12 +46,9 @@ class LoraLinear(nn.Module):
         nn.init.zeros_(self.b.weight)
         self.scaling = alpha / rank
 
+    @override
     def forward(self, x: Float[Tensor, "... d_in"]) -> Float[Tensor, "... d_out"]:
         return self.base(x) + self.scaling * self.b(self.a(x))
-
-
-class Lora:
-    """Inject LoRA adapters into a frozen module tree — the op-namespace for the low-rank fine-tune (bd 29z)."""
 
     @staticmethod
     def inject(module: nn.Module, rank: int = _RANK, alpha: float = _ALPHA,
@@ -64,5 +62,5 @@ class Lora:
                 setattr(module, name, LoraLinear(child, rank, alpha))
                 n += 1
             else:
-                n += Lora.inject(child, rank, alpha, targets)
+                n += LoraLinear.inject(child, rank, alpha, targets)
         return n

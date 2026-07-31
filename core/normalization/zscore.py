@@ -1,6 +1,8 @@
 """Per-channel z-score normalizer — the standard numerical conditioner."""
 from __future__ import annotations
 
+from typing import override
+
 import numpy as np
 from jaxtyping import Float, Int
 
@@ -14,6 +16,7 @@ class ZScore(Normalizer):
     numerical conditioner that keeps a downstream net's running stats well-scaled. Stateless — every trial
     normalizes against itself, so there is nothing to fit, and `groups` is irrelevant (ignored)."""
 
+    @override
     def apply(self, X: Float[np.ndarray, "n ch t"],
               groups: Int[np.ndarray, "n"] | None = None) -> Float[np.ndarray, "n ch t"]:
         mean = X.mean(axis=2, keepdims=True)

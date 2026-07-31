@@ -26,6 +26,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 from sklearn.model_selection import GroupKFold
@@ -54,7 +55,7 @@ class FusionGate:
         """Return per-block EEG band-power + fNIRS mean/slope/peak features, the label, and the subject id —
         block-aligned across the two modalities (hard guard on the label sequence)."""
         me = store.Store.load(_EEG, _EEG_CFG)
-        mf = store.Store.load(_FNIRS, _FNIRS_CFG)
+        mf = store.Store.load(_FNIRS, cast(EpochCfg, _FNIRS_CFG))
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
         qe = me.filter(me["subject"].is_in(subs))
         qf = mf.filter(mf["subject"].is_in(subs))
@@ -83,7 +84,10 @@ class FusionGate:
         logger.info(f"gated fusion: {len(y)} blocks · {len(subs)} subj · EEG {Fe.shape[1]}d · fNIRS {Ff.shape[1]}d · "
               f"chance {1/n_classes:.3f}")
 
-        rows, P, A, Y = [], [], [], []
+        rows: list[dict[str, str | int | float]] = []
+        P: list[np.ndarray] = []
+        A: list[np.ndarray] = []
+        Y: list[np.ndarray] = []
         outer = GroupKFold(n_splits=args.k)
         for i, (tr, te) in enumerate(outer.split(subs, groups=subs)):
             tr_subs, te_subs = subs[tr], subs[te]
@@ -108,8 +112,8 @@ class FusionGate:
 
         y_all, P_all = np.concatenate(Y), np.concatenate(P)
         gate = float((P_all.argmax(1) == y_all).mean())
-        fold_mean = float(np.mean([r["gate_acc"] for r in rows]))
-        std = float(np.std([r["gate_acc"] for r in rows]))
+        fold_mean = float(np.mean(cast(list[float], [r["gate_acc"] for r in rows])))
+        std = float(np.std(cast(list[float], [r["gate_acc"] for r in rows])))
         logger.info("\n=== gated fusion · 5-fold GroupKFold · shin n-back ===")
         logger.info(f"  gate pooled {gate:.3f} | fold-mean {fold_mean:.3f} ± {std:.3f}")
         logger.info(f"  NOTE: this ~{fold_mean:.2f} is NOT a fusion win — it ties z-scored-EEG-alone (~0.581) and "

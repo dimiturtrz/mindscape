@@ -10,6 +10,7 @@ captured something flat fusion destroyed; ~0.58 = another measured null (but now
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import numpy as np
 from sklearn.model_selection import StratifiedGroupKFold
@@ -39,10 +40,12 @@ class FusionCameraEval:
     def _build_all(cls):
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
         # past _TEND so read-forward (τ+lag) fills the tail
-        mf = store.Store.load("shin2017_nback", FnirsCfg(tmax=32.0))
+        mf = store.Store.load("shin2017_nback", cast(EpochCfg, FnirsCfg(tmax=32.0)))
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
         pos_e = bc.EegMontage.eeg_positions(eegmod.Shin2017NbackEegAdapter.adapter().channels())
-        Xs, ys, gs = [], [], []
+        Xs: list[np.ndarray] = []
+        ys: list[np.ndarray] = []
+        gs: list[np.ndarray] = []
         for s in subs:
             Xe, Xf, ye = store.Store.gather_aligned(me, mf, s)
             pos_f = bc.FnirsMontage.fnirs_positions(fnmod.Shin2017NirsAdapter.adapter().subject_dir(int(s)))
@@ -58,7 +61,8 @@ class FusionCameraEval:
         X, y, g = cls._build_all()
         logger.info(f"brain-camera fusion · {X.shape[0]} blocks · {len(set(g))} subj · tensor {X.shape[1:]} · "
               f"grid {_GRID} fps {_FPS} lag derived/subj · chance {1/(y.max()+1):.3f}")
-        accs, kaps = [], []
+        accs: list[float] = []
+        kaps: list[float] = []
         for seed in _SEEDS:
             for tr, te in StratifiedGroupKFold(_K, shuffle=True, random_state=seed).split(X, y, g):
                 clf = BrainCameraNet(BrainCameraConfig(n_classes=int(y.max()) + 1, seed=seed)).fit(X[tr], y[tr])

@@ -18,6 +18,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 
@@ -26,8 +27,14 @@ from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
 
 logger = logging.getLogger(__name__)
 
-_METRICS = [("single_trial", "1"), ("single_trial", "5"), ("concept_avg", "1")]
+# (metric block, top-k) — k is int, as train()'s retrieval_topk keys it (a str would KeyError at runtime)
+_METRICS = [("single_trial", 1), ("single_trial", 5), ("concept_avg", 1)]
+
+
 _N_PAIR = 2   # print the A−B delta only when exactly two models are compared
+# a fold result read by metric block/key (the trainer returns a richer record; loso reads only these blocks)
+_Fold = dict[str, object]
+_Summary = dict[str, tuple[float, float]]
 
 
 class LosoEval:
@@ -35,19 +42,19 @@ class LosoEval:
     `_fold` runs one held-out-subject training run; `_summary` reduces folds to mean ± SE."""
 
     @classmethod
-    def _fold(cls, model: str, seed: int, test_subject: int, pool: list[int], base: dict) -> dict:
+    def _fold(cls, model: str, seed: int, test_subject: int, pool: list[int], base: dict[str, object]) -> _Fold:
         """One LOSO fold: train on `pool \\ {test_subject}`, retrieve on the held-out subject."""
         train_subjects = [s for s in pool if s != test_subject]
-        cfg = TrainConfig(**{**base, "model": model, "seed": seed})
-        return TrainNice.train(train_subjects, test_subject, cfg)
+        cfg = TrainConfig.model_validate({**base, "model": model, "seed": seed})
+        return cast(_Fold, TrainNice.train(train_subjects, test_subject, cfg))
 
     @classmethod
-    def _summary(cls, folds: list[dict]) -> dict:
+    def _summary(cls, folds: list[_Fold]) -> _Summary:
         """Mean ± SE over folds for each reported metric (SE = std / √n_folds — the decision quantity)."""
         out = {}
         n = len(folds)
         for block, k in _METRICS:
-            vals = np.array([f[block][k] for f in folds], dtype=float)
+            vals = np.array([cast("dict[str, dict[int, float]]", f)[block][k] for f in folds], dtype=float)
             out[f"{block}.{k}"] = (float(vals.mean()), float(vals.std() / np.sqrt(max(1, n))))
         return out
 
@@ -73,18 +80,21 @@ class LosoEval:
 
         logger.info(f"LOSO · pool {args.subjects} · models {args.models} · seeds {args.seeds} "
                     f"· {len(args.subjects) * len(args.seeds)} folds/model")
-        results = {}
+        results: dict[str, dict[str, object]] = {}
         for model in args.models:
             folds = [cls._fold(model, seed, test, args.subjects, base)
                      for seed in args.seeds for test in args.subjects]
-            results[model] = {"folds": folds, "summary": cls._summary(folds)}
+            summary = cls._summary(folds)
+            results[model] = {"folds": folds, "summary": summary}
             logger.info(f"\n=== {model} ===")
-            for key, (mean, se) in results[model]["summary"].items():
+            for key, (mean, se) in summary.items():
                 logger.info(f"  {key:16s} {mean * 100:5.2f}% ± {se * 100:.2f}")
 
         if len(args.models) == _N_PAIR:
             a, b = args.models
-            delta = results[b]["summary"]["single_trial.1"][0] - results[a]["summary"]["single_trial.1"][0]
+            sa = cast(_Summary, results[a]["summary"])
+            sb = cast(_Summary, results[b]["summary"])
+            delta = sb["single_trial.1"][0] - sa["single_trial.1"][0]
             logger.info(f"\nΔ ({b} − {a}) single_trial.1: {delta * 100:+.2f}pp")
         if args.out:
             Path(args.out).write_text(json.dumps(results, indent=2))

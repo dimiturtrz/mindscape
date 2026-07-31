@@ -18,6 +18,7 @@ subject holdout** the sweep never touches.
     python -m neuroscan.tasks.workload.feature_importance.differentiable              # uses subset.yaml (local)
     python -m neuroscan.tasks.workload.feature_importance.differentiable --grain channel
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,6 +27,7 @@ import logging
 import math
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict, cast
 
 import numpy as np
 import torch
@@ -33,51 +35,51 @@ import torch.nn.functional as F
 from jaxtyping import Float, Int
 from omegaconf import OmegaConf
 from sklearn.model_selection import GroupShuffleSplit
-from torch import Tensor
 
 from core.config import REPO
 from core.data import store
+from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from core.features import DescriptorBank
 from neuroscan.tasks.cli import Cli
 from neuroscan.tasks.workload.feature_importance._cv import Cv
+from neuroscan.tasks.workload.feature_importance.weighted_linear import WeightedLinear
 
 logger = logging.getLogger(__name__)
 
 _DEV = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-_EPS = 1e-12            # drop numerically-zero simplex weights before the entropy / effective-#-features sum
+
+class _Hyperparams(TypedDict):
+    """Hyperparameter dict for training: learning rate, weight decay, epochs, and CV fold seeds."""
+
+    lr: float
+    weight_decay: float
+    epochs: int
+    k: int
+    fold_seeds: list[int]
+
+
+class _SweepPoint(TypedDict):
+    """A single lambda sweep point: lambda, CV accuracy, effective number of features, and per-family weights."""
+
+    lam: float
+    acc: float
+    eff_n: float
+    family_weights: dict[str, float]
+
+
+_EPS = 1e-12  # drop numerically-zero simplex weights before the entropy / effective-#-features sum
 _KEEP_WEIGHT_MIN = 0.05  # family weight above this is reported in the knee subset (the kept features)
-_KEEP_WEIGHT_DP = 3      # decimal places the kept-subset weights are rounded to for the report
-_CFG = Path(__file__).with_name("subset.yaml")            # study config lives beside the code (config-as-data)
-
-
-class WeightedLinear(torch.nn.Module):
-    """Softmax feature weights (per group) × standardised features → linear head. `group_idx[j]` = the
-    weight-group of column j (per-family: 0..14; per-channel: j itself), so one learnable logit per group
-    broadcasts to its columns."""
-
-    def __init__(self, group_idx: Int[Tensor, "f"], n_groups: int, d: int, n_classes: int):
-        super().__init__()
-        self.logits = torch.nn.Parameter(torch.zeros(n_groups))
-        self.head = torch.nn.Linear(d, n_classes)
-        self.register_buffer("group_idx", group_idx)
-
-    def weights(self) -> Float[Tensor, "f"]:
-        return torch.softmax(self.logits, dim=0)
-
-    def entropy(self) -> Float[Tensor, ""]:
-        w = self.weights()
-        return -(w * (w + 1e-12).log()).sum()
-
-    def forward(self, x: Float[Tensor, "n f"]) -> Float[Tensor, "n c"]:
-        return self.head(x * self.weights()[self.group_idx])
+_KEEP_WEIGHT_DP = 3  # decimal places the kept-subset weights are rounded to for the report
+_CFG = Path(__file__).with_name("subset.yaml")  # study config lives beside the code (config-as-data)
 
 
 @dataclass
 class GroupSpec:
     """The feature-weighting structure the WeightedLinear model is built from: which weight-group each column
     belongs to (`group_idx`), the number of groups, and the class count."""
+
     group_idx: torch.Tensor
     n_groups: int
     n_classes: int
@@ -86,6 +88,7 @@ class GroupSpec:
 @dataclass
 class _SearchData:
     """The search-fold data: the feature bank `F`, class labels `y`, and per-block subject `groups`."""
+
     F: np.ndarray
     y: np.ndarray
     groups: np.ndarray
@@ -96,12 +99,14 @@ class Differentiable:
     public names kept)."""
 
     @classmethod
-    def _fit(cls, Xtr, ytr, spec: GroupSpec, lam, hp) -> WeightedLinear:
+    def _fit(
+        cls, Xtr: Float[np.ndarray, "n d"], ytr: Int[np.ndarray, "n"], spec: GroupSpec, lam: float, hp: _Hyperparams
+    ) -> WeightedLinear:
         model = WeightedLinear(spec.group_idx, spec.n_groups, Xtr.shape[1], spec.n_classes).to(_DEV)
         opt = torch.optim.Adam(model.parameters(), lr=hp["lr"], weight_decay=hp["weight_decay"])
         Xt = torch.as_tensor(Xtr, dtype=torch.float32, device=_DEV)
         yt = torch.as_tensor(ytr, dtype=torch.long, device=_DEV)
-        norm = math.log(max(spec.n_groups, 2))                       # normalise entropy by log K so lambda is
+        norm = math.log(max(spec.n_groups, 2))  # normalise entropy by log K so lambda is
         # grain-invariant (same meaning at 15 or 1080 weights)
         model.train()
         for _ in range(hp["epochs"]):
@@ -113,19 +118,21 @@ class Differentiable:
 
     @classmethod
     @torch.no_grad()
-    def _predict(cls, model, X) -> Int[np.ndarray, "n"]:
+    def _predict(cls, model: WeightedLinear, X: Float[np.ndarray, "n d"]) -> Int[np.ndarray, "n"]:
         model.eval()
         return model(torch.as_tensor(X, dtype=torch.float32, device=_DEV)).argmax(1).cpu().numpy()
 
     @classmethod
-    def _standardise(cls, Xtr, Xte):
+    def _standardise(
+        cls, Xtr: Float[np.ndarray, "n d"], Xte: Float[np.ndarray, "m d"]
+    ) -> tuple[Float[np.ndarray, "n d"], Float[np.ndarray, "m d"]]:
         """Fit per-feature standardisation on TRAIN, apply to both (no leakage) — the weights act on unit-scale
         features so raw-scale differences between metrics don't bias the weighting."""
         mu, sd = Xtr.mean(0), Xtr.std(0) + 1e-8
         return (Xtr - mu) / sd, (Xte - mu) / sd
 
     @classmethod
-    def _cv_acc(cls, data: _SearchData, spec: GroupSpec, lam, hp):
+    def _cv_acc(cls, data: _SearchData, spec: GroupSpec, lam: float, hp: _Hyperparams) -> float:
         """Mean CV accuracy at this lambda, over repeated seeded StratifiedGroupKFold (subject-grouped)."""
         accs = []
         for tr, te in Cv.grouped_folds(data.F, data.y, data.groups, hp["fold_seeds"], hp["k"]):
@@ -140,7 +147,7 @@ class Differentiable:
         return float(np.exp(-(p * np.log(p)).sum()))
 
     @classmethod
-    def _knee(cls, points):
+    def _knee(cls, points: list[_SweepPoint]) -> _SweepPoint:
         """Utopia-corner knee of the (acc, eff_n) sweep: closest to high-acc / low-eff_n."""
         acc = np.array([p["acc"] for p in points])
         en = np.array([p["eff_n"] for p in points])
@@ -149,12 +156,14 @@ class Differentiable:
         return points[int(np.hypot(1 - an, en_).argmin())]
 
     @classmethod
-    def _family_weights(cls, w, group_idx_np, families, grain):
+    def _family_weights(
+        cls, w: Float[np.ndarray, "g"], group_idx_np: Int[np.ndarray, "d"], families: list[str], grain: str
+    ) -> dict[str, float]:
         """Report weights per family: identity for grain=family, else sum the column weights within each family."""
         if grain == "family":
             return {f: float(w[i]) for i, f in enumerate(families)}
         ch = len(group_idx_np) // len(families)
-        return {f: float(w[i * ch:(i + 1) * ch].sum()) for i, f in enumerate(families)}
+        return {f: float(w[i * ch : (i + 1) * ch].sum()) for i, f in enumerate(families)}
 
     @classmethod
     def main(cls):
@@ -166,10 +175,15 @@ class Differentiable:
 
         cfg = OmegaConf.load(args.config or _CFG)
         grain = args.grain or cfg.grain
-        hp = {"lr": cfg.lr, "weight_decay": cfg.weight_decay, "epochs": cfg.epochs,
-              "k": cfg.k, "fold_seeds": list(cfg.fold_seeds)}
+        hp = {
+            "lr": cfg.lr,
+            "weight_decay": cfg.weight_decay,
+            "epochs": cfg.epochs,
+            "k": cfg.k,
+            "fold_seeds": list(cfg.fold_seeds),
+        }
 
-        meta = store.Store.load(cfg.dataset, FnirsCfg())
+        meta = store.Store.load(cfg.dataset, cast(EpochCfg, FnirsCfg()))
         X, y = store.Store.gather(meta)
         groups = meta["subject"].to_numpy()
         Fb, fam = DescriptorBank.extract_bank(X)
@@ -183,43 +197,64 @@ class Differentiable:
         group_idx = torch.as_tensor(gi_np, dtype=torch.long, device=_DEV)
         spec = GroupSpec(group_idx, n_groups, n_classes)
 
-        search_idx, seal_idx = next(GroupShuffleSplit(1, test_size=cfg.holdout_frac,
-                                                      random_state=cfg.holdout_seed).split(Fb, y, groups))
+        search_idx, seal_idx = next(
+            GroupShuffleSplit(1, test_size=cfg.holdout_frac, random_state=cfg.holdout_seed).split(Fb, y, groups)
+        )
         Fs, ys, gs = Fb[search_idx], y[search_idx], groups[search_idx]
         search = _SearchData(Fs, ys, gs)
-        logger.info(f"fNIRS subset (torch/{_DEV.type}): {Fb.shape[0]} blocks · grain {grain} ({n_groups} weights) · "
-              f"search {len(np.unique(gs))} / sealed {len(np.unique(groups[seal_idx]))} subj · "
-              f"lambdas {list(cfg.lambdas)} (chance {1/n_classes:.3f})")
+        logger.info(
+            f"fNIRS subset (torch/{_DEV.type}): {Fb.shape[0]} blocks · grain {grain} ({n_groups} weights) · "
+            f"search {len(np.unique(gs))} / sealed {len(np.unique(groups[seal_idx]))} subj · "
+            f"lambdas {list(cfg.lambdas)} (chance {1 / n_classes:.3f})"
+        )
 
-        sweep = []
+        sweep: list[_SweepPoint] = []
         for lam in cfg.lambdas:
             acc = cls._cv_acc(search, spec, float(lam), hp)
-            Fs_std, _ = cls._standardise(Fs, Fs)           # weights read from a full-search fit
+            Fs_std, _ = cls._standardise(Fs, Fs)  # weights read from a full-search fit
             w_full = cls._fit(Fs_std, ys, spec, float(lam), hp)
             w = w_full.weights().detach().cpu().numpy()
             fw = cls._family_weights(w, gi_np, families, grain)
-            sweep.append({"lam": float(lam), "acc": acc, "eff_n": cls._effective_n(w), "family_weights": fw})
+            sweep.append(cast(_SweepPoint, {
+                "lam": float(lam), "acc": acc, "eff_n": cls._effective_n(w), "family_weights": fw
+            }))
             top = sorted(fw.items(), key=lambda kv: -kv[1])[:4]
-            logger.info(f"  λ={float(lam):<5} acc {acc:.3f} · eff-#feat {sweep[-1]['eff_n']:.2f} · "
-                  f"top {[(feature_family, round(weight, 2)) for feature_family, weight in top]}")
+            logger.info(
+                f"  λ={float(lam):<5} acc {acc:.3f} · eff-#feat {sweep[-1]['eff_n']:.2f} · "
+                f"top {[(feature_family, round(weight, 2)) for feature_family, weight in top]}"
+            )
 
         knee = cls._knee(sweep)
         # leakage-free: refit at the knee lambda on ALL search subjects, score the sealed holdout
         Xtr, Xte = cls._standardise(Fs, Fb[seal_idx])
         m = cls._fit(Xtr, ys, spec, knee["lam"], hp)
         sealed = float((cls._predict(m, Xte) == y[seal_idx]).mean())
-        kept = {feature_family: round(weight, _KEEP_WEIGHT_DP)
-                for feature_family, weight in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1])
-                if weight > _KEEP_WEIGHT_MIN}
-        logger.info(f"\nknee λ={knee['lam']}: eff-#feat {knee['eff_n']:.2f} · search-acc {knee['acc']:.3f} "
-              f"· SEALED-acc {sealed:.3f} (unbiased)")
+        kept = {
+            feature_family: round(weight, _KEEP_WEIGHT_DP)
+            for feature_family, weight in sorted(knee["family_weights"].items(), key=lambda kv: -kv[1])
+            if weight > _KEEP_WEIGHT_MIN
+        }
+        logger.info(
+            f"\nknee λ={knee['lam']}: eff-#feat {knee['eff_n']:.2f} · search-acc {knee['acc']:.3f} "
+            f"· SEALED-acc {sealed:.3f} (unbiased)"
+        )
         logger.info(f"knee subset (family weight>0.05): {kept}")
 
         out = REPO / cfg.out
         out.mkdir(parents=True, exist_ok=True)
-        (out / f"subset_{grain}.json").write_text(json.dumps(
-            {"dataset": str(cfg.dataset), "grain": grain, "sweep": sweep,
-             "knee": knee, "sealed_acc": sealed, "kept": kept}, indent=2))
+        (out / f"subset_{grain}.json").write_text(
+            json.dumps(
+                {
+                    "dataset": str(cfg.dataset),
+                    "grain": grain,
+                    "sweep": sweep,
+                    "knee": knee,
+                    "sealed_acc": sealed,
+                    "kept": kept,
+                },
+                indent=2,
+            )
+        )
         logger.info(f"-> {out}/subset_{grain}.json")
 
 

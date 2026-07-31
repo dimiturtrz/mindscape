@@ -16,6 +16,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, TypedDict, cast
 
 import numpy as np
 from joblib import Parallel, delayed, parallel_config
@@ -24,7 +26,31 @@ from core.data import splits, store
 from neuroscan import tracking
 from neuroscan.evaluation import diagnostics, metrics
 
+if TYPE_CHECKING:
+    from polars import DataFrame
+
 logger = logging.getLogger(__name__)
+
+
+class FoldMetrics(TypedDict, total=False):
+    """Per-fold metric dict."""
+    fold: str
+    n: int
+    acc: float
+    kappa: float
+    ece: float
+
+
+class AggregateResult(TypedDict, total=False):
+    """Complete harness aggregate result dict."""
+    method: str
+    regime: str
+    n_classes: int
+    n_folds: int
+    per_fold: list[FoldMetrics]
+    fold_mean: dict[str, float]
+    pooled: dict[str, object]
+    acc_spread: dict[str, float]
 
 
 @dataclass
@@ -32,8 +58,8 @@ class Method:
     """A decoder as the harness consumes it: a `name` + its `(fit, score)` pair + the class count and
     evaluation `regime`. These five always travel together — every fold is fit/scored the same way."""
     name: str
-    fit: Callable
-    score: Callable
+    fit: Callable[[np.ndarray, np.ndarray], object]
+    score: Callable[..., np.ndarray]
     n_classes: int
     regime: str = ""
 
@@ -43,16 +69,16 @@ class TrackConfig:
     """MLflow logging + model-persistence options for a `run` (no effect on the computed metrics). `params` =
     the run params/tags; `run_dir` (a runs/<name>/ dir) enables resume + artifacts; `save_models` persists
     each fold's trained model."""
-    params: dict | None = None
-    run_dir: object | None = None
+    params: dict[str, object] | None = None
+    run_dir: Path | str | None = None
     save_models: bool = True
 
 
 class Harness:
     @staticmethod
-    def folds_for(meta, regime: str, test_sessions=()):
+    def folds_for(meta: "DataFrame", regime: str, test_sessions: tuple[int | str, ...] = ()):
         """Build the (name, train, test) fold list for a regime over the epoch cloud `meta`."""
-        out = []
+        out: list[tuple[object, "DataFrame", "DataFrame"]] = []
         if regime == "within":
             for s in sorted(meta["subject"].unique().to_list()):
                 tr, _val, te = splits.Splits.within_subject(meta, s, test_sessions=test_sessions)
@@ -66,7 +92,11 @@ class Harness:
         return out
 
     @staticmethod
-    def _fit_score_fold(fold, fit_fn, score_fn):
+    def _fit_score_fold(
+        fold: tuple[object, "DataFrame", "DataFrame"],
+        fit_fn: Callable[[np.ndarray, np.ndarray], object],
+        score_fn: Callable[..., np.ndarray],
+    ):
         """One fold: gather -> fit -> score -> metrics. Returns (name, row, probs, yte, clf)."""
         name, train, test = fold
         Xtr, ytr = store.Store.gather(train)
@@ -80,8 +110,14 @@ class Harness:
         return str(name), row, probs, yte, clf
 
     @staticmethod
-    def aggregate(method: Method, folds, *, models_out: list | None = None, n_jobs: int = 1,
-                  backend: str = "threading") -> dict:
+    def aggregate(
+        method: Method,
+        folds: list[tuple[object, "DataFrame", "DataFrame"]],
+        *,
+        models_out: list[tuple[str, object]] | None = None,
+        n_jobs: int = 1,
+        backend: str = "threading",
+    ) -> AggregateResult:
         """Pure: run the method over folds, compute the metrics. No MLflow, no side effects.
         If `models_out` is given, each fold's fitted clf is appended as (fold_name, clf) for the caller to
         persist. `n_jobs`: parallelize the (independent) folds; `backend` picks how.
@@ -110,11 +146,14 @@ class Harness:
             done = Parallel(n_jobs=n_jobs, backend=backend)(
                 delayed(Harness._fit_score_fold)(f, method.fit, method.score) for f in folds)
 
-        per, P, Y, G = [], [], [], []
+        per: list[FoldMetrics] = []
+        P: list[np.ndarray] = []
+        Y: list[np.ndarray] = []
+        G: list[np.ndarray] = []
         for name, row, probs, yte, clf in done:                         # collected in fold order
             if models_out is not None:
                 models_out.append((name, clf))
-            per.append(row)
+            per.append(cast(FoldMetrics, row))
             logger.info(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  "
                         f"ece {row['ece']:.3f}  (n={row['n']})")
             P.append(probs)
@@ -127,19 +166,25 @@ class Harness:
         pooled = {"acc": metrics.Metrics.accuracy(y, pred), "kappa": metrics.Metrics.kappa(y, pred),
                   "ece": metrics.Metrics.ece_from_probs(probs, y),
                   "confusion": metrics.Metrics.confusion(y, pred, method.n_classes).tolist()}
-        sp = diagnostics.Diagnostics.spread(per, "acc")
+        sp = diagnostics.Diagnostics.spread(cast(list[dict[str, object]], per), "acc")
         logger.info(f"  {'MEAN':>6}  acc {fold_mean['acc']:.3f}  kappa {fold_mean['kappa']:.3f}  "
               f"ece {fold_mean['ece']:.3f}   (spread {sp['min']:.3f}-{sp['max']:.3f}, std {sp['std']:.3f})")
         return {"method": method.name, "regime": method.regime, "n_classes": method.n_classes, "n_folds": len(per),
                 "per_fold": per, "fold_mean": fold_mean, "pooled": pooled, "acc_spread": sp}
 
     @staticmethod
-    def run(method: Method, folds, *, tracking_cfg: TrackConfig | None = None, n_jobs: int = 1,
-            backend: str = "threading") -> dict:
+    def run(
+        method: Method,
+        folds: list[tuple[object, "DataFrame", "DataFrame"]],
+        *,
+        tracking_cfg: TrackConfig | None = None,
+        n_jobs: int = 1,
+        backend: str = "threading",
+    ) -> AggregateResult:
         """aggregate + log to MLflow (guarded), configured by `tracking_cfg` (see TrackConfig). `n_jobs` +
         `backend` parallelize folds (see aggregate — "loky" for heavy GIL-bound methods, "threading" else)."""
         tc = tracking_cfg or TrackConfig()
-        models: list = [] if tc.save_models else None
+        models: list[tuple[str, object]] | None = [] if tc.save_models else None
         res = Harness.aggregate(method, folds, models_out=models, n_jobs=n_jobs, backend=backend)
         fm, pooled = res["fold_mean"], res["pooled"]
         tags = {"method": method.name, "regime": method.regime, "dataset": (tc.params or {}).get("dataset", "")}

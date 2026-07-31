@@ -51,7 +51,7 @@ class Source:
     def _fsaverage_dir() -> tuple[str, str]:   # pragma: no cover — needs the fsaverage template data
         """(fsaverage path, subjects_dir), fetched/cached by MNE under the data root."""
         fs = mne.datasets.fetch_fsaverage(verbose=False)
-        return fs, os.path.dirname(fs)
+        return str(fs), os.path.dirname(str(fs))
 
     def _montage_info(self):
         """An average-referenced EEG `Info` with the channels placed on the standard 10-05 montage."""
@@ -87,7 +87,7 @@ class Source:
         _, subjects_dir = Source._fsaverage_dir()
         return [lbl for lbl in mne.read_labels_from_annot("fsaverage", self.cfg.parcellation,
                                                           subjects_dir=subjects_dir, verbose=False)
-                if "unknown" not in lbl.name]
+                if lbl.name is not None and "unknown" not in lbl.name]
 
     def source_positions(self) -> Float[np.ndarray, "s 3"]:
         """3D positions `[n_src, 3]` of the fixed-orientation source-space vertices, in the forward's source
@@ -96,7 +96,7 @@ class Source:
         fwd = mne.convert_forward_solution(fwd, force_fixed=True, use_cps=True, verbose=False)
         return np.vstack([s["rr"][s["vertno"]] for s in fwd["src"]])   # [n_src, 3]
 
-    def build_inverse(self):  # pragma: no cover — needs fsaverage template data
+    def _build_inverse(self):  # pragma: no cover — needs fsaverage template data
         """Build (or load from cache) the dSPM inverse operator + cortical labels for the montage.
 
         Returns `(inverse_operator, labels)`. The fsaverage forward solution is computed once per
@@ -120,7 +120,7 @@ class Source:
         """Project sensor epochs `[n, ch, t]` to a source-space parcel series `[n, n_labels, t]` via the template
         dSPM inverse + label-time-course extraction. Anatomically-named, montage-independent — the substrate for
         source-space EEG↔fNIRS fusion (bd 728)."""
-        inverse, labels = self.build_inverse()
+        inverse, labels = self._build_inverse()
         info = self._montage_info()
         ep = mne.EpochsArray(np.asarray(epochs, dtype=np.float64), info, verbose=False)
         stcs = mne.minimum_norm.apply_inverse_epochs(ep, inverse, lambda2=1.0 / self.cfg.snr ** 2,

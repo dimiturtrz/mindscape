@@ -14,16 +14,19 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 import torch
 from braindecode.models import ATCNet, Deep4Net, EEGConformer, EEGNetv4, ShallowFBCSPNet
+from jaxtyping import Float, Int
 from pydantic import BaseModel
 
 # standardizers + crops live in transforms.py (independently testable); re-exported under the legacy
 # private names so callers (e.g. tasks/motor_imagery/quantize.py) keep working.
 from neuroscan.models.transforms import Transforms
-from neuroscan.training import EarlyStopper, TorchPerf  # shared TF32 + early-stop scaffold (bd 1eca)
+from neuroscan.perf import TorchPerf
+from neuroscan.training import EarlyStopper
 
 # method -> (braindecode class, training + crop hparams). crop_frac=0.5 + 16 train crops is the standard
 # 2a recipe; strong nets get more epochs (cheap on the 5090, capped by early stopping).
@@ -32,7 +35,7 @@ from neuroscan.training import EarlyStopper, TorchPerf  # shared TF32 + early-st
 # augmentation — ATCNet, EEGConformer); 0.5 = external 2s sliding-window crops (for nets without it).
 # `cls` is the braindecode class itself (imported above), not a name to look up — a typo is an import error
 # at module load, and `make()` validates the method key, so no separate string→class registry is needed.
-MODELS: dict[str, dict] = {
+MODELS: dict[str, dict[str, object]] = {
     "eegnet":        {"cls": EEGNetv4,        "epochs": 750, "lr": 1e-3,   "batch": 128,
                       "patience": 80, "crop_frac": 0.5,  "standardize": "ems"},
     "shallow_fbcsp": {"cls": ShallowFBCSPNet, "epochs": 750, "lr": 6.5e-4, "batch": 128,
@@ -93,7 +96,8 @@ class BraindecodeClf:
     runs nets and baselines through one path."""
 
     @staticmethod
-    def _take(Xs, y, idx, cl, n_crops):
+    def _take(Xs: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"], idx: Int[np.ndarray, "m"] | None,
+              cl: int | None, n_crops: int):
         """Gather (X, y) for a set of trial indices — cropping into `cl`-length windows when cl is set.
         idx=None (no validation split) returns (None, None), so the caller needs no use_val branch."""
         if idx is None:
@@ -116,7 +120,7 @@ class BraindecodeClf:
         # net consumes crop_len samples when cropping, else the full trial
         self.net = arch.cls(n_chans=arch.n_chans, n_outputs=arch.n_classes, n_times=arch.n_times).to(self.device)
 
-    def _make_train_val(self, Xs, y):
+    def _make_train_val(self, Xs: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"]):
         """Trial-level train/val split (val carved from held-out TRIALS, no crop leakage), then crop."""
         cl = self.crop_len
         use_val = self.patience > 0 and len(Xs) > _MIN_TRIALS_FOR_VAL
@@ -131,13 +135,15 @@ class BraindecodeClf:
         Xva, yva = BraindecodeClf._take(Xs, y, vi, cl, self.n_test_crops)     # vi is None when no val -> (None, None)
         return Xtr, ytr, Xva, yva
 
-    def fit(self, X, y):
+    def fit(self, X: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"]):
         TorchPerf.enable_fast_matmul(self.device)
         Xs = self.std.fit(X)(X)
         Xtr, ytr, Xva, yva = self._make_train_val(Xs, y)
         xt = torch.tensor(Xtr, device=self.device)
         yt = torch.tensor(ytr, dtype=torch.long, device=self.device)
         use_val = Xva is not None
+        xv: torch.Tensor | None = None
+        yv: torch.Tensor | None = None
         if use_val:
             xv = torch.tensor(Xva, device=self.device)
             yv = torch.tensor(yva, dtype=torch.long, device=self.device)
@@ -177,7 +183,7 @@ class BraindecodeClf:
         stopper.restore(self.net)
         return self
 
-    def _trial_outputs(self, X, *, softmax: bool):
+    def _trial_outputs(self, X: Float[np.ndarray, "n ch t"], *, softmax: bool):
         """Per-trial outputs (probabilities if softmax else logits), crop-averaged when cropping."""
         Xs = self.std(X)
         self.net.eval()
@@ -193,10 +199,10 @@ class BraindecodeClf:
             o = self.net(torch.tensor(Xs, device=self.device))
             return (torch.softmax(o, dim=1) if softmax else o).cpu().numpy()
 
-    def predict_proba(self, X):
+    def predict_proba(self, X: Float[np.ndarray, "n ch t"]):
         return self._trial_outputs(X, softmax=True)
 
-    def predict_logits(self, X):
+    def predict_logits(self, X: Float[np.ndarray, "n ch t"]):
         """Crop-averaged logits per trial — the input temperature scaling calibrates."""
         return self._trial_outputs(X, softmax=False)
 
@@ -207,21 +213,22 @@ class BraindecodeClf:
             raise KeyError(f"unknown decoder {method!r}; have {sorted(MODELS)}")
         cfg = {**DEFAULTS, **MODELS[method]}
 
-        def fit(X, y, **over):
+        def fit(X: Float[np.ndarray, "n ch t"], y: np.ndarray, **over: object):
             p = {**cfg, **over}
             T = X.shape[2]
-            crop_len = int(p["crop_frac"] * T) if p.get("crop_frac") else None
+            crop_len = int(cast(float, p["crop_frac"]) * T) if p.get("crop_frac") else None
             n_times = crop_len or T
-            arch = Arch(cls=p["cls"], n_chans=X.shape[1], n_times=n_times, n_classes=int(y.max()) + 1)
+            arch = Arch(cls=cast(type[torch.nn.Module], p["cls"]), n_chans=X.shape[1], n_times=n_times,
+                        n_classes=int(y.max()) + 1)
             config = TrainCfg(
-                epochs=p["epochs"], lr=p["lr"], batch=p["batch"],
-                log_every=p.get("log_every", 0), val_frac=p.get("val_frac", 0.2),
-                patience=p.get("patience", 0), crop_len=crop_len,
-                n_train_crops=p["n_train_crops"], n_test_crops=p["n_test_crops"],
-                standardize=p.get("standardize", "ems"), seed=p.get("seed", 0))
+                epochs=cast(int, p["epochs"]), lr=cast(float, p["lr"]), batch=cast(int, p["batch"]),
+                log_every=cast(int, p.get("log_every", 0)), val_frac=cast(float, p.get("val_frac", 0.2)),
+                patience=cast(int, p.get("patience", 0)), crop_len=crop_len,
+                n_train_crops=cast(int, p["n_train_crops"]), n_test_crops=cast(int, p["n_test_crops"]),
+                standardize=cast(str, p.get("standardize", "ems")), seed=cast(int, p.get("seed", 0)))
             return BraindecodeClf(arch, config).fit(X, y)
 
-        def score(clf, X):
+        def score(clf: BraindecodeClf, X: Float[np.ndarray, "n ch t"]):
             return clf.predict_proba(X)
 
         return fit, score

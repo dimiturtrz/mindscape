@@ -16,6 +16,8 @@ Download: EEG_01-26_MATLAB.zip, doc.ml.tu-berlin.de/simultaneous_EEG_NIRS (DOI 1
 from __future__ import annotations
 
 import re
+from pathlib import Path
+from typing import cast
 
 import numpy as np
 import polars as pl
@@ -24,7 +26,7 @@ from scipy.signal import resample as _resample
 
 from core.config import Config
 from core.data.eeg.base import EpochCfg
-from core.data.signal import CANONICAL_NBACK, BlockedRecording, Signal
+from core.data.signal import CANONICAL_NBACK, BlockedRecording, EpochBatch, Signal
 
 _ROOT = "shin2017_eeg"
 _N_EEG = 28              # first 28 clab entries are EEG; the last two (HEOG, VEOG) are EOG — dropped
@@ -41,9 +43,9 @@ class Shin2017NbackEegAdapter:
         self.n_classes = 3
         self.label_map = dict(CANONICAL_NBACK)          # '0-back'/'2-back'/'3-back' -> 0/1/2
 
-    def _index(self) -> dict[int, object]:                # pragma: no cover — filesystem glob (disk shell)
+    def _index(self) -> dict[int, Path]:                # pragma: no cover — filesystem glob (disk shell)
         """{subject int -> VP dir holding cnt_nback.mat}, discovered on disk (naming-robust)."""
-        out: dict[int, object] = {}
+        out: dict[int, Path] = {}
         for f in sorted((Config.raw_dir() / _ROOT).glob("**/cnt_nback.mat")):
             m = re.search(r"(\d{1,3})", f.parent.name)
             if m:
@@ -60,7 +62,7 @@ class Shin2017NbackEegAdapter:
         cnt = sio.loadmat(d / "cnt_nback.mat", struct_as_record=False, squeeze_me=True)["cnt_nback"]
         return [str(c) for c in np.asarray(cnt.clab)][:_N_EEG]
 
-    def _load_continuous(self, d):
+    def _load_continuous(self, d: Path):
         """(cont [28, T] EEG, fs, block onsets[samples], canonical labels[27]) — block-level workload only."""
         cnt = sio.loadmat(d / "cnt_nback.mat", struct_as_record=False, squeeze_me=True)["cnt_nback"]
         mrk = sio.loadmat(d / "mrk_nback.mat", struct_as_record=False, squeeze_me=True)["mrk_nback"]
@@ -80,7 +82,7 @@ class Shin2017NbackEegAdapter:
         idx = self._index()
         subs = subjects or sorted(idx)
         tmax = cfg.tmax if cfg.tmax is not None else _BLOCK_TMAX
-        Xs, ys, subj, sess, run = [], [], [], [], []
+        batch = EpochBatch()
         for sub in subs:
             cont, fs, onsets, y = self._load_continuous(idx[sub])
             cont = Signal.bandpass(cont, cfg.fmin, cfg.fmax, fs)
@@ -89,16 +91,11 @@ class Shin2017NbackEegAdapter:
             # no baseline: CSP/Riemann read covariance
             X, ye = Signal.block_epochs(BlockedRecording(cont, onsets, y), fs, cfg.tmin, tmax, baseline_s=0.0)
             if cfg.resample and cfg.resample != fs:
-                X = _resample(X, round(X.shape[2] * cfg.resample / fs), axis=2).astype(np.float32)
+                X = cast(np.ndarray, _resample(X, round(X.shape[2] * cfg.resample / fs), axis=2)).astype(np.float32)
             n = len(ye)
-            Xs.append(X)
-            ys.append(ye)
-            subj += [str(sub)] * n
-            sess += [str(i // _BLOCKS_PER_SERIES) for i in range(n)]     # 27 blocks -> 3 recording series
-            run += ["0"] * n
-        X = np.concatenate(Xs).astype(np.float32)
-        y = np.concatenate(ys).astype(np.int64)
-        return X, y, pl.DataFrame({"subject": subj, "session": sess, "run": run})
+            batch.add(X, ye, [str(sub)] * n,
+                      [str(i // _BLOCKS_PER_SERIES) for i in range(n)], ["0"] * n)   # 27 blocks -> 3 series
+        return batch.stack()
 
     @staticmethod
     def adapter() -> "Shin2017NbackEegAdapter":

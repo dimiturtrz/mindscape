@@ -50,7 +50,8 @@ class Series:
         return interp1d(t_src, X, axis=-1, bounds_error=False, fill_value=0.0)(t_dst).astype(X.dtype)
 
     @classmethod
-    def channel_series(cls, Xe, Xf, config: SeriesConfig | None = None):
+    def channel_series(cls, Xe: Float[np.ndarray, "n ch t"], Xf: Float[np.ndarray, "n ch t"],
+                       config: SeriesConfig | None = None):
         """The pre-raster fused representation — the single source of truth both the decoder tensor and the viz
         consume. Paired EEG/fNIRS -> per-channel activity on ONE lag-aligned time grid:
           eeg    = {theta,alpha,beta} band-power envelopes `[n, ch_e, T]`  (fast electrical STRENGTH),

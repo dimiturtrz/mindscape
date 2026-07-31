@@ -29,8 +29,11 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import TypedDict
 
 import numpy as np
+import polars as pl
+from jaxtyping import Float, Int
 from joblib import Parallel, delayed
 from pydantic import BaseModel
 from pyriemann.estimation import Covariances
@@ -52,6 +55,28 @@ _ZERO_SHOT = {"recenter", "recenter_scale"}
 _CALIBRATED = {"rpa", "mdwm"}
 
 
+class _AlignRowZeroShot(TypedDict):
+    """Row result for zero-shot alignment method."""
+    fold: str
+    n: int
+    acc: float
+    kappa: float
+    ece: float
+
+
+class _AlignRowCalibratedTypedDict(TypedDict):
+    """Row result for calibrated alignment method."""
+    fold: str
+    n: int
+    n_calib: int
+    acc: float
+    kappa: float
+    ece: float
+
+
+_AlignRow = _AlignRowZeroShot | _AlignRowCalibratedTypedDict
+
+
 class AlignConfig(BaseModel):
     """The transfer experiment's method + knobs. `method` = recenter|recenter_scale|rpa|mdwm; `calib_frac`/
     `seed` = the calibrated split; `mdwm_lambda` = MDWM source↔target tradeoff; `augment`/`order`/`lag` = the
@@ -67,23 +92,33 @@ class AlignConfig(BaseModel):
 
 class Align:
     @classmethod
-    def _covariances(cls, X, augment, order, lag, estimator="oas"):
+    def _covariances(
+        cls, X: Float[np.ndarray, "n ch t"], *, augment: bool, order: int, lag: int, estimator: str = "oas"
+    ) -> Float[np.ndarray, "n ch ch"]:
         if augment:
             X = Covariance.time_delay_embed(X.astype(np.float64), order, lag)
         return Covariances(estimator=estimator).transform(X.astype(np.float64))
 
     @classmethod
-    def _zero_shot_fold(cls, s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
+    def _zero_shot_fold(
+        cls, s: int | str, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig
+    ):
         """Zero-shot: delegate the alignment + classifier to the transfer method, score ALL target."""
+        if test.labels is None:
+            raise ValueError("target domain must carry labels for scoring")
         probs = transfer.zero_shot_predict(train, transfer.Domain(test.cov),
                                            scale=(cfg.method == "recenter_scale"))
         return cls._row(s, test.labels, probs)
 
     @classmethod
-    def _calibrated_fold(cls, s, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig):
+    def _calibrated_fold(
+        cls, s: int | str, train: transfer.Domain, test: transfer.Domain, cfg: AlignConfig
+    ):
         """Calibrated: carve a stratified `calib_frac` of the held-out subject as the *only* labelled target data
         (the rest is the disjoint test set), hand it to the transfer method, score the disjoint remainder. Test
         labels never enter the fit — the split is the runner's leakage-free guarantee, the method just consumes it."""
+        if test.labels is None:
+            raise ValueError("target domain must carry labels for calibration")
         cal, ev = next(StratifiedShuffleSplit(1, train_size=cfg.calib_frac,
                                               random_state=cfg.seed).split(test.cov, test.labels))
         pred = transfer.calibrated_predict(cfg.method, train,
@@ -95,19 +130,20 @@ class Align:
         return row, None, yev
 
     @classmethod
-    def _row(cls, s, yte, probs):
+    def _row(cls, s: int | str, yte: Int[np.ndarray, "n"], probs: Float[np.ndarray, "n k"]):
         pred = probs.argmax(1)
         row = {"fold": str(s), "n": len(yte), "acc": metrics.Metrics.accuracy(yte, pred),
                "kappa": metrics.Metrics.kappa(yte, pred), "ece": metrics.Metrics.ece_from_probs(probs, yte)}
         return row, probs, yte
 
     @classmethod
-    def _run_fold(cls, s, tr, te, cfg: AlignConfig):
+    def _run_fold(cls, s: int | str, tr: pl.DataFrame, te: pl.DataFrame, cfg: AlignConfig):
         """One LOSO fold — module-level so joblib ships it to a worker (folds are independent)."""
         Xtr, ytr = store.Store.gather(tr)
         Xte, yte = store.Store.gather(te)
-        train = transfer.Domain(cls._covariances(Xtr, cfg.augment, cfg.order, cfg.lag), ytr, tr["subject"].to_numpy())
-        test = transfer.Domain(cls._covariances(Xte, cfg.augment, cfg.order, cfg.lag), yte)
+        train = transfer.Domain(cls._covariances(Xtr, augment=cfg.augment, order=cfg.order, lag=cfg.lag),
+                                ytr, tr["subject"].to_numpy())
+        test = transfer.Domain(cls._covariances(Xte, augment=cfg.augment, order=cfg.order, lag=cfg.lag), yte)
         if cfg.method in _ZERO_SHOT:
             return cls._zero_shot_fold(s, train, test, cfg)
         return cls._calibrated_fold(s, train, test, cfg)
@@ -125,8 +161,9 @@ class Align:
         ap.add_argument("--no-record", action="store_true", help="skip updating the committed results.json snapshot")
         args = ap.parse_args()
 
-        exp = config.load_experiment(args.exp, args.overrides)
-        dataset, method = exp.dataset, exp.method
+        exp = config.Config.load_experiment(args.exp, args.overrides)
+        # an align experiment always names its dataset + method
+        dataset, method = str(exp.dataset), str(exp.method)
         p = exp.params
         calib_frac = p.get("calib_frac", 0.5)
         augment = p.get("augment", False)
@@ -147,7 +184,9 @@ class Align:
         out_folds = Parallel(n_jobs=args.jobs)(
             delayed(cls._run_fold)(s, tr, te, fold_cfg) for s, tr, te in folds)
 
-        rows, P, Y = [], [], []
+        rows: list[_AlignRow] = []
+        P: list[np.ndarray] = []
+        Y: list[np.ndarray] = []
         for row, probs, yte in sorted(out_folds, key=lambda r: r[0]["fold"]):
             rows.append(row)
             Y.append(yte)

@@ -17,6 +17,7 @@ constructor never saw. Stateless links (z-score, scale) ignore `groups`, so the 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import override
 
 import numpy as np
 from jaxtyping import Float, Int
@@ -45,6 +46,7 @@ class CompositeNormalization(Normalizer):
     def __init__(self, links: list[Normalizer]):
         self.links = links
 
+    @override
     def fit(self, X: Float[np.ndarray, "n ch t"],
             groups: Int[np.ndarray, "n"] | None = None) -> CompositeNormalization:
         """Fit each link on the running output of the ones before it (only transforming when a later link still
@@ -56,6 +58,7 @@ class CompositeNormalization(Normalizer):
                 X = link.apply(X, groups)
         return self
 
+    @override
     def apply(self, X: Float[np.ndarray, "n ch t"],
               groups: Int[np.ndarray, "n"] | None = None) -> Float[np.ndarray, "n ch t"]:
         for link in self.links:

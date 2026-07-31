@@ -3,7 +3,8 @@ name = "mindscape"
 version = "0.1.0"
 description = "Honest, efficient non-invasive neural decoding (EEG/MEG) — decode, evaluate under shift, deploy on the edge."
 readme = "README.md"
-requires-python = ">=3.11"
+# 3.12 is the floor because strict typing needs `typing.override` (3.12+); template bumped from 3.11 (bd 166).
+requires-python = ">=3.12"
 # LOCAL MOD (not slotted, kept across copier update): the ML dep tree. The template skeleton ships only
 # numpy+pydantic; mindscape's runtime deps live here as a permanent local divergence (bd 588n step 5).
 dependencies = [
@@ -38,9 +39,9 @@ export = ["onnx", "onnxruntime", "onnxscript"]   # ONNX export + parity check (S
 data = ["osfclient", "openneuro-py"]   # dataset fetch (Stage-3 EEG->image: OSF / OpenNeuro); not a runtime dep
 # The guardrail ANALYZERS are an installed package pinned by scaffold tag (not vendored source) — an engine
 # update is a one-line `devtools_ref` bump on `copier update`, no source diff in your PRs. Imports as
-# `devtools` (`python -m devtools.graph …`); grimp/networkx arrive transitively. ast-grep/jscpd configs are
-# located from the install via `python -m devtools.config`. Pin lives in .copier-answers.yml (devtools_ref).
-devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.14.0#subdirectory=sdlc-devtools"]
+# `devtools` (`python -m devtools.graph.fitness …`); grimp/networkx arrive transitively. ast-grep/jscpd configs are
+# located from the install via `python -m devtools.tools.config`. Pin lives in .copier-answers.yml (devtools_ref).
+devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.27.1#subdirectory=sdlc-devtools"]
 source = ["nibabel"]   # EEG->cortex source localization: MNE fsaverage forward/inverse (bd 728; core.features.eeg.source)
 recon = ["diffusers", "transformers", "accelerate"]   # EEG->image reconstruction: unCLIP decode of predicted CLIP embeds (bd 71n; neuroscan/tasks/visual/reconstruct.py)
 all = ["pytest", "onnx", "onnxruntime"]
@@ -69,6 +70,14 @@ constraint-dependencies = [
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "--import-mode=importlib"
+# REQUIRED by [tool.structure] test_layout = "mirror". pytest collects `test_*.py` by default, so a
+# mirror tree is not collected AT ALL without this — and an uncollected suite reports green while running
+# zero tests, which is worse than a red one. `devtools.hygiene.mirror --assert` fails on the CONFIG if these two
+# settings ever disagree, so the failure mode cannot hide. Switch both together, or neither.
+python_files = ["*.py"]
+# The convention is `test_<method>` FUNCTIONS (docs/UNIT_TESTS.md) — there are no test classes. Left at the
+# default, pytest tries to collect any imported `Test*` PRODUCTION class as a test and warns on every run.
+python_classes = []
 
 # Dependency hygiene (deptry, ENFORCED): imported-but-undeclared (DEP001) / declared-but-unused (DEP002) /
 # transitive (DEP003) imports. noxfile.py imports the `nox` runner (invoked via uvx, deliberately not a
@@ -102,7 +111,7 @@ extend-exclude = ["mlruns", "runs", "*.egg-info", "docs", "learning", "research"
 # <<< LOCAL-SLOT: ruff-exclude
 
 [tool.ruff.lint]
-select = ["F", "B", "I", "T201", "FBT", "BLE001", "S101", "S110", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "N", "E741", "E742", "E743", "PLR0124", "PLR1714", "PLW3301", "RUF012", "RUF005", "RUF007", "RUF010", "RUF022", "RUF046", "C408", "C420", "SIM", "PERF401", "PLW0108", "E731", "E402", "ICN001", "S603", "S607", "PTH123", "E501", "SLF001"]
+select = ["F", "B", "I", "T201", "FBT", "BLE001", "S101", "S110", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "N", "E741", "E742", "E743", "PLR0124", "PLR1714", "PLW3301", "RUF012", "RUF005", "RUF007", "RUF010", "RUF022", "RUF046", "C408", "C420", "SIM", "PERF401", "PLW0108", "E731", "E402", "ICN001", "S603", "S607", "PTH123", "E501", "SLF001", "PGH003", "PGH004", "TID251"]
 ignore = [
     # jaxtyping shape strings are deliberate runtime-checked annotations that ruff's forward-ref parser
     # misreads (jaxtyping's own FAQ prescribes disabling both): F722 = a multi-token dim string
@@ -142,6 +151,51 @@ ignore-names = ["X*", "Y*", "A", "B", "C*", "D", "F*", "G", "H", "L", "M", "P*",
 # only residual is the documented moabb `_sanitize_path` monkeypatch, `# noqa: SLF001` at its three sites.
 # <<< LOCAL-SLOT: per-file-ignores
 
+# Static type gate (pyrefly, ENFORCED): every def carries annotations (a bare param fails
+# implicit-any-parameter) AND the annotations must CHECK (a mismatch fails bad-return / bad-argument-type)
+# — the R1 type-grade Correctness leg ruff's lint codes can't reach. `preset = "strict"` bundles
+# strict-callable-subtyping + implicit-any + missing-override + unused-ignore. Runs env-aware
+# (`uv run --with pyrefly`) so it reads installed dep stubs (pydantic/numpy ship py.typed). A fresh gen's
+# seed is fully typed (0 errors), so it BLOCKS from day one as a regression guard — no advisory ratchet.
+# `Any` is an annotation that opts OUT of annotation, in a repo where typing is a blocking rule. Banning the
+# IMPORT is what makes this complete: `dict[str, Any]` is caught by no use-site rule (not even ANN401), yet
+# it cannot exist once the name cannot be imported. The unnamed escape hatch — a bare `dict`, an empty
+# container, an unannotated param — is already closed by pyrefly strict's implicit-any family, so the two
+# compose into one rule with no hole. At a genuine JSON boundary, name the shape with a TypedDict/Protocol.
+# ADVISORY for now: it rides ruff_advisory_select until a real tree is clean (bd lph).
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"typing.Any" = { msg = "Any opts out of the type system. Name the real type, or a TypedDict/Protocol at a JSON boundary." }
+
+[tool.pyrefly]
+preset = "strict"
+check-unannotated-defs = true
+search-path = ["."]
+# MUST equal the `requires-python` floor above. pyrefly does NOT infer it from requires-python — left
+# unset it checks against its own default (>=3.12), so a repo declaring 3.11 would get a GREEN type check
+# for `from typing import override` and then ImportError at runtime on the version it claims to support.
+# The checker has to target the oldest interpreter the project promises, not the newest one it is run on.
+# A unit test pins these two together (bd 166).
+python-version = "3.12"
+# Untyped third-party imports ERROR by default (stricter than mypy's silent Any). A dep that ships no
+# py.typed / stubs goes here to be treated as Any — a per-repo FACT vocab, parallel to the deptry/vulture
+# slots. jaxtyping shape strings (`Float[Array, "b n"]`) are a runtime-checked DSL
+# pyrefly's front-end models only partially; if one surfaces a type error, add its module here or suppress
+# at the line with `# pyrefly: ignore[<code>]`.
+# >>> LOCAL-SLOT: pyrefly-ignore-imports — this repo's untyped-dependency modules (treated as Any)
+# external/ git-repo checkouts (EEGPT_mcae, models.cbramod, benchnirs) carry no stubs and aren't pip deps;
+# fvcore ships no py.typed. Treat as Any rather than scatter per-line ignores.
+ignore-missing-imports = ["EEGPT_mcae", "models.cbramod", "fvcore.nn",
+                          "benchnirs.learn", "benchnirs.load", "benchnirs.process",
+                          "diffusers", "transformers", "accelerate"]
+# <<< LOCAL-SLOT: pyrefly-ignore-imports
+
+# Tests inject unannotated fixture params (pytest fills them) — mirror the ruff `tests/**` carve-out so the
+# strict annotation requirement doesn't force a type onto every fixture signature. Scope is packages
+# (`lint_paths`) anyway, but this keeps a bare `pyrefly check` clean too.
+[[tool.pyrefly.sub-config]]
+matches = "**/tests/**"
+check-unannotated-defs = false
+
 [tool.vulture]
 min_confidence = 60
 ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
@@ -155,7 +209,9 @@ ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer"
 # JointForward: the source-space fusion generator (bd shd) — exercised by tests/ (which vulture doesn't scan)
 # and pending the decode-integration wiring; the SLF001 op-namespace migration removed the internal
 # self-refs that had masked it. Test-referenced, not dead.
-ignore_names = ["model_config", "forward", "intra_op_num_threads", "proj_out", "allow_tf32", "JointForward"]
+ignore_names = ["model_config", "forward", "intra_op_num_threads", "proj_out", "allow_tf32", "JointForward",
+                "generate"]   # JointForward.generate: source-space fusion entry, needs MNE fsaverage (integration,
+                              # not unit) — awaiting the decode-integration wiring (bd shd), documented not-dead
 # <<< LOCAL-SLOT: vulture-ignore-names
 # >>> LOCAL-SLOT: vulture-scan — edit freely, the template will not overwrite intent here
 paths = ["core", "neuroscan", "baselines"]
@@ -174,20 +230,24 @@ omit = [
     "neuroscan/tasks/motor_imagery/quantize.py", "neuroscan/tasks/visual/clip_targets.py",
     "neuroscan/tasks/visual/reconstruct.py",   # unCLIP decode of predicted CLIP embeds (diffusers + model download; bd 71n)
     "neuroscan/tracking.py",
+    "neuroscan/evaluation/calibrate.py",   # temperature-scaling CLI runner (its TemperatureScaler logic is a tested module)
     "core/export_onnx.py",   # ONNX export (onnx dep; trained-decoder glue)
     # interface / registry maps (no logic)
     "core/decoder.py",   # typing.Protocol decoder contract (structural interface, no body)
     "core/data/registry.py",   # top-level dataset registry map (sibling core/data/*/registry.py already omitted)
     # GPU training entrypoints + torch models/trainers (device + data, not logic)
-    "neuroscan/tasks/visual/train_nice.py", "neuroscan/tasks/visual/retrieval_audit.py",
+    "neuroscan/tasks/visual/train_nice.py", "neuroscan/tasks/visual/epoch_dataset.py",
+    "neuroscan/tasks/visual/retrieval_audit.py",
     "neuroscan/tasks/visual/cross_dataset_eval.py",   # cross-dataset EEG1->EEG2 GPU runner
     "neuroscan/tasks/visual/loso_eval.py",   # leave-one-subject-out GPU runner (loops train_nice.train)
     "neuroscan/tasks/visual/frozen_head.py",   # frozen-backbone head sweep (external backbone + device, bd nm5)
     "neuroscan/models/decoders.py", "neuroscan/models/eegnet.py",
-    "neuroscan/models/foundation.py",   # CBraMod wrapper: external backbone + device + out-of-repo weights (contract-test skip-guarded)
+    "neuroscan/models/foundation.py",   # backbone resolution + encoder builders (external backbones + device)
+    "neuroscan/models/cbramod_backbone.py", "neuroscan/models/eegpt_backbone.py",   # external backbone + device + out-of-repo weights (contract-test skip-guarded)
     "neuroscan/models/profile.py",   # fvcore params+FLOPs (model on device)
     "neuroscan/tasks/workload/feature_importance/optuna_search.py",   # Optuna study runner (entrypoint)
     "neuroscan/tasks/workload/feature_importance/differentiable.py",  # torch/GPU differentiable feature-selection runner
+    "neuroscan/tasks/workload/feature_importance/weighted_linear.py",  # torch model for the differentiable search
     "baselines/fusion/gate.py", "baselines/fusion/spatiotemporal.py", "core/data/eeg/braindecode_pre.py",
     # data adapters: filesystem read / OSF+OpenNeuro download
     "core/data/*/registry.py", "core/data/eeg/things_eeg2.py", "core/data/fnirs/shin2017.py",
@@ -248,6 +308,20 @@ forbidden_modules = ["neuroviz"]
 # <<< LOCAL-SLOT: import-contracts
 
 
+# Forbidden-USE contracts (devtools/contracts.py) — directional rules over the DECOMPOSED arrows
+# (inherits / holds / references / calls / construct), not just imports. import-linter can only say "must
+# not IMPORT"; this says "must not USE", and can target ONE kind — e.g. "nothing outside the composition
+# root may CONSTRUCT a concrete", which an import rule cannot express at all. Empty by default: no
+# contracts means nothing to check, so a fresh project starts green and ratchets. The GATE is universal;
+# the LAYERS are a per-repo FACT, hence the slot.
+# >>> LOCAL-SLOT: arch-contracts — this repo's directional use rules (uncomment + edit)
+# [[tool.arch.forbidden]]
+# name = "domain must not use infra"
+# source = "core.domain"
+# forbidden = ["core.infra"]
+# kinds = ["calls", "holds", "construct"]   # omit `kinds` to forbid EVERY arrow kind
+# <<< LOCAL-SLOT: arch-contracts
+
 # Architecture fitness thresholds read by devtools/graph.py --assert.
 [tool.structure]
 # >>> LOCAL-SLOT: arch-thresholds — tune per repo; the template ships defaults and won't churn these,
@@ -258,8 +332,26 @@ file_min = 0             # advisory line floor — 0 = OFF (no honest universal 
 betweenness_max = 0.10   # advisory chokepoint threshold
 main_sequence_max = 0.0  # advisory Martin main-sequence distance |A+I-1| ceiling — 0 = OFF (a concrete
                          # stable leaf legitimately sits at D≈1, so no honest universal floor; raise per repo)
-test_layout = "mirror"   # every logic module needs a unit test: "mirror" = tests/unit/<pkg>/<path>/test_<name>.py
-                         # (strict, one home); "flat" = test_<name>.py anywhere under tests/; "off" = no check
+feature_envy_min = 4     # feature-envy floor: foreign accesses before a method is judged at all. Below
+                         # it the ratio is noise (2 vs 1 proves nothing). Raise it for repos full of
+                         # legitimate delegators (mappers / serializers / visitors) rather than weakening
+                         # the rule; value objects are already excluded by role.
+demeter_max_depth = 2    # Law of Demeter ceiling: attribute hops in one chain. 2 = "reach your own field,
+                         # then talk to it" (`self.store.get(k)`); 3 reaches THROUGH it
+                         # (`self.store.config.name`). Raise it for data-navigation-heavy trees (AST/JSON
+                         # walking), where a deep chain is reading a structure, not coupling to a stranger.
+test_layout = "mirror"   # WHERE a module's unit test lives — read by BOTH mirror gates (file-level, in
+                         # devtools/graph.py, and method-level, in devtools/mirror.py), so they cannot
+                         # disagree about what is covered. See docs/UNIT_TESTS.md.
+                         #   "mirror" tests/unit/<pkg>/<path>/<name>.py — a PATH mirror, so the names match
+                         #            and what a test covers is visible in its path rather than
+                         #            reconstructed by the reader. REQUIRES python_files = ["*.py"] (set
+                         #            above): `test_` is how pytest FINDS files, not a convention, and
+                         #            without that setting nothing is collected at all.
+                         #   "off"    no test-existence gate, and no method-level gate either
+                         # There is deliberately no lenient value. A mode accepting a test "anywhere" is not
+                         # a threshold, it is the RULE meaning something else here — see the o70 union law
+                         # in the scaffold's docs/RULE_INVENTORY.md. Turn it off or meet it.
 # <<< LOCAL-SLOT: arch-thresholds
 
 # magic-literals + complexity are ADVISORY explorers (devtools/magic_literals.py, devtools/complexity.py) —

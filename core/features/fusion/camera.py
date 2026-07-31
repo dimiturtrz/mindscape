@@ -85,13 +85,13 @@ class BrainCamera:
         pts = np.stack([gxx.ravel(), gyy.ravel()], axis=1)                  # [G², 2]
         s2 = (0.20 ** 2) * 2                                                # co-sampling radius² (unit-disk units)
 
-        def near(pos):
+        def near(pos: Float[np.ndarray, "ch 2"]):
             p = pos[np.isfinite(pos).all(1)]
             return np.exp(-((pts[:, None, :] - p[None, :, :]) ** 2).sum(-1).min(1) / s2)
         return (near(pos_e) * near(pos_f)).reshape(grid, grid).astype(np.float32)
 
     @staticmethod
-    def build_tensor(paired: PairedModalities, *, grid=16, series: SeriesConfig | None = None):
+    def build_tensor(paired: PairedModalities, *, grid: int = 16, series: SeriesConfig | None = None):
         """Paired EEG+fNIRS -> the brain-camera tensor `X[n, C, grid, grid, T]`, C = [θ, α, β, CBSI-neural,
         coverage]. ⚠️ VIZ representation / DECODE NEGATIVE — the rasterized band-envelope maps underperform raw
         EEG covariance as a decoder input. `series` -> channel_series timing (fs/fps/lag/window)."""
@@ -105,7 +105,7 @@ class BrainCamera:
         return np.stack(stack, axis=1).astype(np.float32)                              # [n, C=5, grid, grid, T]
 
     @staticmethod
-    def fused_node_series(paired: PairedModalities, *, band="sum", fnirs=True,
+    def fused_node_series(paired: PairedModalities, *, band: str = "sum", fnirs: bool = True,
                           series: SeriesConfig | None = None):
         """The FUSION-only signal collapsed to EEG channel format `[n, n_e, T]`. At each EEG node the joint =
         SIGN-ALIGNED EEG envelope × co-located fNIRS CBSI × locality COVERAGE. The EEG term is centered and flipped
@@ -119,7 +119,7 @@ class BrainCamera:
         eeg, neural, _, coupling = Series.channel_series(paired.eeg, paired.fnirs, series)
         pos_e, pos_f = paired.pos_eeg, paired.pos_fnirs
         ok = np.isfinite(pos_e).all(1)
-        strength = sum(eeg[b] for b in _BANDS) if band == "sum" else eeg[band]      # [n, n_e, T], envelopes ≥ 0
+        strength: np.ndarray = np.asarray(sum(eeg[b] for b in _BANDS)) if band == "sum" else eeg[band]
         strength = strength[:, ok, :]
         Wq, _ = BrainCamera._bary(pos_f, pos_e[ok])                                # fNIRS -> EEG-node interp [n_e, n_f]
         neural_e = np.einsum("nct,gc->ngt", neural, Wq)                             # CBSI at the EEG nodes [n, n_e, T]
@@ -148,7 +148,8 @@ class BrainCamera:
         return (m - mu) / sd
 
     @staticmethod
-    def _broadcast(mask2d: Float[np.ndarray, "h w"], like_shape) -> Float[np.ndarray, "n h w t"]:
+    def _broadcast(mask2d: Float[np.ndarray, "h w"], like_shape: tuple[int, int, int, int]
+                   ) -> Float[np.ndarray, "n h w t"]:
         """A `[grid,grid]` mask -> `[n, grid, grid, T]` matching a map block."""
         n, g, _, t = like_shape
         return np.broadcast_to(mask2d[None, :, :, None], (n, g, g, t)).astype(np.float32)

@@ -8,11 +8,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from core.reference import Reference
+from neuroscan.evaluation.harness import AggregateResult
 
 
 class ModelCard:
     @staticmethod
-    def card(res: dict, dataset: str, regime: str) -> str:
+    def card(res: AggregateResult, dataset: str, regime: str) -> str:
         fm, pooled, sp = res["fold_mean"], res["pooled"], res["acc_spread"]
         ref_regime = "within_subject" if regime == "within" else regime
         per = sorted(res["per_fold"], key=lambda r: r["acc"])
@@ -42,7 +43,7 @@ class ModelCard:
         return "\n".join(lines)
 
     @staticmethod
-    def write(res: dict, dataset: str, regime: str, path: str | Path) -> Path:
+    def write(res: AggregateResult, dataset: str, regime: str, path: str | Path) -> Path:
         path = Path(path)
         path.write_text(ModelCard.card(res, dataset, regime))
         return path

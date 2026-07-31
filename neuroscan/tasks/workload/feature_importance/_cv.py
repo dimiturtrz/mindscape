@@ -7,7 +7,7 @@ deliberate, so this consolidates only the fold loop they genuinely share, not th
 """
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 
 import numpy as np
 from jaxtyping import Float, Int
@@ -20,7 +20,7 @@ class Cv:
 
     @staticmethod
     def grouped_folds(F: Float[np.ndarray, "n f"], y: Int[np.ndarray, "n"], groups: Int[np.ndarray, "n"],
-                      seeds, k: int) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+                      seeds: Sequence[int], k: int) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         """Yield `(train_idx, test_idx)` for each fold of each seeded StratifiedGroupKFold pass. Subject-grouped;
         repeated over `seeds` to average out the split noise in the CV estimate."""
         for seed in seeds:

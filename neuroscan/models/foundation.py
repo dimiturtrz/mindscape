@@ -1,64 +1,30 @@
-"""Pretrained EEG foundation-model encoder for the visual retrieval trainer (bd yjd, epic bji).
+"""Pretrained EEG foundation-model encoders for the visual retrieval trainer (bd yjd, epic bji).
 
-Wraps the **CBraMod** backbone (Wang et al., ICLR 2025 — a criss-cross transformer, 4.9M params, pretrained on
-27,062 h of Temple University EEG) behind the EEG→CLIP `ImageEncoder` contract, so `train_nice` can pit a
-pretrained encoder against the from-scratch NICE baseline — the epic's capacity-vs-SNR-floor test. Capacity
-lives in the frozen pretrained weights; only a small head learns the CLIP map (the answer to NICE's "overfits
-at n≤17 subjects" — the big net isn't trained on the tiny labelled set).
-
-CBraMod's input is patched: `[B, C, S, P]`, `P=200` points/patch at **200 Hz**. Our sensor epoch `[B, C, T]`
-arrives already normalized by the upstream `core.normalization` chain, then it is reshaped to `[B, C, T//P, P]`.
-Its pretraining scale is microvolts/100 (`pretrain_trainer.py` does `x/100`, NOT the z-score the deep-dive
-claimed — bd 7mi4), so feeding that amplitude-preserving `scale` link was the pfad hypothesis — but on the
-frozen probe it REGRESSED the geometry heads vs z-score, so the chain feeds CBraMod a **z-score** by default
-(`scale` remains an override to test under fine-tuning). The backbone's per-token `d_model` features are
-mean-pooled over (C, S); a trainable MLP maps `d_model → CLIP dim`. Channel count is flexible (verified: 63
-posterior channels feed straight through), so no montage projection is needed.
-
-Backbone checked out (not vendored) under `external/CBraMod`; pretrained weights live out-of-repo under
-`<data_root>/pretrained/CBraMod/pretrained_weights.pth`. Reproduce:
-
-    git clone https://github.com/wjq-learning/CBraMod external/CBraMod
-    git -C external/CBraMod checkout 0ff6be918985689e7df679bc731ffb70e6c6224f   # MIT
-    # then download to <data_root>/pretrained/CBraMod/pretrained_weights.pth :
-    #   https://huggingface.co/weighting666/CBraMod/resolve/main/pretrained_weights.pth
-
-**EEGPT** (Wang et al., NeurIPS 2024 — an autoregressive/summary-token transformer, patch 64 pts at **256 Hz**
-= 0.25 s/patch, so a 1 s epoch is S=4 time-patches, escaping CBraMod's S=1) is the second frozen backbone
-(bd m69x.3). Its encoder FUSES channels into `embed_num=4` summary tokens per time-patch, so it emits
-`[B, N_time, embed_num, d=512]` — NOT a per-electrode grid: the geometry heads don't apply to it. Reproduce:
-
-    git clone https://github.com/BINE022/EEGPT external/EEGPT
-    git -C external/EEGPT checkout a0e0a8f                                     # Apache-2.0
-    # pretrained backbone (figshare, CC BY 4.0) -> <data_root>/pretrained/EEGPT/eegpt_mcae_58chs_4s_large4E.ckpt
-    #   article: https://figshare.com/articles/code/EEGPT_checkpoints/25866970  (the 'EEGPT/checkpoint/' file)
+The `Foundation` op-namespace resolves a frozen backbone by name (`CBraModBackbone` / `EegptBackbone`, each in
+its own module) into a `LoadedBackbone`, and builds the `Model = Backbone + Head` composites the encoder
+registry serves — so `train_nice` can pit a pretrained encoder against the from-scratch NICE baseline (the
+epic's capacity-vs-SNR-floor test). Capacity lives in the frozen pretrained weights; only a small head learns
+the CLIP map. The builders are registered lazily by `encoders.EncoderRegistry` (one registration home, no
+import-time side effects), so importing this module registers nothing on its own.
 """
 from __future__ import annotations
 
 import logging
-import sys
 from dataclasses import dataclass
-from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-import torch
-from jaxtyping import Float
 from torch import nn
-
-from core.config import REPO, Config
-from neuroscan.models.composite import Backbone, HeadContext, HeadSpec, Model, TokenHead
-from neuroscan.models.lora import Lora
 
 if TYPE_CHECKING:
     from neuroscan.models.encoder_spec import EncoderSpec
 
-logger = logging.getLogger(__name__)
+from neuroscan.models.cbramod_backbone import CBraModBackbone
+from neuroscan.models.composite import Model
+from neuroscan.models.eegpt_backbone import _EEGPT_PATCH, _EEGPT_RATE, EegptBackbone
+from neuroscan.models.head import HeadContext, HeadSpec, TokenHead
+from neuroscan.models.lora import LoraLinear
 
-_CBRAMOD_ROOT = REPO / "external" / "CBraMod"   # checked out @ 0ff6be91 (MIT); see the fetch step above
-_EEGPT_MODELS = REPO / "external" / "EEGPT" / "downstream" / "Modules" / "models"   # checked out @ a0e0a8f (Apache-2.0)
-_EEGPT_PATCH = 64          # EEGPT points/patch (checkpoint-fixed); 0.25 s at its rate
-_EEGPT_RATE = 256          # EEGPT's native sample rate (checkpoint-fixed); the epoch is the 1 s THINGS stimulus
-_EEGPT_EPOCH_S = 1.0       # -> feed n_time = rate × epoch seconds; resample data to the same rate (kept in sync)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -73,50 +39,8 @@ class LoadedBackbone:
     name: str
 
 
-class CBraModBackbone(Backbone):
-    """CBraMod as a `composite.Backbone`: pre-normalized epoch -> `[B, C, S, d]` token grid. Input normalization
-    is the upstream chain's job (CBraMod's amplitude scale, bd 7mi4), not the backbone's. The checkpoint fixes
-    `patch_points` (200 pts = 1s at 200 Hz -> S=1 on our stimulus) and `d_model` (200)."""
-
-    def __init__(self):
-        super().__init__()
-        self.module = Foundation.load_cbramod()                 # raw CBraMod (consumes pre-patched input)
-        self.patch_points = 200
-        self.d_model = 200
-
-    def forward(self, x: Float[torch.Tensor, "n ch t"]) -> Float[torch.Tensor, "n ch s d"]:
-        b, c, t = x.shape
-        p = self.patch_points
-        s = t // p
-        x = x[:, :, :s * p]                                        # drop the ragged tail patch (input already scaled)
-        return self.module(x.reshape(b, c, s, p))                 # [B, C, S, d_model]
-
-
-class EegptBackbone(Backbone):
-    """EEGPT as a `composite.Backbone`: `[B, C, T]` (256 Hz) -> `[B, N_time, embed_num, d=512]`. Subsets our
-    montage to the 58 channels EEGPT knows (its `CHANNEL_DICT`; the 5 missing edge channels are dropped),
-    per-channel z-scores, and runs the frozen EEGTransformer. The encoder fuses channels into `embed_num`
-    summary tokens per time-patch — so the axes are (time-patch, summary), NOT electrodes: token heads
-    (mean/flat/attn) apply, geometry heads do not."""
-
-    _N_TIME = round(_EEGPT_RATE * _EEGPT_EPOCH_S)   # samples fed to the encoder (-> 4 patches at stride 64)
-
-    def __init__(self, channel_names: list[str], patch_stride: int | None = None):
-        super().__init__()
-        module, chan_dict = Foundation.load_eegpt_encoder(self._N_TIME, patch_stride)
-        self.module = module
-        self.d_model = 512
-        keep = [i for i, ch in enumerate(channel_names) if ch.upper().strip(".") in chan_dict]
-        self.register_buffer("keep", torch.tensor(keep, dtype=torch.long))
-        self.register_buffer("chan_ids", module.prepare_chan_ids([channel_names[i] for i in keep]))
-
-    def forward(self, x: Float[torch.Tensor, "n ch t"]) -> Float[torch.Tensor, "n n_time embed_num d"]:
-        x = x[:, self.keep, :]                                    # -> the 58 EEGPT channels (input pre-normalized)
-        return self.module(x, chan_ids=self.chan_ids)            # [B, N_time, embed_num, d]
-
-
 class Foundation:
-    """CBraMod backbone loading + the encoder builders — the free helpers folded in as staticmethods (public
+    """Frozen backbone resolution + the encoder builders — the free helpers folded in as staticmethods (public
     names kept). The builders are registered lazily by `encoders.EncoderRegistry` (one registration home, no
     import-time side effects), so importing this module registers nothing on its own."""
 
@@ -149,45 +73,6 @@ class Foundation:
                               sample_rate=float(_EEGPT_RATE), name=name)
 
     @classmethod
-    def load_eegpt_encoder(cls, n_time: int, patch_stride: int | None = None):
-        """Build the EEGPT EEGTransformer encoder (its downstream config: patch 64, dim 512, embed_num 4,
-        depth 8) sized to our epoch length and load the FROZEN pretrained `target_encoder` weights from the
-        checkpoint. Returns (encoder, CHANNEL_DICT). Reaches into the external checkout (see the fetch step)."""
-        if str(_EEGPT_MODELS) not in sys.path:
-            sys.path.insert(0, str(_EEGPT_MODELS))
-        from EEGPT_mcae import CHANNEL_DICT, EEGTransformer  # noqa: PLC0415
-
-        ckpt = Config.data_root("pretrained") / "EEGPT" / "eegpt_mcae_58chs_4s_large4E.ckpt"
-        if not ckpt.exists():
-            raise FileNotFoundError(f"EEGPT weights not at {ckpt} — see the fetch step in this module's docstring")
-        encoder = EEGTransformer(img_size=(58, n_time), patch_size=_EEGPT_PATCH, patch_stride=patch_stride,
-                                 embed_dim=512, embed_num=4, depth=8, num_heads=8, mlp_ratio=4.0,
-                                 norm_layer=partial(nn.LayerNorm, eps=1e-6))
-        state = torch.load(ckpt, map_location="cpu", weights_only=False)
-        state = state.get("state_dict", state)
-        enc = {k[len("target_encoder."):]: v for k, v in state.items() if k.startswith("target_encoder.")}
-        encoder.load_state_dict(enc, strict=True)
-        return encoder, CHANNEL_DICT
-
-    @classmethod
-    def load_cbramod(cls) -> nn.Module:
-        """Instantiate CBraMod and load the pretrained weights. The backbone lives in a checked-out external repo
-        (not a package), so its path is injected here — the one place that reaches into `external/` — rather than
-        importing an uninstalled top-level module. `proj_out` (the pretrain reconstruction head) is dropped so the
-        encoder exposes the raw `d_model` token features."""
-        if str(_CBRAMOD_ROOT) not in sys.path:
-            sys.path.insert(0, str(_CBRAMOD_ROOT))
-        from models.cbramod import CBraMod  # noqa: PLC0415
-
-        ckpt = Config.data_root("pretrained") / "CBraMod" / "pretrained_weights.pth"
-        if not ckpt.exists():
-            raise FileNotFoundError(f"CBraMod weights not at {ckpt} — see the fetch step in this module's docstring")
-        backbone = CBraMod()
-        backbone.load_state_dict(torch.load(ckpt, map_location="cpu"))
-        backbone.proj_out = nn.Identity()       # expose d_model token features, not the reconstruction output
-        return backbone
-
-    @classmethod
     def _cbramod_model(cls, spec: EncoderSpec, pool: str, freeze: bool) -> Model:  # noqa: FBT001
         """`Model(CBraModBackbone, TokenHead)` — the frozen probe / fine-tune / attn-pool as one composite."""
         bb = CBraModBackbone()
@@ -212,9 +97,9 @@ class Foundation:
         """LoRA fine-tune (bd 29z): a frozen CBraMod with rank-8 adapters injected into its feed-forward linears
         (`linear1`/`linear2`) — the cheap middle between the frozen probe (0.6%, chance) and the full fine-tune
         (2.38%; the fused attention stays frozen — it isn't module-callable, see lora.py). The
-        backbone is frozen/eval-locked; `Lora.inject` re-arms only the low-rank A/B, which `Model.param_groups`
+        backbone is frozen/eval-locked; `LoraLinear.inject` re-arms only the low-rank A/B, which `Model.param_groups`
         picks up via `requires_grad` as the sole trainable backbone group."""
         model = cls._cbramod_model(spec, pool="mean", freeze=True)
-        n_adapted = Lora.inject(model.backbone.module)
+        n_adapted = LoraLinear.inject(cast(nn.Module, model.backbone.module))
         logger.info(f"cbramod_lora: injected rank-8 LoRA into {n_adapted} linear layers")
         return model

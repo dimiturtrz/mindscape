@@ -11,7 +11,6 @@ windows from events with a -0.5 s trial-start offset.
 from __future__ import annotations
 
 import numpy as np
-import polars as pl
 from braindecode.datasets import MOABBDataset
 from braindecode.preprocessing import (
     Preprocessor,
@@ -22,6 +21,7 @@ from braindecode.preprocessing import (
 from pydantic import BaseModel
 
 from core.config import Config
+from core.data.signal import EpochBatch
 
 
 class BraindecodePreConfig(BaseModel):
@@ -67,19 +67,12 @@ class BraindecodePre:
         windows = create_windows_from_events(ds, trial_start_offset_samples=start,
                                              trial_stop_offset_samples=0, preload=True)
 
-        Xs, ys, subj, sess, run = [], [], [], [], []
+        batch = EpochBatch()
         for wds in windows.datasets:
             d = wds.description
             arr = np.stack([wds[i][0] for i in range(len(wds))]).astype(np.float32)   # [n, ch, t]
             lab = np.array([wds[i][1] for i in range(len(wds))], dtype=np.int64)        # braindecode int labels
-            Xs.append(arr)
-            ys.append(lab)
             n = len(lab)
-            subj += [str(d["subject"])] * n
-            sess += [str(d["session"])] * n
-            run += [str(d.get("run", "0"))] * n
-
-        X = np.concatenate(Xs).astype(np.float32)
-        y = np.concatenate(ys).astype(np.int64)
-        meta = pl.DataFrame({"subject": subj, "session": sess, "run": run})
-        return X, y, meta
+            batch.add(arr, lab, [str(d["subject"])] * n,
+                      [str(d["session"])] * n, [str(d.get("run", "0"))] * n)
+        return batch.stack()

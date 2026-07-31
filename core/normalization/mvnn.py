@@ -19,6 +19,8 @@ the within-condition residuals are pooled over all its conditions+time and Ledoi
 """
 from __future__ import annotations
 
+from typing import override
+
 import numpy as np
 from jaxtyping import Float, Int
 from pyriemann.utils.base import invsqrtm
@@ -61,6 +63,7 @@ class Mvnn(Normalizer):
         sigma = LedoitWolf(assume_centered=True).fit(residuals).covariance_
         return invsqrtm(sigma)
 
+    @override
     def fit(self, X: Float[np.ndarray, "n ch t"]) -> Mvnn:
         """Estimate `Σ_g^{-1/2}` for each subject `g` from ITS calibration epochs (rows aligned with the
         constructor grouping): residualize that subject's trials against its own condition means (within-
@@ -75,6 +78,7 @@ class Mvnn(Normalizer):
             self._whiteners[int(g)] = Mvnn._noise_whitener(pooled)
         return self
 
+    @override
     def apply(self, X: Float[np.ndarray, "n ch t"],
               groups: Int[np.ndarray, "n"] | None = None) -> Float[np.ndarray, "n ch t"]:
         """Whiten each row by ITS subject's `Σ^{-1/2}`. `groups` = subject id per applied row (defaults to the

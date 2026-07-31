@@ -15,17 +15,22 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 from pydantic import BaseModel
 
 from core.data.eeg import things_eeg2 as things
 from neuroscan.tasks.cli import Cli
-from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
+from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice, _TrainResult
 
 logger = logging.getLogger(__name__)
 
 _CELLS = ("within_single", "within_avg", "cross_single", "cross_avg")
+
+
+# an audit row: cell name (within_single/within_avg/cross_single/cross_avg) -> {top-k: score}
+AuditRowData = dict[str, dict[int, float]]
 _ROBUST = "cross_single"        # the defensible number every leaky cell is measured against
 
 
@@ -54,10 +59,10 @@ class RetrievalAudit:
         index — comparing indices would falsely report every test concept as 'seen'."""
         meta = things.ThingsEeg2.meta()
         return {str(name)[6:] if str(name)[:5].isdigit() else str(name)
-                for name in meta[f"{split_key}_img_concepts"]}
+                for name in cast("list[object]", meta[f"{split_key}_img_concepts"])}
 
     @classmethod
-    def verify_concept_disjoint(cls) -> dict:
+    def verify_concept_disjoint(cls) -> dict[str, int]:
         """Check the THINGS-EEG2 train/test concept sets don't overlap — the dataset's zero-shot claim, verified
         on concept NAMES rather than assumed. Returns the two set sizes + the overlap (must be 0)."""
         train_names, test_names = cls._concept_names("train"), cls._concept_names("test")
@@ -68,12 +73,12 @@ class RetrievalAudit:
                 "concept_overlap": len(overlap)}
 
     @classmethod
-    def _cells_from_result(cls, result: dict, regime: str) -> dict:
+    def _cells_from_result(cls, result: _TrainResult, regime: str) -> dict[str, dict[int, float]]:
         """Pull the (single-trial, concept-avg) top-1/5 out of one train() result into flat `{regime}_{avg}` keys."""
         return {f"{regime}_single": dict(result["single_trial"]), f"{regime}_avg": dict(result["concept_avg"])}
 
     @classmethod
-    def summarize(cls, rows: list[dict], ks: tuple[int, ...] = (1, 5)) -> dict:
+    def summarize(cls, rows: list[AuditRowData], ks: tuple[int, ...] = (1, 5)) -> dict[str, object]:
         """Mean each cell over held-out subjects, then the inflation of every leaky cell over the robust one.
 
         `rows` = one dict per held-out subject, each carrying all four `_CELLS` -> {k: acc}. Pure: no data/torch,
@@ -85,13 +90,13 @@ class RetrievalAudit:
         return {"n_subjects": len(rows), "grid": grid, "robust_cell": _ROBUST, "inflation_over_robust": inflation}
 
     @classmethod
-    def _load_row(cls, path: Path) -> dict:
+    def _load_row(cls, path: Path) -> AuditRowData:
         """Read a checkpointed subject row, restoring the int top-k keys JSON turned into strings."""
         raw = json.loads(path.read_text())
         return {cell: {int(k): v for k, v in cell_scores.items()} for cell, cell_scores in raw.items()}
 
     @classmethod
-    def run_audit(cls, cfg: AuditConfig, ckpt_dir: str = "runs/retrieval_audit_ckpt") -> dict:
+    def run_audit(cls, cfg: AuditConfig, ckpt_dir: str = "runs/retrieval_audit_ckpt") -> dict[str, object]:
         """Train the within- + cross-subject encoder for each held-out subject, assemble the robustness grid.
 
         Checkpoints each subject's row to `ckpt_dir` AS IT COMPLETES and resumes from it (bd 9js) — a stall on the
