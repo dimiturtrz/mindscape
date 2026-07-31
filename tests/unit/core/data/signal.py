@@ -5,16 +5,8 @@ epoching must cut the right windows, drop epochs whose window runs off the edge,
 baseline when asked. Boundary case: an onset whose window exactly reaches T is kept; one sample past is dropped.
 """
 import numpy as np
-import pytest
 
-from core.data.signal import BlockedRecording, Recipe, Signal
-
-
-def test_key():
-    """Recipe.key is abstract — a concrete recipe (EpochCfg/FnirsCfg) implements it; the bare base refuses,
-    so no one accidentally caches under an empty key."""
-    with pytest.raises(NotImplementedError):
-        Recipe().key()
+from core.data.signal import BlockedRecording, Signal
 
 
 def _tone(freq, fs, n):

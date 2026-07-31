@@ -13,26 +13,10 @@ from typing import cast
 import numpy as np
 import polars as pl
 from jaxtyping import Float, Int
-from pydantic import BaseModel
 from scipy.signal import butter, filtfilt
 
 # canonical n-back workload classes (load level) — shared by the fNIRS and EEG n-back adapters
 CANONICAL_NBACK: dict[str, int] = {"0-back": 0, "2-back": 1, "3-back": 2}
-
-
-class Recipe(BaseModel):
-    """A preprocessing config that hashes to a cache key — the shared vocabulary the modality-agnostic Store
-    speaks. Both the EEG recipe (EpochCfg) and the fNIRS recipe (FnirsCfg) are Recipes, so `Store.load`/`build`
-    take ONE honest type instead of casting FnirsCfg through EpochCfg at every fNIRS call site."""
-
-    def key(self) -> str:
-        """Cache key encoding the recipe -> processed/<dataset>/<key>/. Implemented per modality."""
-        raise NotImplementedError
-
-    @staticmethod
-    def _fmt(x: float) -> str:
-        """Filesystem-safe float: '.'->'p', '-'->'m' (8.0 -> '8p0', -2.0 -> 'm2p0')."""
-        return str(x).replace(".", "p").replace("-", "m")
 
 
 @dataclass

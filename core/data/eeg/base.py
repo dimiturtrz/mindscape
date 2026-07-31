@@ -11,19 +11,19 @@ Every adapter remaps its source event names to this via `label_map`. An epoch te
 """
 from __future__ import annotations
 
-from typing import Protocol, cast, override, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 import numpy as np
 import polars as pl
 from moabb.paradigms import MotorImagery
+from pydantic import BaseModel
 
 from core.config import Config
-from core.data.signal import Recipe
 
 CANONICAL_MI: dict[str, int] = {"left_hand": 0, "right_hand": 1, "feet": 2, "tongue": 3}
 
 
-class EpochCfg(Recipe):
+class EpochCfg(BaseModel):
     """Preprocessing params that define an epoched cache. Two recipes never collide (see `key`).
 
     Defaults = a standard motor-imagery recipe: 8–32 Hz band (mu+beta), resampled to 128 Hz, the
@@ -34,12 +34,12 @@ class EpochCfg(Recipe):
     tmax: float | None = None
     resample: float = 128.0
 
-    @override
     def key(self) -> str:
         """Cache key encoding the recipe -> processed/<dataset>/<key>/."""
-        tmax = "full" if self.tmax is None else self._fmt(self.tmax)
-        return (f"b{self._fmt(self.fmin)}-{self._fmt(self.fmax)}"
-                f"_t{self._fmt(self.tmin)}-{tmax}_r{self._fmt(self.resample)}")
+        def f(x: float) -> str:
+            return str(x).replace(".", "p").replace("-", "m")
+        tmax = "full" if self.tmax is None else f(self.tmax)
+        return f"b{f(self.fmin)}-{f(self.fmax)}_t{f(self.tmin)}-{tmax}_r{f(self.resample)}"
 
 
 @runtime_checkable
