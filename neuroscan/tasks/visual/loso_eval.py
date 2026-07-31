@@ -27,7 +27,8 @@ from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
 
 logger = logging.getLogger(__name__)
 
-_METRICS = [("single_trial", "1"), ("single_trial", "5"), ("concept_avg", "1")]
+# (metric block, top-k) — k is int, as train()'s retrieval_topk keys it (a str would KeyError at runtime)
+_METRICS = [("single_trial", 1), ("single_trial", 5), ("concept_avg", 1)]
 
 
 _N_PAIR = 2   # print the A−B delta only when exactly two models are compared
@@ -53,7 +54,7 @@ class LosoEval:
         out = {}
         n = len(folds)
         for block, k in _METRICS:
-            vals = np.array([cast("dict[str, dict[str, float]]", f)[block][k] for f in folds], dtype=float)
+            vals = np.array([cast("dict[str, dict[int, float]]", f)[block][k] for f in folds], dtype=float)
             out[f"{block}.{k}"] = (float(vals.mean()), float(vals.std() / np.sqrt(max(1, n))))
         return out
 
