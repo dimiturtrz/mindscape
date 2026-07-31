@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 
 import numpy as np
+from jaxtyping import Float, Int
 from sklearn.cross_decomposition import CCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import StratifiedGroupKFold
@@ -51,7 +52,8 @@ class FusionCcaProbe:
     _EEG_FS = 100.0
 
     @classmethod
-    def _load(cls) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def _load(cls) -> tuple[Float[np.ndarray, "n ce te"], Float[np.ndarray, "n cf tf"],
+                            Int[np.ndarray, "n"], Int[np.ndarray, "n"]]:
         """Block-aligned EEG+fNIRS over the subjects both modalities share -> (Xe[N,ch,t], Xf[N,72,t], y, g).
         `g` = per-block subject index, for grouped cross-subject folds + per-subject EEG re-centering."""
         me = store.Store.load("shin2017_nback_eeg", cls._EEG_CFG)
@@ -73,7 +75,8 @@ class FusionCcaProbe:
         return np.concatenate(xes), np.concatenate(xfs), np.concatenate(ys), np.concatenate(gs)
 
     @classmethod
-    def _features(cls, xe: np.ndarray, xf: np.ndarray, g: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def _features(cls, xe: Float[np.ndarray, "n ce te"], xf: Float[np.ndarray, "n cf tf"],
+                  g: Int[np.ndarray, "n"]) -> tuple[Float[np.ndarray, "n de"], Float[np.ndarray, "n df"]]:
         """EEG re-centered-tangent feature (the strong decoder's feature space, per-subject centred) and the
         full fNIRS descriptor bank. Both are leakage-free per block (EEG re-centering is per-subject unsupervised;
         the bank is per-block), so they can be built once over all blocks before the fold split."""
@@ -82,15 +85,17 @@ class FusionCcaProbe:
         return eeg, fnirs
 
     @staticmethod
-    def _decode(feat_tr: np.ndarray, feat_te: np.ndarray, ytr: np.ndarray, yte: np.ndarray) -> float:
+    def _decode(feat_tr: Float[np.ndarray, "m d"], feat_te: Float[np.ndarray, "k d"],
+                ytr: Int[np.ndarray, "m"], yte: Int[np.ndarray, "k"]) -> float:
         """Shrinkage-LDA fit on train features, accuracy on test — the shared classifier every arm uses, so the
         arms differ ONLY in their feature set (matched comparison)."""
         lda = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto").fit(feat_tr, ytr)
         return metrics.Metrics.accuracy(yte, lda.predict(feat_te))
 
     @classmethod
-    def _fold_arms(cls, eeg: np.ndarray, fnirs: np.ndarray, y: np.ndarray,
-                   tr: np.ndarray, te: np.ndarray) -> dict[str, float]:
+    def _fold_arms(cls, eeg: Float[np.ndarray, "n de"], fnirs: Float[np.ndarray, "n df"],
+                   y: Int[np.ndarray, "n"], tr: Int[np.ndarray, "m"], te: Int[np.ndarray, "k"]
+                   ) -> dict[str, float]:
         """One fold: standardise both modalities on train, fit CCA on train to get the shared subspace, decode
         four arms (eeg / fnirs / naive-concat / cca-shared) with the same LDA. `shared` = the mean of the two
         aligned canonical projections — both estimate the same latent, averaging denoises."""
