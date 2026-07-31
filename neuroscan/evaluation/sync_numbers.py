@@ -78,7 +78,9 @@ class SyncNumbers:
         return [(m[0], m[1], m[2], SyncNumbers._render(runs, m[1])) for m in _MARKER.finditer(text)]
 
     @staticmethod
-    def sync(*, check: bool = False) -> int:
+    def sync(*, check: bool = False) -> int:  # devtools-ignore: test-mirror
+        # reads runs/results.json and rewrites the doc markers in place — file I/O, an integration path, not a
+        # unit (its pure pieces `_render`/`_markers`/`_doc_files` are unit-tested)
         runs = json.loads(_RESULTS.read_text())["runs"]
         total = stale_total = 0
         for path in SyncNumbers._doc_files():

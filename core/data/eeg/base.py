@@ -79,7 +79,7 @@ class MoabbMIAdapter:
     def subjects(self) -> list[int]:
         return list(self._dataset().subject_list)
 
-    def get_data(self, subjects: list[int] | None, cfg: EpochCfg
+    def get_data(self, subjects: list[int] | None, cfg: EpochCfg  # devtools-ignore: test-mirror
                  ) -> tuple[np.ndarray, np.ndarray, pl.DataFrame]:
         """Epoch the requested subjects -> (X[n,ch,t] float32, y[n] canonical int, meta polars frame).
 

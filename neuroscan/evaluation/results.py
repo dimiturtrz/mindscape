@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from core.config import REPO
 from neuroscan.tasks.cli import Cli
@@ -85,20 +85,26 @@ class Results:
 
         The one place that knows both run-aggregate shapes; reused by tracking.backfill so the schema
         knowledge isn't duplicated."""
-        from typing import cast as type_cast
         fm = agg.get("fold_mean")                                # harness schema: {"acc","kappa","ece"} or absent
         if fm is not None:
-            fm_dict = type_cast(dict[str, object], fm)
+            fm_dict = cast(dict[str, object], fm)
             if "acc" in fm_dict:
-                return {"acc": type_cast(float, fm_dict["acc"]), "kappa": type_cast(float | None, fm_dict.get("kappa")), "ece": type_cast(float | None, fm_dict.get("ece"))}
+                return {
+                    "acc": cast(float, fm_dict["acc"]),
+                    "kappa": cast(float | None, fm_dict.get("kappa")),
+                    "ece": cast(float | None, fm_dict.get("ece")),
+                }
         if "acc_mean" in agg:                                    # align.py schema
-            return {"acc": type_cast(float, agg["acc_mean"]), "kappa": type_cast(float | None, agg.get("kappa_mean")), "ece": type_cast(float | None, agg.get("ece_mean"))}
+            return {
+                "acc": cast(float, agg["acc_mean"]),
+                "kappa": cast(float | None, agg.get("kappa_mean")),
+                "ece": cast(float | None, agg.get("ece_mean")),
+            }
         return None
 
     @staticmethod
     def _row(name: str, agg: dict[str, object]) -> RunRow | None:
         """Normalize one aggregate.json -> a snapshot row, or None if it has no usable metrics."""
-        from typing import cast as type_cast
         m = Results.read_metrics(agg)
         if m is None:
             return None
@@ -109,19 +115,19 @@ class Results:
         extra_a = agg.get("per_role_mean", {})
         extra_b = agg.get("aggregation", {})
         extra_c = agg.get("complementarity", {})
-        extra = {**(type_cast(dict[str, object], extra_a) if extra_a else {}),
-                 **(type_cast(dict[str, object], extra_b) if extra_b else {}),
-                 **(type_cast(dict[str, object], extra_c) if extra_c else {})}
+        extra = {**(cast(dict[str, object], extra_a) if extra_a else {}),
+                 **(cast(dict[str, object], extra_b) if extra_b else {}),
+                 **(cast(dict[str, object], extra_c) if extra_c else {})}
         result: dict[str, float | int | str | None] = {
-            "method": type_cast(str, agg.get("method", method)),
-            "regime": type_cast(str, agg.get("regime", regime)),
+            "method": cast(str, agg.get("method", method)),
+            "regime": cast(str, agg.get("regime", regime)),
             "dataset": dataset,
-            "n_classes": type_cast(int | None, agg.get("n_classes")),
+            "n_classes": cast(int | None, agg.get("n_classes")),
             # metrics: kappa/ece are None on fusion runs (no per-fold kappa) — keep None, round the rest
-            **{k: (round(type_cast(float, v), _PRECISION) if v is not None else None) for k, v in m.items()},
-            **{k: round(type_cast(float, v), _PRECISION) for k, v in extra.items()},
+            **{k: (round(cast(float, v), _PRECISION) if v is not None else None) for k, v in m.items()},
+            **{k: round(cast(float, v), _PRECISION) for k, v in extra.items()},
         }
-        return type_cast(RunRow, result)
+        return cast(RunRow, result)
 
     @staticmethod
     def collect(runs_dir: Path = _RUNS) -> dict[str, RunRow]:
@@ -158,10 +164,9 @@ class Results:
             row = Results._row(run_dir.name, json.loads(agg_path.read_text()))
             if row is None:
                 return None
-            from typing import cast as type_cast
             empty_dict: dict[str, RunRow] = {}
             payload = json.loads(out_path.read_text()) if out_path.exists() else {"runs": {}}
-            runs: dict[str, RunRow] = type_cast(dict[str, RunRow], payload.get("runs", empty_dict))
+            runs: dict[str, RunRow] = cast(dict[str, RunRow], payload.get("runs", empty_dict))
             runs[run_dir.name] = row
             Results._dump(runs, out_path)
             return run_dir.name

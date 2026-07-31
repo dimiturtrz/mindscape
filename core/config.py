@@ -71,7 +71,7 @@ class Config:
         node = doc.experiments[name]
         if overrides:
             node = OmegaConf.merge(node, OmegaConf.from_dotlist(overrides))
-        return Experiment(**cast(dict, OmegaConf.to_container(node, resolve=True)))
+        return Experiment(**cast(dict[str, object], OmegaConf.to_container(node, resolve=True)))  # type: ignore[arg-type]
 
     @classmethod
     def to_native_path(cls, path_str: str) -> str:
@@ -169,5 +169,5 @@ class Config:
                 return Path(drive + rest.translate({ord(c): "-" for c in _bad}))
             return Path(s.translate({ord(c): "-" for c in _bad}))
 
-        _safe._mindscape_patched = True  # noqa: SLF001
-        _dl._sanitize_path = _safe  # noqa: SLF001
+        _safe._mindscape_patched = True  # type: ignore[attr-defined] # noqa: SLF001
+        _dl._sanitize_path = _safe  # type: ignore[attr-defined] # noqa: SLF001

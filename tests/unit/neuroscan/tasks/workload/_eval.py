@@ -30,31 +30,23 @@ def _valid(acc, sd, kap):
     assert -1.0 <= kap <= 1.0
 
 
-def test_grouped_default_build_decodes_amplitude():
+def test_cv_score():
     data = _dataset()
     acc, sd, kap = Eval.cv_score(None, data, CvConfig(grouped=True, seeds=(0, 1), k=5))
     _valid(acc, sd, kap)
     assert acc > 0.7                                        # clean amplitude signal -> well above 0.5 chance
-
-
-def test_within_subject_split_also_decodes():
+    # within-subject split also decodes
     data = _dataset()
     acc, sd, kap = Eval.cv_score(None, data, CvConfig(grouped=False, seeds=(0,), k=5))
     _valid(acc, sd, kap)
     assert acc > 0.7
-
-
-def test_custom_build_thunk_matches_default_fnirslda():
+    # custom build thunk matches default fnirslda
     data = _dataset()
     cfg = CvConfig(grouped=True, seeds=(0,), k=5)
     default = Eval.cv_score(None, data, cfg)
     custom = Eval.cv_score(lambda: FnirsLda(), data, cfg)   # build != None path
     assert np.allclose(default, custom)                    # the thunk builds the same decoder -> same score
-
-
-def test_classes_filter_restricts_and_binary_relabels():
-    """`classes=(0, 2)` on a 3-class set keeps only those labels and relabels binary (2 -> 1). The kept two
-    classes are still amplitude-separable, so it decodes; a 3rd untouched class is dropped from scoring."""
+    # classes filter restricts and binary relabels
     data = _dataset(n_classes=3)
     acc, sd, kap = Eval.cv_score(None, data, CvConfig(grouped=True, seeds=(0,), k=5, classes=(0, 2)))
     _valid(acc, sd, kap)

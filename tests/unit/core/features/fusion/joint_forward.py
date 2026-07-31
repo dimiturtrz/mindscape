@@ -7,9 +7,8 @@ from core.data.fnirs.synthetic import SynthConfig
 from core.features.fusion.joint_forward import Grid, JointConfig, JointForward
 
 
-def test_plant_latent_support_matches_active():
-    """Class: latent structure — exactly n_active parcels nonzero per trial, and they ARE the reported active
-    indices; every other parcel is silent (zero)."""
+def test_plant_latent():
+    """plant_latent() generates sparse source with n_active nonzero parcels per trial."""
     cfg = JointConfig(n_active=2)
     lat = JointForward.plant_latent(Grid(n_trials=4, n_parcels=6, n_times=50, sfreq=10.0), cfg=cfg, seed=1)
     assert lat.source.shape == (4, 6, 50)
@@ -19,9 +18,8 @@ def test_plant_latent_support_matches_active():
         assert set(nonzero.tolist()) == set(lat.active[i].tolist())
 
 
-def test_sensitivity_decreases_with_distance():
-    """Class: geometric sensitivity — a channel weights a NEAR parcel more than a FAR one, and all weights are
-    positive (a Gaussian of the cortical distance)."""
+def test_sensitivity():
+    """sensitivity() returns a Gaussian weight matrix: near parcels weighted more than far ones."""
     parcels = np.array([[0.0, 0.0, 0.05], [0.0, 0.0, -0.05], [0.08, 0.0, 0.0]], dtype=np.float32)
     channel = np.array([[0.0, 0.0, 0.09]], dtype=np.float32)          # scalp above parcel 0
     a = JointForward.sensitivity(parcels, channel, JointConfig())
@@ -30,9 +28,8 @@ def test_sensitivity_decreases_with_distance():
     assert a[0, 0] > a[0, 1] and a[0, 0] > a[0, 2]                    # nearest parcel is most sensitive
 
 
-def test_eeg_from_source_is_linear_lead_field():
-    """Class: EEG forward — with noise off, sensors are exactly the lead-field mixing of the source; a zero
-    lead-field column (silent-to-sensors parcel) contributes nothing."""
+def test_eeg_from_source():
+    """eeg_from_source() applies linear lead-field mixing to source signals."""
     rng = np.random.default_rng(0)
     source = rng.standard_normal((2, 3, 40)).astype(np.float32)
     lead = rng.standard_normal((5, 3)).astype(np.float32)
@@ -45,9 +42,8 @@ def test_eeg_from_source_is_linear_lead_field():
     np.testing.assert_allclose(eeg, np.einsum("cp,npt->nct", lead[:, :2], source[:, :2]), atol=1e-5)
 
 
-def test_fnirs_hbo_hbr_anticorrelated_on_neural():
-    """Class: fNIRS forward — with systemic + measurement noise off, HbR is exactly the anti-correlated
-    -hbr_ratio·HbO neural response (what CBSI must keep); a silent source yields a flat-zero response."""
+def test_fnirs_from_source():
+    """fnirs_from_source() generates HbO/HbR anti-correlated response from source."""
     scfg = SynthConfig(systemic_amp=0.0, noise_std=0.0, hbr_ratio=0.4)
     cfg = JointConfig(synth=scfg)
     lat = JointForward.plant_latent(Grid(n_trials=3, n_parcels=4, n_times=200, sfreq=10.0), cfg=cfg, seed=2)

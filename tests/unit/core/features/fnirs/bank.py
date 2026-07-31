@@ -1,13 +1,23 @@
-"""fNIRS descriptor bank: shape/column-map contract, per-descriptor sanity on known signals, and the
-one thing that's easy to get wrong — the weight must land AFTER standardisation."""
+"""fNIRS descriptor bank: shape/column-map contract, per-descriptor sanity on known signals."""
 import numpy as np
 import pytest
 
 from core.features import DescriptorBank
-from core.features.fnirs.bank import FNIRS_FEATURE_FNS, WeightedFamilyScaler
+from core.features.fnirs.bank import FNIRS_FEATURE_FNS
 
 
-def test_extract_bank_shape_and_column_map():
+def test_family_names():
+    """family_names() returns the family list in column order."""
+    names = DescriptorBank.family_names()
+    assert isinstance(names, list)
+    assert len(names) > 0
+    expected_families = {"mean", "slope", "peak", "variance", "skew", "kurtosis", "auc", "time_to_peak",
+                        "min", "max", "range", "final", "early_slope", "late_slope", "zero_crossings"}
+    assert set(names) == expected_families
+
+
+def test_extract_bank():
+    """extract_bank() concatenates all descriptor families and maps each column to its family."""
     n, ch, t = 5, 72, 220
     X = np.random.default_rng(0).standard_normal((n, ch, t))
     F, fam = DescriptorBank.extract_bank(X)
@@ -41,31 +51,23 @@ def test_descriptors_on_known_signals():
     assert f["max"][1] == pytest.approx(t - 1)
 
 
-def test_weighted_scaler_standardises_then_weights():
-    rng = np.random.default_rng(1)
-    X = rng.normal(loc=5.0, scale=2.0, size=(200, 2))                      # 2 columns, non-unit mean/scale
-    fam = np.array(["a", "b"])
-    ws = WeightedFamilyScaler(fam, {"a": 1.0, "b": 2.0}).fit(X)
-    Z = ws.transform(X)
-    # column a: standardised -> ~unit std; column b: standardised THEN ×2 -> ~2× std
-    assert np.std(Z[:, 0]) == pytest.approx(1.0, abs=0.05)
-    assert np.std(Z[:, 1]) == pytest.approx(2.0, abs=0.1)
-    assert np.mean(Z[:, 0]) == pytest.approx(0.0, abs=0.05)
 
 
-def test_weight_zero_drops_family():
-    X = np.random.default_rng(2).standard_normal((50, 3))
-    fam = np.array(["keep", "drop", "keep"])
-    Z = WeightedFamilyScaler(fam, {"drop": 0.0}).fit(X).transform(X)
-    assert np.allclose(Z[:, 1], 0.0)                                       # dropped family is zeroed out
-    assert not np.allclose(Z[:, 0], 0.0)
+def test_f_time_to_peak():
+    """f_time_to_peak: latency (in [0,1)) of each channel's signed extreme — a ramp peaks at the end."""
+    t = 100
+    X = np.zeros((1, 2, t))
+    X[0, 1, :] = np.arange(t)                              # channel 1 ramps up -> extreme at the last sample
+    ttp = DescriptorBank.f_time_to_peak(X)
+    assert ttp.shape == (1, 2)
+    assert ttp[0, 1] == pytest.approx((t - 1) / t)
 
 
-def test_scaler_fits_on_train_only():
-    # std_ comes from the fitted (train) data, not the transformed set — no leakage
-    rng = np.random.default_rng(3)
-    Xtr = rng.normal(0, 1, (100, 1))
-    Xte = rng.normal(0, 5, (100, 1))                                       # test has 5× the spread
-    ws = WeightedFamilyScaler(np.array(["a"]), {}).fit(Xtr)
-    Zte = ws.transform(Xte)
-    assert np.std(Zte[:, 0]) == pytest.approx(5.0, abs=0.6)               # scaled by TRAIN std (~1), so ~5
+def test_f_zero_crossings():
+    """f_zero_crossings: number of sign changes over time — an alternating signal crosses every step."""
+    alt = np.tile([1.0, -1.0], 50)                        # 100 samples, sign flips every step -> 99 crossings
+    X = np.stack([np.full(100, 3.0), alt])[None]          # channel 0 constant (0 crossings), channel 1 alternating
+    zc = DescriptorBank.f_zero_crossings(X)
+    assert zc.shape == (1, 2)
+    assert zc[0, 0] == pytest.approx(0.0)                  # constant never crosses
+    assert zc[0, 1] == pytest.approx(99.0)

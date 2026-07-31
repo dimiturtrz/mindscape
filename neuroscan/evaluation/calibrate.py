@@ -69,7 +69,7 @@ class Calibrate:
         return ap.parse_args()
 
     @classmethod
-    def _per_subject_rows(cls, meta: pl.DataFrame, fit: Callable[..., object],
+    def _per_subject_rows(cls, meta: pl.DataFrame, fit: Callable[..., decoders.BraindecodeClf],
                           test_session: str) -> list[dict[str, str | float]]:
         """One temperature-scaling row per subject: fit T on the in-session val, report val + cross-session ECE."""
         rows: list[dict[str, str | float]] = []

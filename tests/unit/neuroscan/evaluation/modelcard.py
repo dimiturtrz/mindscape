@@ -13,10 +13,19 @@ _RES = {
 }
 
 
-def test_card_has_headline_and_where_it_fails():
+def test_card():
     md = modelcard.ModelCard.card(_RES, "bnci2014_001", "within")
     assert "# Model card" in md
     assert "Where it fails" in md
     assert "worst: subject 1" in md          # lowest-acc fold surfaced
     assert "vs reference" in md
     assert "| 1 | 0.340 |" in md             # per-subject table row
+
+
+def test_write(tmp_path):
+    """write renders the card to a file."""
+    out = tmp_path / "card.md"
+    modelcard.ModelCard.write(_RES, "bnci2014_001", "within", out)
+    content = out.read_text()
+    assert "# Model card" in content
+    assert "bnci2014_001" in content

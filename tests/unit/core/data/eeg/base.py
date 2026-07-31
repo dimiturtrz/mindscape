@@ -12,7 +12,7 @@ def test_canonical_mi_is_the_fixed_four_class_convention():
     assert CANONICAL_MI == {"left_hand": 0, "right_hand": 1, "feet": 2, "tongue": 3}
 
 
-def test_epochcfg_key_encodes_recipe_and_disambiguates():
+def test_key():
     base = EpochCfg()                                    # 8-32 Hz, t0-full, r128
     assert base.key() == "b8p0-32p0_t0p0-full_r128p0"    # dots -> 'p', None tmax -> 'full'
     assert EpochCfg(fmin=4.0).key() != base.key()        # a changed param yields a different cache dir
@@ -23,7 +23,7 @@ class _DummyDataset:
     subject_list = [1, 2, 3]
 
 
-def test_adapter_defaults_label_map_to_canonical():
+def test_subjects():
     a = MoabbMIAdapter("bnci", _DummyDataset)
     assert a.label_map == CANONICAL_MI
     assert a.name == "bnci" and a.n_classes == 4
@@ -34,3 +34,7 @@ def test_adapter_keeps_injected_label_map():
     custom = {"left_hand": 0, "right_hand": 1}
     a = MoabbMIAdapter("two", _DummyDataset, n_classes=2, label_map=custom)
     assert a.label_map == custom and a.n_classes == 2
+
+
+# MoabbMIAdapter.get_data wraps MOABB's paradigm epoching — it needs a real dataset download, so it is an
+# integration path, not a unit (see the module docstring); marked `# devtools-ignore: test-mirror` at source.

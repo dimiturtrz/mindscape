@@ -43,7 +43,7 @@ class ReproduceAll:
             exp = config.Config.load_experiment(name)
             if exp.task not in ("decode", "fnirs"):
                 continue
-            cfg = FnirsCfg(**exp.recipe) if exp.task == "fnirs" else EpochCfg(**exp.recipe)
+            cfg = FnirsCfg.model_validate(exp.recipe) if exp.task == "fnirs" else EpochCfg.model_validate(exp.recipe)
             # decode/fnirs runs always carry dataset/method/regime (the task filter above guarantees it)
             runs.append((name, cast(str, exp.dataset), cast(str, exp.method), cast(str, exp.regime),
                          cfg, exp.test_session))

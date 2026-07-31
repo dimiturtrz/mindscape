@@ -13,8 +13,29 @@ def _epochs(rng, n=3, n_e=8, n_f=6):
     return rng.standard_normal((n, n_e, 4000)), rng.standard_normal((n, 2 * n_f, 320))
 
 
-def test_channel_series_grid_and_envelope_contract():
-    """Returns (eeg{theta,alpha,beta}, neural, t_dst, coupling); the grid has `t_end*fps` samples and the
+def test_band_env():
+    """band_env() computes non-negative band-power envelope via bandpass + analytic signal."""
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal((2, 3, 1000)).astype(np.float32)
+    env = Series.band_env(X, fs=100.0, band=(8.0, 13.0))
+    assert env.shape == X.shape
+    assert (env >= 0).all()                              # envelope is magnitude, non-negative
+    assert np.isfinite(env).all()
+
+
+def test_resample_time():
+    """resample_time() linearly resamples signals to a new time axis."""
+    rng = np.random.default_rng(1)
+    X = rng.standard_normal((2, 4, 100)).astype(np.float32)
+    t_src = np.linspace(0, 10, 100)
+    t_dst = np.linspace(0, 10, 50)  # downsample by 2x
+    X_resampled = Series.resample_time(X, t_src, t_dst)
+    assert X_resampled.shape == (2, 4, 50)
+    assert np.isfinite(X_resampled).all()
+
+
+def test_channel_series():
+    """channel_series() returns (eeg{theta,alpha,beta}, neural, t_dst, coupling); the grid has `t_end*fps` samples and the
     band envelopes are non-negative (|analytic signal|)."""
     rng = np.random.default_rng(0)
     Xe, Xf = _epochs(rng)

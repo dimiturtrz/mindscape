@@ -39,9 +39,9 @@ from torch import Tensor, nn
 from core.config import Config
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.montage import EegMontage
-from neuroscan.models.head import Head, HeadContext, HeadSpec
 from neuroscan.models.encoders import NORMALIZE_CHOICES, EncoderRegistry
 from neuroscan.models.foundation import Foundation, LoadedBackbone
+from neuroscan.models.head import Head, HeadContext, HeadSpec
 from neuroscan.models.nice_loss import Nice
 from neuroscan.tasks.visual import clip_targets
 from neuroscan.tracking import Tracking

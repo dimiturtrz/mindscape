@@ -6,7 +6,7 @@ only called on `get_adapter`), so no dataset is instantiated until requested.
 """
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, cast
 
 from core.data.eeg.base import DatasetAdapter
 from core.data.eeg.bnci2014_001 import Bnci2014001
@@ -52,7 +52,7 @@ class Registry:
 
     @staticmethod
     def _shin2017_nback():
-        return Shin2017NirsAdapter.adapter("nback")
+        return cast(DatasetAdapter, Shin2017NirsAdapter.adapter("nback"))
 
     @staticmethod
     def _shin2017_nback_eeg():

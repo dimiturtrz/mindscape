@@ -15,7 +15,7 @@ from neuroscan.models.encoders import EncoderRegistry, EncoderSpec
 torch.manual_seed(0)
 
 
-def test_nice_builds_and_honours_the_contract():
+def test_build_encoder():
     spec = EncoderSpec(n_channels=17, n_times=100, embed_dim=64)
     encoder = EncoderRegistry.build_encoder("nice", spec)
     z = encoder(torch.randn(4, spec.n_channels, spec.n_times))
@@ -28,9 +28,24 @@ def test_unknown_encoder_raises_with_known_names():
         EncoderRegistry.build_encoder("nope", EncoderSpec(n_channels=17, n_times=100, embed_dim=64))
 
 
+def test_register():
+    """EncoderRegistry.register adds an encoder to the registry under a name."""
+    # Create a simple test encoder builder
+    def test_builder(spec):
+        return torch.nn.Identity()
+
+    # Register it
+    EncoderRegistry.register("test_encoder_temp", test_builder)
+
+    # Verify it's in the registry by building it
+    spec = EncoderSpec(n_channels=8, n_times=64, embed_dim=128)
+    encoder = EncoderRegistry.build_encoder("test_encoder_temp", spec)
+    assert encoder is not None
+
+
 @pytest.mark.parametrize(("override", "link"), [
     ("auto", ZScore), ("zscore", ZScore), ("scale", Scale), ("mvnn", Mvnn)])
-def test_normalization_override_resolves_to_its_link(override, link):
+def test_normalization(override, link):
     """Each --normalize override maps to the right normalizer object: auto/zscore → per-channel z-score (the
     default for every encoder), scale → CBraMod amplitude scale, mvnn → per-subject whitening."""
     groups = np.zeros(4, dtype=np.int64)

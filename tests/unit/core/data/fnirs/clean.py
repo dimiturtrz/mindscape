@@ -11,46 +11,71 @@ def _pair(hbo, hbr):
     return np.concatenate([hbo, hbr], axis=1)
 
 
-def test_cbsi_removes_common_mode_artifact():
+def test_cbsi_fit():
     t = np.arange(200) / 10.0
     neural = np.sin(2 * np.pi * 0.05 * t)                            # slow hemodynamic-ish
     artifact = 3.0 * np.sin(2 * np.pi * 0.1 * t)                     # common-mode (same in HbO and HbR)
     hbo = (neural + artifact)[None, None, :]                         # HbO = +neural + artifact
     hbr = (-neural + artifact)[None, None, :]                        # HbR = -neural + artifact (anti-corr neural)
     X = _pair(hbo, hbr)
-    out = Cbsi().transform(X)
+    out = Cbsi().fit(X).transform(X)
     hbo_c = out[0, 0]
     # common-mode artifact is largely removed -> corrected HbO tracks the neural component, not the artifact
     assert np.corrcoef(hbo_c, neural)[0, 1] > 0.98
     assert abs(np.corrcoef(hbo_c, artifact)[0, 1]) < 0.3
 
 
-def test_cbsi_shape_and_dtype_preserved():
+def test_cbsi_transform():
     X = np.random.default_rng(0).standard_normal((5, 8, 100)).astype(np.float32)
-    out = Cbsi().transform(X)
+    out = Cbsi().fit(X).transform(X)
     assert out.shape == X.shape and out.dtype == X.dtype
 
 
-def test_detrend_kills_linear_drift():
+def test_detrend_fit():
     t = np.arange(100)
     X = (0.5 * t + 2.0)[None, None, :].repeat(3, 1)                  # pure linear ramp, 3 channels
-    out = Detrend().transform(X)
+    out = Detrend().fit(X).transform(X)
     assert np.allclose(out, 0.0, atol=1e-6)                          # ramp -> ~0
 
 
-def test_chain_applies_in_order_and_is_leakage_free():
+def test_detrend_transform():
+    t = np.arange(100)
+    X = (0.5 * t + 2.0)[None, None, :].repeat(3, 1)                  # pure linear ramp, 3 channels
+    detrend = Detrend().fit(X)
+    out = detrend.transform(X)
+    assert out.shape == X.shape
+
+
+def test_chain_fit():
     X = np.random.default_rng(1).standard_normal((4, 6, 80))
     chain = Chain.make_cleaner(["cbsi", "detrend"])
     assert isinstance(chain, Chain) and len(chain.cleaners) == 2
     # fit is a no-op for stateless cleaners: fit-then-transform == transform (no state carried from data)
-    a = chain.transform(X)
+    fitted_chain = chain.fit(X)
+    assert isinstance(fitted_chain, Chain)
+
+
+def test_chain_transform():
+    X = np.random.default_rng(1).standard_normal((4, 6, 80))
+    chain = Chain.make_cleaner(["cbsi", "detrend"])
+    a = chain.fit(X).transform(X)
     b = Chain.make_cleaner(["cbsi", "detrend"]).fit(X).transform(X)
     assert np.allclose(a, b)
 
 
-def test_make_cleaner_single_none_and_bad():
+def test_make_cleaner():
     assert Chain.make_cleaner(None) is None
     assert Chain.make_cleaner([]) is None
     assert len(Chain.make_cleaner("cbsi").cleaners) == 1
     with pytest.raises(ValueError):
         Chain.make_cleaner("nope")
+
+
+def test_clean_key():
+    """Test that Chain.clean_key generates a deterministic cache key."""
+    key1 = Chain.clean_key(["cbsi", "detrend"])
+    key2 = Chain.clean_key(["cbsi", "detrend"])
+    assert key1 == key2
+    # different cleaners give different keys
+    key3 = Chain.clean_key(["cbsi"])
+    assert key1 != key3

@@ -10,7 +10,6 @@ import pytest
 
 from neuroscan.evaluation import harness
 
-
 # --- folds_for: turning the data cloud into evaluation-regime folds -------------------------------------------
 
 def _meta():
@@ -22,37 +21,33 @@ def _meta():
     return pl.DataFrame(rows)
 
 
-def test_within_folds_one_per_subject_with_session_holdout():
-    folds = harness.Harness.folds_for(_meta(), "within", test_sessions=["1test"])
-    assert len(folds) == 3
-    for name, train, test in folds:
-        assert set(train["subject"].unique()) == {name}
-        assert set(test["subject"].unique()) == {name}
-        assert set(test["session"].unique()) == {"1test"}
-        assert set(train["session"].unique()) == {"0train"}
-
-
-def test_cross_subject_folds_are_loso():
-    folds = harness.Harness.folds_for(_meta(), "cross_subject")
-    assert len(folds) == 3
-    for name, train, test in folds:
-        assert set(test["subject"].unique()) == {name}
-        assert name not in set(train["subject"].unique())
-
-
-def test_unknown_regime_raises():
-    with pytest.raises(ValueError):
-        harness.Harness.folds_for(_meta(), "nope")
-
-
 def _kfold_meta(n_subjects=5):
     rows = [{"subject": str(s), "session": "0", "label_id": e % 2, "epoch": e}
             for s in range(n_subjects) for e in range(4)]
     return pl.DataFrame(rows)
 
 
-def test_folds_for_cross_subject_kfold_partitions_subjects():
-    folds = harness.Harness.folds_for(_kfold_meta(5), "cross_subject_kfold")
+def test_folds_for():
+    meta = _meta()
+    folds = harness.Harness.folds_for(meta, "within", test_sessions=["1test"])
+    assert len(folds) == 3
+    for name, train, test in folds:
+        assert set(train["subject"].unique()) == {name}
+        assert set(test["subject"].unique()) == {name}
+        assert set(test["session"].unique()) == {"1test"}
+        assert set(train["session"].unique()) == {"0train"}
+    # cross_subject variant
+    folds = harness.Harness.folds_for(meta, "cross_subject")
+    assert len(folds) == 3
+    for name, train, test in folds:
+        assert set(test["subject"].unique()) == {name}
+        assert name not in set(train["subject"].unique())
+    # unknown regime raises
+    with pytest.raises(ValueError):
+        harness.Harness.folds_for(meta, "nope")
+    # cross_subject_kfold partitions subjects
+    meta_kfold = _kfold_meta(5)
+    folds = harness.Harness.folds_for(meta_kfold, "cross_subject_kfold")
     assert len(folds) == 5                        # k=5 over 5 subjects == LOSO limit
     tested = set()
     for _name, train, test in folds:
@@ -87,7 +82,7 @@ def _perfect_method(n_classes):
     return harness.Method(name="perfect", fit=fit, score=score, n_classes=n_classes, regime="within")
 
 
-def test_aggregate_fold_mean_and_pooled_perfect_scorer(monkeypatch):
+def test_aggregate(monkeypatch):
     monkeypatch.setattr(harness.store.Store, "gather", staticmethod(_stub_gather))
     folds = [_fold("s1", [0, 1, 2, 3]), _fold("s2", [0, 0, 1, 1, 2])]   # unequal fold sizes
     res = harness.Harness.aggregate(_perfect_method(4), folds)
@@ -101,11 +96,20 @@ def test_aggregate_fold_mean_and_pooled_perfect_scorer(monkeypatch):
     assert conf.shape == (4, 4)
     assert conf.trace() == 9                     # all 9 epochs on the diagonal (perfect)
     assert res["acc_spread"]["min"] == 1.0 and res["acc_spread"]["max"] == 1.0
-
-
-def test_aggregate_collects_models_out_in_fold_order(monkeypatch):
-    monkeypatch.setattr(harness.store.Store, "gather", staticmethod(_stub_gather))
-    folds = [_fold("a", [0, 1]), _fold("b", [1, 0])]
+    # collects models_out in fold order
     models: list = []
-    harness.Harness.aggregate(_perfect_method(2), folds, models_out=models)
-    assert [name for name, _clf in models] == ["a", "b"]
+    harness.Harness.aggregate(_perfect_method(4), folds, models_out=models)
+    assert [name for name, _clf in models] == ["s1", "s2"]
+
+
+def test_run(monkeypatch):
+    """run calls aggregate and logs to tracking, returning the aggregate result."""
+    monkeypatch.setattr(harness.store.Store, "gather", staticmethod(_stub_gather))
+    monkeypatch.setattr(harness.tracking.Tracking, "run", lambda *a, **kw: __import__("contextlib").nullcontext())
+    monkeypatch.setattr(harness.tracking.Tracking, "metrics", lambda *a, **kw: None)
+    monkeypatch.setattr(harness.tracking.Tracking, "per_group", lambda *a, **kw: None)
+    monkeypatch.setattr(harness.tracking.Tracking, "artifact_json", lambda *a, **kw: None)
+    folds = [_fold("s1", [0, 1]), _fold("s2", [1, 0])]
+    res = harness.Harness.run(_perfect_method(2), folds)
+    assert res["method"] == "perfect"
+    assert res["fold_mean"]["acc"] == 1.0

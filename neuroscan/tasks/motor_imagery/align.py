@@ -29,7 +29,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import cast
+from typing import TypedDict
 
 import numpy as np
 import polars as pl
@@ -53,6 +53,28 @@ logger = logging.getLogger(__name__)
 
 _ZERO_SHOT = {"recenter", "recenter_scale"}
 _CALIBRATED = {"rpa", "mdwm"}
+
+
+class _AlignRowZeroShot(TypedDict):
+    """Row result for zero-shot alignment method."""
+    fold: str
+    n: int
+    acc: float
+    kappa: float
+    ece: float
+
+
+class _AlignRowCalibratedTypedDict(TypedDict):
+    """Row result for calibrated alignment method."""
+    fold: str
+    n: int
+    n_calib: int
+    acc: float
+    kappa: float
+    ece: float
+
+
+_AlignRow = _AlignRowZeroShot | _AlignRowCalibratedTypedDict
 
 
 class AlignConfig(BaseModel):
@@ -141,7 +163,7 @@ class Align:
 
         exp = config.Config.load_experiment(args.exp, args.overrides)
         # an align experiment always names its dataset + method
-        dataset, method = cast(str, exp.dataset), cast(str, exp.method)
+        dataset, method = str(exp.dataset), str(exp.method)
         p = exp.params
         calib_frac = p.get("calib_frac", 0.5)
         augment = p.get("augment", False)
@@ -162,7 +184,7 @@ class Align:
         out_folds = Parallel(n_jobs=args.jobs)(
             delayed(cls._run_fold)(s, tr, te, fold_cfg) for s, tr, te in folds)
 
-        rows: list[dict[str, object]] = []
+        rows: list[_AlignRow] = []
         P: list[np.ndarray] = []
         Y: list[np.ndarray] = []
         for row, probs, yte in sorted(out_folds, key=lambda r: r[0]["fold"]):

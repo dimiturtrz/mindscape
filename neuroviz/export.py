@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 import mne
 import numpy as np
@@ -58,17 +59,17 @@ def _load_epochs(subject: int) -> tuple[mne.Epochs, np.ndarray]:
     ep, labels, _ = para.get_data(dataset=BNCI2014_001(), subjects=[subject], return_epochs=True)
     ep.set_montage(mne.channels.make_standard_montage("standard_1020"),  # type: ignore[union-attr]
                    match_case=False, on_missing="ignore")
-    return ep, np.asarray(labels)
+    return cast(mne.Epochs, ep), np.asarray(labels)
 
 
 def _pos2d(info: mne.Info):
-    pos = _find_topomap_coords(info, picks="eeg")          # sphere-projected 2D, the standard topo layout
+    pos = np.asarray(_find_topomap_coords(info, picks="eeg"))   # sphere-projected 2D, the standard topo layout
     pos = pos - pos.mean(0)
     pos = pos / np.abs(pos).max()                          # normalize into [-1, 1]
     return pos
 
 
-def _erd_frames(ep: mne.Epochs, labels: np.ndarray, band_hz: tuple[float, float], n_frames: int = N_FRAMES,
+def _erd_frames(ep: mne.BaseEpochs, labels: np.ndarray, band_hz: tuple[float, float], n_frames: int = N_FRAMES,
                 baseline_s: float = BASELINE_S):
     """Time-resolved ERD per class: band-limited power over the trial, baseline-normalized to the first
     `baseline_s` (pre-imagery). Negative = event-related DESYNCHRONIZATION (the motor-imagery signature).
@@ -76,7 +77,7 @@ def _erd_frames(ep: mne.Epochs, labels: np.ndarray, band_hz: tuple[float, float]
     fmin, fmax = band_hz
     band = ep.copy().filter(fmin, fmax, verbose="error")
     sf = ep.info["sfreq"]
-    X = band.get_data() * 1e6
+    X = np.asarray(band.get_data()) * 1e6
     power = X ** 2                                          # [n_epochs, ch, t]
     T = power.shape[2]
     t = np.arange(T) / sf
@@ -94,8 +95,8 @@ def _erd_frames(ep: mne.Epochs, labels: np.ndarray, band_hz: tuple[float, float]
     return frames, ftimes
 
 
-def _csp_patterns(ep: mne.Epochs, labels: np.ndarray, n: int = N_CSP):
-    X = ep.get_data() * 1e6
+def _csp_patterns(ep: mne.BaseEpochs, labels: np.ndarray, n: int = N_CSP):
+    X = np.asarray(ep.get_data()) * 1e6
     csp = CSP(n_components=n, reg="ledoit_wolf", log=True)
     csp.fit(X.astype(np.float64), labels)
     pat = csp.patterns_                                    # [n_ch, n_components] (mne convention)
@@ -103,7 +104,7 @@ def _csp_patterns(ep: mne.Epochs, labels: np.ndarray, n: int = N_CSP):
     return [(row / (np.abs(row).max() + 1e-9)).tolist() for row in pat]
 
 
-def _riemann_patterns(ep: mne.Epochs, labels: np.ndarray):
+def _riemann_patterns(ep: mne.BaseEpochs, labels: np.ndarray):
     """Per-class Riemannian discriminant channel weights — what the tangent-space classifier learned.
 
     Fits the tangent-space + logistic-regression baseline (baselines/eeg/riemann.py), then reads each class's
@@ -111,7 +112,7 @@ def _riemann_patterns(ep: mne.Epochs, labels: np.ndarray):
     how much that channel's own power drives the logit for the class. Parallel to CSP patterns, but here
     the feature is the covariance itself (no spatial filters). Returns {class: [w per channel]}, normalized.
     """
-    X = ep.get_data() * 1e6
+    X = np.asarray(ep.get_data()) * 1e6
     clf = TangentSpace().fit(X.astype(np.float64), np.asarray(labels))
     lr = clf.pipe_.named_steps["logisticregression"]
     coef = np.atleast_2d(lr.coef_)                         # [n_class, n_tri] over upper-triangular cov entries
@@ -128,11 +129,11 @@ def _riemann_patterns(ep: mne.Epochs, labels: np.ndarray):
     return out
 
 
-def _waveforms(ep: mne.Epochs, labels: np.ndarray, per_class: int = PER_CLASS, n_t: int = N_WAVE_T):
+def _waveforms(ep: mne.BaseEpochs, labels: np.ndarray, per_class: int = PER_CLASS, n_t: int = N_WAVE_T):
     """One example trial per class, ALL channels (downsampled to ~n_t points for display).
     The viewer colors each channel by its contribution to the selected view — no hardcoded highlight."""
     names = list(ep.ch_names)
-    X = ep.get_data() * 1e6                                # [n, ch, t] microvolts
+    X = np.asarray(ep.get_data()) * 1e6                                # [n, ch, t] microvolts
     T = X.shape[2]
     step = max(1, T // n_t)
     ti = np.arange(0, T, step)
@@ -144,8 +145,8 @@ def _waveforms(ep: mne.Epochs, labels: np.ndarray, per_class: int = PER_CLASS, n
     return {"t": t, "trials": out, "chans": names}
 
 
-def _eeg_view(subject: int, ep: mne.Epochs, labels: np.ndarray, frames: dict[str, list[list[float]]],
-              ftimes: list[float]) -> dict[str, object]:
+def _eeg_view(subject: int, ep: mne.BaseEpochs, labels: np.ndarray,
+              frames: dict[str, dict[str, list[list[float]]]], ftimes: list[float]) -> dict[str, object]:
     """The shared EEG view payload (motor-imagery and workload exporters differ only in the frame bands):
     channels + 2D positions + per-class frames + CSP/Riemann patterns + example waveforms."""
     return {

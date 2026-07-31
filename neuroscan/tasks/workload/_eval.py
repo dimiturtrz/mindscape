@@ -6,7 +6,7 @@ the CV plumbing.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, cast
 
 import numpy as np
 from pydantic import BaseModel
@@ -54,7 +54,7 @@ class Eval:
             sp = (StratifiedGroupKFold(config.k, shuffle=True, random_state=seed) if config.grouped
                   else StratifiedKFold(config.k, shuffle=True, random_state=seed))
             for tr, te in sp.split(X, y, groups if config.grouped else None):
-                clf = (build() if build is not None else FnirsLda()).fit(X[tr], y[tr])
+                clf = cast(FnirsLda, build() if build is not None else FnirsLda()).fit(X[tr], y[tr])
                 pred = clf.predict_proba(X[te]).argmax(1)
                 accs.append(metrics.Metrics.accuracy(y[te], pred))
                 kaps.append(metrics.Metrics.kappa(y[te], pred))

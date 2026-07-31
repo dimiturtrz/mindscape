@@ -8,7 +8,7 @@ import numpy as np
 from core.features.eeg.montage import EegMontage
 
 
-def test_eeg_positions_shape_and_unit_disk():
+def test_eeg_positions():
     ch = ["Cz", "Fz", "Pz", "Oz", "C3", "C4"]
     pos = EegMontage.eeg_positions(ch)
     assert pos.shape == (len(ch), 2)
@@ -22,14 +22,14 @@ def test_unknown_channel_is_nan_row():
     assert np.isnan(pos[1]).all()                           # missing channel -> NaN, not a fabricated position
 
 
-def testto_unit_disk_centers_and_scales():
+def test_to_unit_disk():
     raw = np.array([[10.0, 10.0], [10.0, 12.0], [12.0, 10.0], [8.0, 8.0]])
     out = EegMontage.to_unit_disk(raw)
     assert np.allclose(out.mean(0), 0.0, atol=1e-6)        # centred on the mean
     assert np.hypot(out[:, 0], out[:, 1]).max() <= 1.0 + 1e-6
 
 
-def test_channel_laplacian_is_valid_graph_laplacian():
+def test_channel_laplacian():
     pos = EegMontage.eeg_positions(["Cz", "Fz", "Pz", "Oz", "C3", "C4"])
     lap = EegMontage.channel_laplacian(pos, sigma=0.3)
     assert lap.shape == (len(pos), len(pos))

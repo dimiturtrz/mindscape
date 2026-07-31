@@ -7,7 +7,7 @@ import numpy as np
 from core.normalization.scale import Scale
 
 
-def test_multiplies_by_factor():
+def test_apply():
     out = Scale(1e4).apply(np.ones((2, 3, 4), dtype=np.float32))
     assert np.allclose(out, 1e4)
 

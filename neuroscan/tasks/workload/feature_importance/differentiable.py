@@ -215,7 +215,9 @@ class Differentiable:
             w_full = cls._fit(Fs_std, ys, spec, float(lam), hp)
             w = w_full.weights().detach().cpu().numpy()
             fw = cls._family_weights(w, gi_np, families, grain)
-            sweep.append(cast(_SweepPoint, {"lam": float(lam), "acc": acc, "eff_n": cls._effective_n(w), "family_weights": fw}))
+            sweep.append(cast(_SweepPoint, {
+                "lam": float(lam), "acc": acc, "eff_n": cls._effective_n(w), "family_weights": fw
+            }))
             top = sorted(fw.items(), key=lambda kv: -kv[1])[:4]
             logger.info(
                 f"  λ={float(lam):<5} acc {acc:.3f} · eff-#feat {sweep[-1]['eff_n']:.2f} · "

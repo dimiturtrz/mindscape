@@ -5,7 +5,7 @@ import polars as pl
 from core.data import store
 
 
-def test_gather_preserves_row_order(tmp_path):
+def test_gather(tmp_path):
     X = np.arange(5 * 2 * 3).reshape(5, 2, 3).astype(np.float32)
     npz = tmp_path / "sub1.npz"
     np.savez(npz, X=X, y=np.array([0, 1, 2, 3, 0]),
@@ -45,7 +45,7 @@ def _meta(npz, subject, labels):
         "label_id": list(labels), "subject": [str(subject)] * len(labels)})
 
 
-def test_gather_aligned_returns_both_modalities_and_shared_labels(tmp_path):
+def test_gather_aligned(tmp_path):
     Xe = np.arange(3 * 2 * 4).reshape(3, 2, 4).astype(np.float32)
     Xf = np.arange(3 * 5 * 6).reshape(3, 5, 6).astype(np.float32)     # fNIRS: different ch/t
     np.savez(tmp_path / "e.npz", X=Xe, y=np.array([0, 1, 0]))
@@ -65,3 +65,93 @@ def test_gather_aligned_raises_on_misaligned_labels(tmp_path):
     mf = _meta(tmp_path / "f.npz", "7", [1, 0])
     with pytest.raises(ValueError, match="misaligned"):
         store.Store.gather_aligned(me, mf, "7")
+
+
+def test_build(tmp_path, monkeypatch):
+    """Test that build creates output directory and metadata."""
+    from core.data.eeg.base import EpochCfg
+    from unittest.mock import MagicMock, patch
+    import json
+
+    monkeypatch.setenv("MINDSCAPE_DATA", str(tmp_path / "data"))
+    (tmp_path / "data").mkdir()
+
+    # Mock the registry to avoid needing real datasets
+    with patch('core.data.store.Registry.get_adapter') as mock_get_adapter:
+        mock_adapter = MagicMock()
+        mock_adapter.subjects.return_value = [1]
+        mock_adapter.label_map = {0: "class_a", 1: "class_b"}
+        mock_adapter.channels.return_value = ["ch1", "ch2"]
+        mock_adapter.get_data.return_value = (
+            np.zeros((1, 2, 10), dtype=np.float32),
+            np.array([0]),
+            pl.DataFrame({"session": ["s1"], "run": ["0"]})
+        )
+        mock_get_adapter.return_value = mock_adapter
+
+        cfg = EpochCfg()
+        out = store.Store.build("test_dataset", cfg)
+        assert out.exists()
+        assert (out / "meta.csv").exists()
+
+
+def test_dataset_dir(tmp_path, monkeypatch):
+    """Test that dataset_dir returns correct path."""
+    from core.data.eeg.base import EpochCfg
+    monkeypatch.setenv("MINDSCAPE_DATA", str(tmp_path / "data"))
+    (tmp_path / "data").mkdir()
+    cfg = EpochCfg()
+    dataset_dir = store.Store.dataset_dir("test", cfg)
+    assert "test" in str(dataset_dir)
+    assert cfg.key() in str(dataset_dir)
+
+
+def test_load(tmp_path, monkeypatch):
+    """Test that load returns a polars DataFrame."""
+    from core.data.eeg.base import EpochCfg
+
+    monkeypatch.setenv("MINDSCAPE_DATA", str(tmp_path / "data"))
+    (tmp_path / "data").mkdir()
+
+    cfg = EpochCfg()
+    out_dir = store.Store.dataset_dir("test", cfg)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Setup a minimal metadata file
+    meta_file = out_dir / "meta.csv"
+    meta_data = pl.DataFrame({
+        "dataset": ["test"], "subject": ["1"], "session": ["s1"], "run": ["0"],
+        "label_id": [0], "label": ["left_hand"], "epoch": [0], "file": ["sub1.npz"]
+    })
+    meta_data.write_csv(meta_file)
+
+    df = store.Store.load("test", cfg)
+    assert isinstance(df, pl.DataFrame)
+
+
+def test_channels(tmp_path, monkeypatch):
+    """Test that channels returns channel names or None."""
+    from core.data.eeg.base import EpochCfg
+    import json
+
+    monkeypatch.setenv("MINDSCAPE_DATA", str(tmp_path / "data"))
+    (tmp_path / "data").mkdir()
+
+    cfg = EpochCfg()
+    out_dir = store.Store.dataset_dir("test", cfg)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create metadata
+    meta_file = out_dir / "meta.csv"
+    meta_data = pl.DataFrame({
+        "dataset": ["test"], "subject": ["1"], "session": ["s1"], "run": ["0"],
+        "label_id": [0], "label": ["left_hand"], "epoch": [0], "file": ["sub1.npz"]
+    })
+    meta_data.write_csv(meta_file)
+
+    # Create channels file
+    channels_file = out_dir / "channels.json"
+    channels_file.write_text(json.dumps(["ch1", "ch2", "ch3"]))
+
+    channels = store.Store.channels("test", cfg)
+    assert channels == ["ch1", "ch2", "ch3"]

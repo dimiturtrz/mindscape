@@ -24,7 +24,18 @@ def _residual_cov(X, conditions):
     return np.cov(res.transpose(0, 2, 1).reshape(-1, X.shape[1]), rowvar=False)
 
 
-def test_whitens_each_subjects_within_condition_noise_to_identity():
+def test_fit():
+    rng = np.random.default_rng(0)
+    mix = np.array([[1.5, 0.0, 0.0], [0.9, 1.1, 0.0], [0.3, 0.6, 0.8]])
+    conditions = np.repeat(np.arange(40), 8)
+    signal = rng.standard_normal((40, 3, 1))[np.repeat(np.arange(40), 8)]
+    X = signal + _colored(rng, mix, len(conditions), 16)
+    groups = np.zeros(len(conditions), dtype=int)
+    mvnn = Mvnn(groups, conditions).fit(X)
+    assert mvnn is not None
+
+
+def test_apply():
     rng = np.random.default_rng(0)
     mix = np.array([[1.5, 0.0, 0.0], [0.9, 1.1, 0.0], [0.3, 0.6, 0.8]])
     conditions = np.repeat(np.arange(40), 8)

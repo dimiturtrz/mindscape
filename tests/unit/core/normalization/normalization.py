@@ -37,7 +37,15 @@ def test_empty_chain_is_identity():
     np.testing.assert_array_equal(CompositeNormalization([]).apply(X), X)
 
 
-def test_chain_applies_links_in_order():
+def test_normalizer_fit():
+    """Test that Normalizer.fit() works on subclasses."""
+    X = np.zeros((1, 1, 1), dtype=np.float32)
+    norm = _AddK(5.0)
+    fitted = norm.fit(X)
+    assert fitted is norm  # fit returns self
+
+
+def test_composite_normalization_fit():
     """(x + 1) * 2 ≠ (x * 2) + 1 — order is respected (add-links fit first)."""
     X = np.zeros((1, 1, 1), dtype=np.float32)
     add_then_mul = CompositeNormalization([_AddK(1.0), _MulK(2.0)]).fit(X).apply(X)
@@ -55,8 +63,8 @@ def test_chain_is_a_normalizer():
     assert outer.fit(X).apply(X).item() == 6.0
 
 
-def test_chain_fit_fits_every_link():
-    """Without fit, an _AddK contributes 0; chain.fit must arm each link (else apply ≠ expected)."""
+def test_apply():
+    """Test that CompositeNormalization.apply works after fit."""
     X = np.zeros((1, 1, 1), dtype=np.float32)
     chain = CompositeNormalization([_AddK(5.0), _AddK(2.0)])
     assert chain.apply(X).item() == 0.0          # unfit: both add 0

@@ -5,20 +5,20 @@ import pytest
 from neuroscan.evaluation.cross_dataset import CrossDataset
 
 
-def test_holdout_mask_excludes_eval_concepts_from_training():
+def test_holdout_mask():
     names = np.array(["aardvark", "antelope", "axe", "antelope"])
     mask = CrossDataset.holdout_mask(names, {"antelope"})            # antelope is an eval concept -> drop both its trials
     assert list(mask) == [True, False, True, False]
 
 
-def test_common_channel_order_keeps_a_order_intersection():
+def test_common_channel_order():
     # EEG1-like (has Fz not Cz) vs EEG2-like (has Cz not Fz); common = the shared ones in names_a order
     a = ["Fp1", "Fz", "F3", "Cz_missing_here", "O1"]
     b = ["O1", "F3", "Fp1", "Cz"]                        # no Fz, no 'Cz_missing_here'
     assert CrossDataset.common_channel_order(a, b) == ["Fp1", "F3", "O1"]   # a's order, only those also in b
 
 
-def test_align_channels_reorders_by_name():
+def test_align_channels():
     # eeg channels in src order; align to a target order (a permutation + drop)
     src = ["A", "B", "C", "D"]
     eeg = np.arange(2 * 4 * 3).reshape(2, 4, 3).astype(float)   # [n=2, C=4, t=3]

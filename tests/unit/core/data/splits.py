@@ -14,7 +14,7 @@ def _meta():
     return pl.DataFrame(rows)
 
 
-def test_test_subjects_holds_out_whole_subject():
+def test_make_split():
     tr, _va, te = splits.Splits.make_split(_meta(), splits.SplitSpec(test_subjects=["3"]))
     assert set(te["subject"].unique()) == {"3"}
     assert "3" not in set(tr["subject"].unique())
@@ -33,7 +33,7 @@ def test_val_subjects_disjoint_from_train_and_test():
     assert set(tr["subject"].unique()) == {"3"}
 
 
-def test_loso_yields_one_fold_per_subject():
+def test_leave_one_subject_out():
     folds = list(splits.Splits.leave_one_subject_out(_meta()))
     assert len(folds) == 3
     all_subs = set(_meta()["subject"].unique().to_list())
@@ -42,7 +42,7 @@ def test_loso_yields_one_fold_per_subject():
         assert set(tr["subject"].unique()) == all_subs - {sub}     # train = ALL others, in full (no val carve)
 
 
-def test_within_subject_session_protocol():
+def test_within_subject():
     tr, _va, te = splits.Splits.within_subject(_meta(), "1", test_sessions=["1test"])
     assert set(tr["subject"].unique()) == {"1"}
     assert set(te["subject"].unique()) == {"1"}
@@ -67,3 +67,17 @@ def test_make_split_default_spec_carves_random_val_no_test():
     n = len(_meta())
     assert len(va) == max(1, round(n * 0.2))               # default val_frac 0.2
     assert len(tr) + len(va) == n
+
+
+def test_grouped_kfold():
+    """Test that grouped_kfold yields k folds with proper grouping."""
+    folds = list(splits.Splits.grouped_kfold(_meta(), k=3))
+    assert len(folds) == 3
+    # Each fold should partition the data
+    for fold_name, tr, te in folds:
+        assert fold_name.startswith("fold")
+        assert len(tr) > 0 and len(te) > 0
+        # No overlap: subjects in test should not be in train
+        tr_subjects = set(tr["subject"].unique().to_list())
+        te_subjects = set(te["subject"].unique().to_list())
+        assert len(tr_subjects & te_subjects) == 0

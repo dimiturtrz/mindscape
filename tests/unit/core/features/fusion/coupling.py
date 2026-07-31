@@ -33,10 +33,8 @@ def test_cbsi_recovers_neural_from_systemic():
     assert np.corrcoef(cbsi[0], true_resp[0])[0, 1] > 0.9        # neural recovered, systemic cancelled
 
 
-def test_estimate_coupling_recovers_lag_and_sign():
-    """Across seeds, the recovered lag sits in the HRF's physiological delay window and the coupling sign is
-    positive (a neural drive raises HbO). Tolerances are wide — the single-gamma estimator can't match the
-    double-gamma peak exactly, which is the point (independent test)."""
+def test_estimate_coupling():
+    """estimate_coupling() recovers lag and coupling coefficient from independent synthetic data."""
     cfg = SynthConfig()
     lags = []
     for seed in range(3):

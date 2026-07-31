@@ -22,7 +22,7 @@ null (the prior regularizes, doesn't inform the discriminant) — complementarit
 from __future__ import annotations
 
 import logging
-from typing import cast
+from pathlib import Path
 
 import numpy as np
 from jaxtyping import Float
@@ -59,7 +59,7 @@ class SourcePriorDecode:
         mean over epochs — unsupervised) RBF-interpolated from the optode disk onto the source-space vertices."""
         act = np.asarray(x_fnirs[:, :36, :], dtype=np.float64).std(axis=-1).mean(axis=0)   # [36] HbO channels
         act = act / (act.max() + 1e-12)
-        pos_f = FnirsMontage.fnirs_positions(subject_dir)                                   # [36, 2] unit disk
+        pos_f = FnirsMontage.fnirs_positions(Path(subject_dir))                             # [36, 2] unit disk
         d2 = ((src2d[:, None, :] - pos_f[None, :, :]) ** 2).sum(-1)                          # [n_src, 36]
         wgt = np.exp(-d2 / (2 * _RBF_SIGMA ** 2))
         a_src = (wgt @ act) / (wgt.sum(1) + 1e-12)                                           # [n_src]
@@ -70,7 +70,7 @@ class SourcePriorDecode:
     def _build(cls):
         """Per-subject covariances for the four arms + labels/groups, over the EEG∩fNIRS subjects."""
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
-        mf = store.Store.load("shin2017_nback", cast(EpochCfg, FnirsCfg()))
+        mf = store.Store.load("shin2017_nback", FnirsCfg())  # type: ignore[arg-type]
         subs = sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list()))
         ch_e = eegmod.Shin2017NbackEegAdapter.adapter().channels()
         g, agg = SourcePrior.prior_leadfield(ch_e, _SFREQ)

@@ -5,7 +5,7 @@ import numpy as np
 from neuroscan.evaluation import diagnostics
 
 
-def test_spread_summarizes_across_groups():
+def test_spread():
     rows = [{"acc": 0.4}, {"acc": 0.6}, {"acc": 0.8}]
     s = diagnostics.Diagnostics.spread(rows, key="acc")
     assert np.isclose(s["mean"], 0.6)

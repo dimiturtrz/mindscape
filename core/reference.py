@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-from typing import cast
+from typing import TypedDict, cast
 
 from omegaconf import OmegaConf
 
@@ -16,17 +16,24 @@ logger = logging.getLogger(__name__)
 _REF = REPO / "reference.yaml"
 
 
+class MethodCeiling(TypedDict, total=False):
+    """Reference ceiling record for a method: accuracy, optional kappa, and source."""
+    acc: float
+    kappa: float
+    source: str
+
+
 class Reference:
     """Reads published ceilings from reference.yaml — the free helpers folded in as staticmethods
     (public names kept), so a result is always read against the literature, not in a vacuum."""
 
     @staticmethod
-    def ceilings(dataset: str, regime: str) -> dict[str, str | float]:
+    def ceilings(dataset: str, regime: str) -> dict[str, MethodCeiling]:
         """{method: {acc, kappa?, source}} for a dataset+regime, or {} if none recorded."""
         if not _REF.exists():
             return {}
-        ref = cast(dict[str, dict], OmegaConf.to_container(OmegaConf.load(_REF), resolve=True))
-        return cast(dict[str, str | float], (ref.get(dataset, {}) or {}).get(regime, {}) or {})
+        ref = cast(dict[str, dict[str, dict[str, object]]], OmegaConf.to_container(OmegaConf.load(_REF), resolve=True))
+        return cast(dict[str, MethodCeiling], (ref.get(dataset, {}) or {}).get(regime, {}) or {})
 
     @staticmethod
     def compare(our_acc: float, dataset: str, regime: str, method: str | None = None) -> str:

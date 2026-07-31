@@ -4,7 +4,7 @@ import numpy as np
 from neuroscan.evaluation.retrieval import Retrieval
 
 
-def test_retrieval_metrics_known_ranks():
+def test_retrieval_metrics():
     # trial0: true=0 is the top score (rank 1); trial1: true=0 has two higher (rank 3)
     scores = np.array([[10.0, 1, 1, 1, 1],
                        [1.0, 10, 5, 1, 1]])
@@ -14,9 +14,7 @@ def test_retrieval_metrics_known_ranks():
     assert abs(m["mrr"] - (1.0 + 1.0 / 3) / 2) < 1e-9        # (1/1 + 1/3)/2
     assert m["median_rank"] == 2.0                            # ranks [1, 3]
     assert 0.0 <= m["pr_auc"] <= 1.0
-
-
-def test_retrieval_metrics_perfect_vs_worst():
+    # perfect vs worst
     C = 5
     scores_perfect = np.eye(C) * 10                          # each trial's true label scores highest
     m = Retrieval.retrieval_metrics(scores_perfect, np.arange(C))
@@ -41,24 +39,19 @@ def _scores(n_conf_correct, n_flat_wrong, n_cand=5, seed=0):
     return np.array(scores), np.array(labels)
 
 
-def test_informative_confidence_positive_gap_and_counts():
+def test_retrieval_calibration():
     scores, labels = _scores(60, 40)
     out = Retrieval.retrieval_calibration(scores, labels, scale=1.0, n_bins=10)
     assert abs(out["top1_acc"] - 0.60) < 0.05           # the 60 sharp trials are the hits
     assert out["conf_gap"] > 0.1                         # confident trials are the correct ones
     assert 0.0 <= out["ece"] <= 1.0
     assert sum(b["count"] for b in out["reliability"]) == 100   # every trial lands in exactly one bin
-
-
-def test_all_correct_gap_is_nan():
+    # all correct: gap is nan
     scores, labels = _scores(30, 0)
     out = Retrieval.retrieval_calibration(scores, labels)
     assert out["top1_acc"] == 1.0
     assert np.isnan(out["conf_gap"])                     # no misses -> gap undefined, reported as nan
-
-
-def test_scale_sharpens_confidence():
-    # higher temperature scale concentrates softmax -> higher mean confidence on the same scores
+    # scale sharpens confidence: higher temperature scale concentrates softmax
     scores, labels = _scores(50, 50, seed=3)
     lo = Retrieval.retrieval_calibration(scores, labels, scale=0.5)
     hi = Retrieval.retrieval_calibration(scores, labels, scale=5.0)

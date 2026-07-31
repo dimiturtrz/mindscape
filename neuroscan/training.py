@@ -24,7 +24,7 @@ class EarlyStopper:
         self.patience, self.min_delta = patience, min_delta
         self.sign = 1.0 if mode == "max" else -1.0
         self._best = -float("inf")       # sign-normalized: always "higher is better" internally
-        self.best_state: dict[str, Any] | None = None
+        self.best_state: dict[str, torch.Tensor] | None = None
         self.best_step = -1
         self.bad = 0
 

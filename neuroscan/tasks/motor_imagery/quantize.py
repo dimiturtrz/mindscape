@@ -13,9 +13,9 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import TypedDict
 
 import numpy as np
-from typing import TypedDict
 import polars as pl
 from jaxtyping import Float
 from scipy.special import softmax

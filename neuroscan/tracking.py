@@ -20,9 +20,9 @@ import logging
 import os
 import pickle
 import tempfile
+from collections.abc import Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import cast
 
 import joblib
 import mlflow
@@ -67,6 +67,32 @@ class Tracking:
         return out
 
     @staticmethod
+    def _start_run(run_name: str, run_id: str | None, params: dict[str, object] | None,
+                   idf: Path | None) -> None:
+        """Start or resume a run, persisting the run ID if needed."""
+        if run_id:
+            mlflow.start_run(run_id=run_id)  # resume — don't re-log params
+        else:
+            mlflow.start_run(run_name=run_name)
+            if params:
+                mlflow.log_params(Tracking._flat(params))
+            if idf:
+                idf.parent.mkdir(parents=True, exist_ok=True)
+                active_run = mlflow.active_run()
+                if active_run is not None:
+                    idf.write_text(active_run.info.run_id)
+
+    @staticmethod
+    def _setup_tracking() -> None:
+        """Initialize MLflow tracking infrastructure."""
+        _MLRUNS.mkdir(exist_ok=True)
+        mlflow.set_tracking_uri(_DB_URI)
+        try:
+            mlflow.enable_system_metrics_logging()  # GPU/CPU/mem (psutil + pynvml if present)
+        except _TRACK_ERRORS as exc:
+            logger.debug(f"tracking: {exc}")
+
+    @staticmethod
     @contextmanager
     def run(experiment: str, run_name: str, params: dict[str, object] | None = None,
             tags: dict[str, object] | None = None, run_dir: str | Path | None = None):
@@ -77,26 +103,11 @@ class Tracking:
             yield
             return
         try:
-            _MLRUNS.mkdir(exist_ok=True)
-            mlflow.set_tracking_uri(_DB_URI)
+            Tracking._setup_tracking()
             mlflow.set_experiment(experiment)
-            try:
-                mlflow.enable_system_metrics_logging()      # GPU/CPU/mem (psutil + pynvml if present)
-            except _TRACK_ERRORS as exc:
-                logger.debug(f"tracking: {exc}")
             idf = Path(run_dir) / ".mlflow_run_id" if run_dir else None
             rid = idf.read_text().strip() if (idf and idf.exists()) else None
-            if rid:
-                mlflow.start_run(run_id=rid)                 # resume — don't re-log params
-            else:
-                mlflow.start_run(run_name=run_name)
-                if params:
-                    mlflow.log_params(Tracking._flat(params))
-                if idf:
-                    idf.parent.mkdir(parents=True, exist_ok=True)
-                    active_run = mlflow.active_run()
-                    if active_run is not None:
-                        idf.write_text(active_run.info.run_id)
+            Tracking._start_run(run_name, rid, params, idf)
             for k, v in (tags or {}).items():
                 mlflow.set_tag(k, str(v))
             _active = mlflow
@@ -113,7 +124,7 @@ class Tracking:
             _active = None
 
     @staticmethod
-    def metrics(d: dict[str, object], step: int | None = None) -> None:
+    def metrics(d: Mapping[str, object], step: int | None = None) -> None:
         if _active is None:
             return
         for k, v in d.items():
@@ -123,7 +134,7 @@ class Tracking:
                 logger.debug(f"tracking: {exc}")
 
     @staticmethod
-    def per_group(prefix: str, d: dict[str, object]) -> None:
+    def per_group(prefix: str, d: Mapping[str, object]) -> None:
         """Log a per-group scalar dict as <prefix>_<group> (e.g. acc_subject_1)."""
         Tracking.metrics({f"{prefix}_{g}": v for g, v in d.items()})
 

@@ -92,8 +92,11 @@ def _waveforms(X: Float[np.ndarray, "n ch t"], y: Int[np.ndarray, "n"], names: l
     return {"t": t, "trials": out, "chans": names}
 
 
-def _predictions(subject: int, X: Float[np.ndarray, "n ch t"],
-                 y: Int[np.ndarray, "n"]) -> tuple[dict[str, dict[str, str | list[float] | bool]], dict[str, float | str]]:
+def _predictions(
+    subject: int,
+    X: Float[np.ndarray, "n ch t"],
+    y: Int[np.ndarray, "n"],
+) -> tuple[dict[str, dict[str, str | list[float] | bool]], dict[str, float | str]]:
     """Honest per-trial output: train the fNIRS decoder on the OTHER subjects (LOSO), predict THIS
     subject's trials. Returns ({class: {truth, pred, probs, correct}} for the shown example trial) and the
     subject's cross-subject fold accuracy — so the viewer shows ground truth vs prediction, not just signal."""

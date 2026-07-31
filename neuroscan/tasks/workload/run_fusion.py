@@ -24,7 +24,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import TypedDict, cast
 
 import numpy as np
 import polars as pl
@@ -45,6 +45,43 @@ from neuroscan.tasks.workload.riemann import Riemann
 logger = logging.getLogger(__name__)
 
 
+class _FoldResult(TypedDict):
+    """Per-fold results from fusion: accuracy metrics for each modality and fusion strategy."""
+    fold: str
+    n: int
+    eeg: float
+    fnirs: float
+    late: float
+    feature: float
+
+
+class _ComplementarityDict(TypedDict):
+    """Complementarity analysis between modalities."""
+    best_single: float
+    oracle_either: float
+    err_corr: float
+    both_wrong: float
+
+
+class _AggregationDict(TypedDict, total=False):
+    """Aggregation sweep results for different combiners."""
+    eeg: float
+    fnirs: float
+    late: float
+    feature: float
+    stacking: float
+    cal_eeg: float
+    cal_fnirs: float
+    eeg_conf_gap: float
+    fnirs_conf_gap: float
+    mean: float
+    product: float
+    conf_weight: float
+    maxconf_pick: float
+    cal_mean: float
+    cal_conf_weight: float
+
+
 @dataclass
 class _RunnerModels:
     """The four modality callables the fold loop needs: the EEG probability + tangent-feature functions
@@ -58,8 +95,8 @@ class _RunnerModels:
 @dataclass
 class _Analysis:
     """The two fusion diagnostics reported together: complementarity/oracle-headroom + the aggregation sweep."""
-    complementarity: dict[str, object]
-    aggregation: dict[str, object]
+    complementarity: _ComplementarityDict
+    aggregation: _AggregationDict
 
 _EEG, _FNIRS = "shin2017_nback_eeg", "shin2017_nback"
 # the recipes each modality decodes best at (from the unimodal runs)
@@ -95,7 +132,7 @@ class RunFusion:
 
     @classmethod
     def _run_folds(cls, fold_subs: list[list[str]], meta_e: pl.DataFrame, meta_f: pl.DataFrame,
-                   subs: list[int], models: _RunnerModels) -> tuple[list[dict[str, object]], PooledProbs]:
+                   subs: list[int], models: _RunnerModels) -> tuple[list[_FoldResult], PooledProbs]:
         """Run every fold: unimodal + fused predictions per fold. Returns (rows, PooledProbs) — the pooled probs
         hold the concatenated correct-masks and probability stacks used for the oracle + aggregation-sweep."""
         field_names = ("eeg", "fnirs", "stacking", "cal_eeg", "cal_fnirs", "y", "eeg_correct", "fnirs_correct")
@@ -123,20 +160,20 @@ class RunFusion:
                                 ("eeg_correct", eeg_probs.argmax(1) == test.y),
                                 ("fnirs_correct", fnirs_probs.argmax(1) == test.y)):
                 pooled[name].append(value)
-            rows.append({
+            rows.append(cast(_FoldResult, {
                 "fold": str(fold), "n": len(test.y),
                 "eeg": metrics.Metrics.accuracy(test.y, eeg_probs.argmax(1)),
                 "fnirs": metrics.Metrics.accuracy(test.y, fnirs_probs.argmax(1)),
                 "late": metrics.Metrics.accuracy(test.y, late.argmax(1)),
                 "feature": metrics.Metrics.accuracy(test.y, feature.argmax(1)),
-            })
+            }))
             logger.info(f"  fold{fold}: eeg {rows[-1]['eeg']:.3f} | fnirs {rows[-1]['fnirs']:.3f} | "
                   f"late {rows[-1]['late']:.3f} | feature {rows[-1]['feature']:.3f}")
 
         return rows, PooledProbs(**{name: np.concatenate(values) for name, values in pooled.items()})
 
     @classmethod
-    def _report(cls, regime: str | None, n_classes: int, rows: list[dict[str, object]], mean: dict[str, float],
+    def _report(cls, regime: str | None, n_classes: int, rows: list[_FoldResult], mean: dict[str, float],
                 analysis: _Analysis) -> None:
         """Print the per-role means, fusion-vs-unimodal deltas, oracle headroom, and the aggregation sweep."""
         comp, agg = analysis.complementarity, analysis.aggregation
@@ -216,7 +253,8 @@ class RunFusion:
         agg = combine.aggregation_sweep(pooled)                  # every output-space combiner
         comp["best_aggregator"] = float(max(agg[k] for k in combine.SWEEP_KEYS))
         comp["oracle_gap_captured"] = comp["best_aggregator"] - comp["best_single"]
-        cls._report(regime, n_classes, rows, mean, _Analysis(comp, agg))
+        cls._report(regime, n_classes, rows, mean,
+                    _Analysis(cast(_ComplementarityDict, comp), cast(_AggregationDict, agg)))
 
         run_dir = Path(args.out) if args.out else Path("runs") / f"fusion_{regime}_shin2017_nback"
         run_dir.mkdir(parents=True, exist_ok=True)

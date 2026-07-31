@@ -13,7 +13,7 @@ def _sig(n=2, ch=3, t=200, seed=0):
     return np.random.default_rng(seed).standard_normal((n, ch, t))
 
 
-def test_cbsi_cancels_common_mode():
+def test_cbsi_neural():
     """HbO == HbR is pure systemic/motion (common mode) — CBSI(HbO,HbO) = 0.5(HbO - 1·HbO) = 0."""
     s = _sig()
     assert np.allclose(Chromophore.cbsi_neural(s, s), 0.0, atol=1e-6)   # ~1e-10 residual from the std-ratio epsilon

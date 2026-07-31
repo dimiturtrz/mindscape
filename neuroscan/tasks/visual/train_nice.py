@@ -38,7 +38,7 @@ from torch.utils.data import DataLoader
 from core.data.eeg import things_eeg2 as things
 from core.features.eeg.covariance import Covariance
 from core.features.eeg.montage import EegMontage
-from neuroscan.evaluation.invariants import Invariants
+from neuroscan.evaluation.invariants import InvariantCheckDict, Invariants
 from neuroscan.evaluation.metrics import Metrics
 from neuroscan.evaluation.retrieval import Retrieval
 from neuroscan.models.encoders import NORMALIZE_CHOICES, EncoderRegistry, EncoderSpec
@@ -609,7 +609,7 @@ class TrainNice:
             "chance_top1": 1 / (int(test_concept.max()) + 1),
             **test,
         }
-        Invariants.check(cast(dict[str, object], result))  # fail loud on a silently-inconsistent number
+        Invariants.check(cast(InvariantCheckDict, result))  # fail loud on a silently-inconsistent number
         return cast(_TrainResult, result)
 
 

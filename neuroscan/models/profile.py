@@ -55,7 +55,9 @@ class Profile:
         logger.info(f"\n=== params + FLOPs (input {N_CHANS}ch x {N_TIMES} samples, batch 1) ===")
         logger.info(f"{'model':16} {'params':>10} {'FLOPs':>10}")
         for r in rows:
-            logger.info(f"{r['model']:16} {cls._fmt(cast(int | None, r['params'])):>10} {cls._fmt(cast(int | None, r['flops'])):>10}")
+            params_fmt = cls._fmt(cast(int | None, r["params"]))
+            flops_fmt = cls._fmt(cast(int | None, r["flops"]))
+            logger.info(f"{r['model']:16} {params_fmt:>10} {flops_fmt:>10}")
         return rows
 
 

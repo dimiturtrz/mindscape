@@ -9,7 +9,7 @@ import numpy as np
 from core.features.fnirs.amplitude import Amplitude
 
 
-def test_amplitude_features_shape_and_known_values():
+def test_amplitude_features():
     """`[n, ch, t]` -> `[n, 3*ch]` laid out [mean(ch..), slope(ch..), peak(ch..)]; each block recovers the
     hand-computable statistic for a flat, a rising, and a dipping channel."""
     t = 50
@@ -24,6 +24,17 @@ def test_amplitude_features_shape_and_known_values():
     assert np.isclose(mean[1], 2.0)                      # flat channel mean
     assert slope[0] > 0 and abs(slope[1]) < 1e-6         # ramp rises, flat is flat
     assert peak[0] > 0 and peak[2] < 0                   # signed extreme: HbO up, HbR down
+
+
+def test_time_axis():
+    """time_axis() returns centered time axis + sum-of-squares (OLS denominator), cached for window length."""
+    tc, tc_ss = Amplitude.time_axis(100)
+    assert isinstance(tc, np.ndarray)
+    assert isinstance(tc_ss, float)
+    assert len(tc) == 100
+    assert np.isclose(tc.mean(), 0.0, atol=1e-6)                  # centered at 0
+    assert tc_ss > 0                                               # sum of squares is positive
+    assert np.isclose(tc_ss, (tc.astype(np.float64) ** 2).sum())   # matches expected computation
 
 
 def test_amplitude_response_scales_monotonically():

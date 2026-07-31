@@ -15,26 +15,22 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import TypedDict
+from typing import cast
 
 import numpy as np
 from pydantic import BaseModel
 
 from core.data.eeg import things_eeg2 as things
 from neuroscan.tasks.cli import Cli
-from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice
+from neuroscan.tasks.visual.train_nice import TrainConfig, TrainNice, _TrainResult
 
 logger = logging.getLogger(__name__)
 
 _CELLS = ("within_single", "within_avg", "cross_single", "cross_avg")
 
 
-class AuditRowData(TypedDict, total=False):
-    """Audit result row with within/cross and single/avg metrics."""
-    within_single: dict[int, float]
-    within_avg: dict[int, float]
-    cross_single: dict[int, float]
-    cross_avg: dict[int, float]
+# an audit row: cell name (within_single/within_avg/cross_single/cross_avg) -> {top-k: score}
+AuditRowData = dict[str, dict[int, float]]
 _ROBUST = "cross_single"        # the defensible number every leaky cell is measured against
 
 
@@ -63,7 +59,7 @@ class RetrievalAudit:
         index — comparing indices would falsely report every test concept as 'seen'."""
         meta = things.ThingsEeg2.meta()
         return {str(name)[6:] if str(name)[:5].isdigit() else str(name)
-                for name in meta[f"{split_key}_img_concepts"]}
+                for name in cast("list[object]", meta[f"{split_key}_img_concepts"])}
 
     @classmethod
     def verify_concept_disjoint(cls) -> dict[str, int]:
@@ -77,9 +73,9 @@ class RetrievalAudit:
                 "concept_overlap": len(overlap)}
 
     @classmethod
-    def _cells_from_result(cls, result: dict[str, object], regime: str) -> dict[str, dict[int, float]]:
+    def _cells_from_result(cls, result: _TrainResult, regime: str) -> dict[str, dict[int, float]]:
         """Pull the (single-trial, concept-avg) top-1/5 out of one train() result into flat `{regime}_{avg}` keys."""
-        return {f"{regime}_single": dict(result["single_trial"]), f"{regime}_avg": dict(result["concept_avg"])}
+        return {f"{regime}_single": dict(result["single_trial"]), f"{regime}_avg": dict(result["concept_avg"])}  # type: ignore[index]
 
     @classmethod
     def summarize(cls, rows: list[AuditRowData], ks: tuple[int, ...] = (1, 5)) -> dict[str, object]:

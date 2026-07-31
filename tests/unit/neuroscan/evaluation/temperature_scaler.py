@@ -16,13 +16,13 @@ def _overconfident():
     return logits, y
 
 
-def test_fit_temperature_softens_overconfidence():
+def test_fit():
     logits, y = _overconfident()
     T = TemperatureScaler().fit(logits, y).T
     assert T > 1.0                           # overconfident -> T>1 softens
 
 
-def test_temperature_lowers_ece_and_keeps_argmax():
+def test_ece():
     logits, y = _overconfident()
     T = TemperatureScaler().fit(logits, y).T
     assert TemperatureScaler(T).ece(logits, y) < TemperatureScaler(1.0).ece(logits, y)

@@ -67,7 +67,7 @@ class Head(nn.Module):
         return TokenHead(spec, context, n_tok)
 
     @staticmethod
-    def mlp(in_dim: int, hidden: int, dropout: float, embed_dim: int) -> nn.Module:
+    def build_mlp(in_dim: int, hidden: int, dropout: float, embed_dim: int) -> nn.Module:
         """Shared head tail: bare linear (hidden=0) or one GELU-MLP block -> CLIP dim."""
         if hidden == 0:
             return nn.Linear(in_dim, embed_dim)
@@ -126,7 +126,7 @@ class TokenHead(Head):
             in_dim = n_tok * context.d
         else:
             in_dim = context.d                                   # mean/attn collapse the tokens to d
-        self.mlp = Head.mlp(in_dim, spec.hidden, spec.dropout, context.embed_dim)
+        self.mlp = Head.build_mlp(in_dim, spec.hidden, spec.dropout, context.embed_dim)
 
     @override
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
@@ -151,7 +151,7 @@ class PosAttnHead(Head):
         self.pos_proj = nn.Linear(2, context.d)
         self.enc = nn.TransformerEncoderLayer(context.d, _NHEAD, dim_feedforward=spec.hidden or context.d,
                                               dropout=spec.dropout, batch_first=True, activation="gelu")
-        self.mlp = Head.mlp(context.d, spec.hidden, spec.dropout, context.embed_dim)
+        self.mlp = Head.build_mlp(context.d, spec.hidden, spec.dropout, context.embed_dim)
 
     @override
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
@@ -170,7 +170,7 @@ class TopoHead(Head):
         self.conv = nn.Sequential(
             nn.Conv2d(context.d, 64, 3, padding=1), nn.GELU(),
             nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.GELU(), nn.AdaptiveAvgPool2d(1))
-        self.mlp = Head.mlp(64, spec.hidden, spec.dropout, context.embed_dim)
+        self.mlp = Head.build_mlp(64, spec.hidden, spec.dropout, context.embed_dim)
 
     @override
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
@@ -190,7 +190,7 @@ class GcnHead(Head):
         self.register_buffer("adj", Head.adjacency(pos))                            # [C, C] normalized Â
         self.gcn1 = nn.Linear(context.d, context.d)
         self.gcn2 = nn.Linear(context.d, context.d)
-        self.mlp = Head.mlp(context.d, spec.hidden, spec.dropout, context.embed_dim)
+        self.mlp = Head.build_mlp(context.d, spec.hidden, spec.dropout, context.embed_dim)
 
     @override
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:
@@ -212,7 +212,7 @@ class TemporalConvHead(Head):
         self.conv = nn.Sequential(
             nn.Conv1d(context.d, 64, 3, padding=1), nn.GELU(),
             nn.Conv1d(64, 64, 3, padding=1), nn.GELU(), nn.AdaptiveAvgPool1d(1))
-        self.mlp = Head.mlp(64, spec.hidden, spec.dropout, context.embed_dim)
+        self.mlp = Head.build_mlp(64, spec.hidden, spec.dropout, context.embed_dim)
 
     @override
     def forward(self, tokens: Float[Tensor, "n ch s d"]) -> Float[Tensor, "n d_embed"]:

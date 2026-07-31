@@ -20,7 +20,6 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, cast
 
 import numpy as np
 from jaxtyping import Float, Int
@@ -37,6 +36,7 @@ from neuroscan.tasks.cli import Cli
 logger = logging.getLogger(__name__)
 
 _EEG_CFG = EpochCfg(fmin=4, fmax=30, tmin=0.0, tmax=40.0, resample=100.0)
+_FNIRS_CFG = FnirsCfg()
 _K = 5
 _SEED = 0
 
@@ -69,8 +69,8 @@ class CalibrationAblation:
             Ftr = SubjectNorm.zscore_per_subject(F, g)            # train side: per-subject z (train subjects only used)
             train_mask = np.isin(g, subs[train_subj])
             clf = cls._lda().fit(Ftr[train_mask], y[train_mask])
-            yt: list[Any] = []
-            yp: list[Any] = []
+            yt: list[int] = []
+            yp: list[int] = []
             for s in subs[test_subj]:
                 idx = np.where(g == s)[0]
                 perm = rng.permutation(idx)
@@ -87,7 +87,7 @@ class CalibrationAblation:
         Cli.setup_logging()
         rng = np.random.default_rng(_SEED)
         me = store.Store.load("shin2017_nback_eeg", _EEG_CFG)
-        mf = store.Store.load("shin2017_nback", cast(EpochCfg, FnirsCfg()))
+        mf = store.Store.load("shin2017_nback", _FNIRS_CFG)  # type: ignore[arg-type]
         subs = np.array(sorted(set(me["subject"].unique().to_list()) & set(mf["subject"].unique().to_list())))
         qe = me.filter(me["subject"].is_in([str(s) for s in subs]))
         qf = mf.filter(mf["subject"].is_in([str(s) for s in subs]))

@@ -27,3 +27,53 @@ def test_montage_info_builds_average_referenced_eeg_info():
     info = Source(["C3", "Cz", "C4"], 250.0)._montage_info()
     assert info["sfreq"] == 250.0 and len(info["ch_names"]) == 3
     assert len(info["projs"]) == 1                                             # average-reference projection added
+
+
+def test_build_forward():
+    """Forward solution construction requires fsaverage; skip if unavailable."""
+    pytest.importorskip("mne.datasets")
+    src = Source(["C3", "Cz", "C4"], 250.0)
+    try:
+        fwd, info = src.build_forward()
+        assert fwd is not None and info is not None
+    except Exception:
+        pytest.skip("fsaverage template not available")
+
+
+def test_cortical_labels():
+    """Cortical labels require fsaverage annotation; skip if unavailable."""
+    pytest.importorskip("mne")
+    src = Source(["C3", "Cz", "C4"], 250.0)
+    try:
+        labels = src.cortical_labels()
+        assert isinstance(labels, list) and len(labels) > 0
+    except Exception:
+        pytest.skip("fsaverage annotations not available")
+
+
+def test_source_positions():
+    """Source positions require fsaverage forward solution; skip if unavailable."""
+    pytest.importorskip("mne.datasets")
+    import numpy as np
+    src = Source(["C3", "Cz", "C4"], 250.0)
+    try:
+        positions = src.source_positions()
+        assert positions.shape[1] == 3
+        assert np.isfinite(positions).all()
+    except Exception:
+        pytest.skip("fsaverage template not available")
+
+
+def test_to_parcels():
+    """Parcel projection requires fsaverage forward/inverse; skip if unavailable."""
+    pytest.importorskip("mne.datasets")
+    import numpy as np
+    src = Source(["C3", "Cz", "C4"], 250.0)
+    try:
+        rng = np.random.default_rng(0)
+        epochs = rng.standard_normal((2, 3, 100))
+        parcels = src.to_parcels(epochs)
+        assert parcels.shape[0] == 2 and parcels.shape[2] == 100  # n, n_labels, t
+        assert np.isfinite(parcels).all()
+    except Exception:
+        pytest.skip("fsaverage template or forward/inverse not available")

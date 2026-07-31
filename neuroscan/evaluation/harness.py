@@ -17,7 +17,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, TypedDict, cast
 
 import numpy as np
 from joblib import Parallel, delayed, parallel_config
@@ -59,7 +59,7 @@ class Method:
     evaluation `regime`. These five always travel together — every fold is fit/scored the same way."""
     name: str
     fit: Callable[[np.ndarray, np.ndarray], object]
-    score: Callable[[object, np.ndarray], np.ndarray]
+    score: Callable[..., np.ndarray]
     n_classes: int
     regime: str = ""
 
@@ -95,7 +95,7 @@ class Harness:
     def _fit_score_fold(
         fold: tuple[object, "DataFrame", "DataFrame"],
         fit_fn: Callable[[np.ndarray, np.ndarray], object],
-        score_fn: Callable[[object, np.ndarray], np.ndarray],
+        score_fn: Callable[..., np.ndarray],
     ):
         """One fold: gather -> fit -> score -> metrics. Returns (name, row, probs, yte, clf)."""
         name, train, test = fold
@@ -150,11 +150,10 @@ class Harness:
         P: list[np.ndarray] = []
         Y: list[np.ndarray] = []
         G: list[np.ndarray] = []
-        from typing import cast as type_cast
         for name, row, probs, yte, clf in done:                         # collected in fold order
             if models_out is not None:
                 models_out.append((name, clf))
-            per.append(type_cast(FoldMetrics, row))
+            per.append(cast(FoldMetrics, row))
             logger.info(f"  {row['fold']:>6}  acc {row['acc']:.3f}  kappa {row['kappa']:.3f}  "
                         f"ece {row['ece']:.3f}  (n={row['n']})")
             P.append(probs)
@@ -167,7 +166,7 @@ class Harness:
         pooled = {"acc": metrics.Metrics.accuracy(y, pred), "kappa": metrics.Metrics.kappa(y, pred),
                   "ece": metrics.Metrics.ece_from_probs(probs, y),
                   "confusion": metrics.Metrics.confusion(y, pred, method.n_classes).tolist()}
-        sp = diagnostics.Diagnostics.spread(type_cast(list[dict[str, object]], per), "acc")
+        sp = diagnostics.Diagnostics.spread(cast(list[dict[str, object]], per), "acc")
         logger.info(f"  {'MEAN':>6}  acc {fold_mean['acc']:.3f}  kappa {fold_mean['kappa']:.3f}  "
               f"ece {fold_mean['ece']:.3f}   (spread {sp['min']:.3f}-{sp['max']:.3f}, std {sp['std']:.3f})")
         return {"method": method.name, "regime": method.regime, "n_classes": method.n_classes, "n_folds": len(per),

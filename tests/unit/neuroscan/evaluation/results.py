@@ -34,19 +34,19 @@ def test_split_name_regime_and_dataset():
         "fnirs_lda", "cross_subject", "shin2017_nback")
 
 
-def test_metrics_handles_both_schemas():
+def test_read_metrics():
     assert results.Results.read_metrics(_harness(ACC, KAPPA, ECE)) == {"acc": ACC, "kappa": KAPPA, "ece": ECE}
     assert results.Results.read_metrics({"acc_mean": ACC, "kappa_mean": KAPPA}) == {"acc": ACC, "kappa": KAPPA, "ece": None}
     assert results.Results.read_metrics({"nothing": 1}) is None
 
 
-def test_collect_rounds_to_precision(tmp_path):
+def test_collect(tmp_path):
     row = results.Results.collect(_write_run(tmp_path, NAME).parent)[NAME]
     assert row["acc"] == round(ACC, results._PRECISION)          # snapshot keeps _PRECISION decimals
     assert row["dataset"] == "bnci2014_001"
 
 
-def test_record_upserts_and_preserves_others(tmp_path):
+def test_record(tmp_path):
     out = tmp_path / "results.json"
     other = "riemann_within_bnci2014_001"
     a = _write_run(tmp_path, NAME, _harness(acc=0.5))
@@ -59,10 +59,18 @@ def test_record_upserts_and_preserves_others(tmp_path):
     results.Results.record(a, out)
     runs = json.loads(out.read_text())["runs"]
     assert runs[NAME]["acc"] == 0.55 and runs[other]["acc"] == 0.7      # upsert in place, sibling untouched
-
-
-def test_record_nonfatal_on_missing(tmp_path):
+    # nonfatal on missing
     assert results.Results.record(tmp_path / "nope", tmp_path / "results.json") is None   # no aggregate -> None, no raise
+
+
+def test_write(tmp_path):
+    """write collects all runs and saves to output file."""
+    out = tmp_path / "results.json"
+    a = _write_run(tmp_path, NAME, _harness(acc=0.5))
+    results.Results.write(out_path=out, runs_dir=a.parent)
+    content = json.loads(out.read_text())
+    assert "runs" in content
+    assert NAME in content["runs"]
 
 
 def test_render_single_and_gap():

@@ -16,11 +16,10 @@ from pathlib import Path
 from typing import cast
 
 import numpy as np
+import polars as pl
 from sklearn.model_selection import GroupKFold
 
-import polars as pl
-
-from baselines.eeg import transfer  # noqa: F401
+from baselines.eeg import transfer
 from baselines.fusion import combine
 from core.data import store
 from core.data.eeg.base import EpochCfg

@@ -17,6 +17,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+from typing import cast
 
 from core import config
 from core.data import store
@@ -40,9 +41,10 @@ def main():
                     help="skip updating the committed results.json snapshot (scratch/experimental runs)")
     args = ap.parse_args()
 
-    exp = config.load_experiment(args.exp, args.overrides)  # type: ignore[attr-defined]
-    dataset, method, regime = exp.dataset, exp.method, exp.regime
-    cfg = FnirsCfg(**exp.recipe)
+    exp = config.Config.load_experiment(args.exp, args.overrides)
+    dataset = cast(str, exp.dataset)
+    method, regime = cast(str, exp.method), cast(str, exp.regime)
+    cfg = FnirsCfg.model_validate(exp.recipe)
     meta = store.Store.load(dataset, cfg)  # type: ignore[arg-type]
     n_classes = int(meta["label_id"].max()) + 1  # type: ignore[arg-type]
     chance = 1.0 / n_classes

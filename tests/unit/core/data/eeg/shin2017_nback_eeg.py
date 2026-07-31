@@ -43,7 +43,7 @@ def test_load_continuous_drops_non_session_markers(synthetic_mat):
     assert len(onsets) == len(y) == 3                                 # 'instruction' marker filtered out
 
 
-def test_get_data_epochs_end_to_end(synthetic_mat, monkeypatch):
+def test_get_data(synthetic_mat, monkeypatch):
     """get_data over the mocked parse: bandpass -> block-epoch -> resample -> (X[n,28,t], y, meta)."""
     monkeypatch.setattr(mod.Shin2017NbackEegAdapter, "_index", lambda self: {1: Path("dummy")})
 
@@ -52,3 +52,46 @@ def test_get_data_epochs_end_to_end(synthetic_mat, monkeypatch):
     assert x.shape[:2] == (3, 28) and x.shape[2] == 50                # 3 blocks, 28 EEG ch, 0.5 s @ 100 Hz
     np.testing.assert_array_equal(sorted(y), [0, 1, 2])              # the 3 back-levels epoched
     assert meta["subject"].to_list() == ["1", "1", "1"]             # per-block meta carried
+
+
+def test_adapter(synthetic_mat):
+    """Test that adapter() returns a functional adapter instance."""
+    adapter = mod.Shin2017NbackEegAdapter.adapter()
+    assert adapter is not None
+    assert hasattr(adapter, "get_data") and callable(adapter.get_data)
+
+
+def test_subjects(synthetic_mat, monkeypatch):
+    """Test that subjects() returns the dataset subject list."""
+    # Mock _index to return test data
+    monkeypatch.setattr(mod.Shin2017NbackEegAdapter, "_index", lambda self: {1: Path("dummy")})
+    adapter = mod.Shin2017NbackEegAdapter()
+    subjects = adapter.subjects()
+    assert subjects and isinstance(subjects, list)
+    assert all(isinstance(s, int) for s in subjects)
+
+
+def test_channels(synthetic_mat, monkeypatch):
+    """Test that channels() returns the EEG channel names."""
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    # Create a mock adapter with _index that returns test data
+    adapter = mod.Shin2017NbackEegAdapter()
+
+    # Mock the loadmat to return synthetic channel data
+    mock_cnt = SimpleNamespace(
+        clab=np.array([f"E{i}" for i in range(28)] + ["HEOG", "VEOG"]),
+        fs=200.0,
+        x=np.zeros((200, 30))
+    )
+
+    with patch('core.data.eeg.shin2017_nback_eeg.sio.loadmat') as mock_loadmat:
+        mock_loadmat.return_value = {"cnt_nback": mock_cnt}
+        # Mock _index to return test data
+        monkeypatch.setattr(adapter, "_index", lambda: {1: Path("dummy")})
+        channels = adapter.channels()
+        assert channels is not None
+        assert isinstance(channels, list)
+        assert len(channels) == 28
+        assert all(isinstance(c, str) for c in channels)

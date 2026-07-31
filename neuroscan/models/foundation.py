@@ -15,14 +15,14 @@ from typing import TYPE_CHECKING, cast
 
 from torch import nn
 
-from neuroscan.models.cbramod_backbone import CBraModBackbone
-from neuroscan.models.composite import Model
-from neuroscan.models.head import HeadContext, HeadSpec, TokenHead
-from neuroscan.models.eegpt_backbone import _EEGPT_PATCH, _EEGPT_RATE, EegptBackbone
-from neuroscan.models.lora import LoraLinear
-
 if TYPE_CHECKING:
     from neuroscan.models.encoder_spec import EncoderSpec
+
+from neuroscan.models.cbramod_backbone import CBraModBackbone
+from neuroscan.models.composite import Model
+from neuroscan.models.eegpt_backbone import _EEGPT_PATCH, _EEGPT_RATE, EegptBackbone
+from neuroscan.models.head import HeadContext, HeadSpec, TokenHead
+from neuroscan.models.lora import LoraLinear
 
 logger = logging.getLogger(__name__)
 

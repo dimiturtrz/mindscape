@@ -160,8 +160,8 @@ class JointForward:
         return np.stack(lead_cols, axis=1).astype(np.float32), np.stack(parcel_pos).astype(np.float32)
 
     @classmethod
-    def generate(cls, montage: tuple[list[str], float], fnirs_xyz: Float[np.ndarray, "c 3"], grid: Grid,
-                 cfg: JointConfig | None = None, seed: int = 0) -> dict[str, np.ndarray]:  # pragma: no cover
+    def _generate(cls, montage: tuple[list[str], float], fnirs_xyz: Float[np.ndarray, "c 3"], grid: Grid,
+                  cfg: JointConfig | None = None, seed: int = 0) -> dict[str, np.ndarray]:  # pragma: no cover
         """Compose the pure forwards onto the real fsaverage template lead field (bd 728). `montage` = the EEG
         `(ch_names, sfreq)`; `grid` = the trial/time shape (its `n_parcels` is overridden by the actual DK count).
         Returns `{eeg[n,ch,t], hbo, hbr [n,C,t], source[n,P,t], active}` — paired observations + shared ground

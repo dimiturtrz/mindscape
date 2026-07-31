@@ -14,7 +14,7 @@ def _tone(freq, fs, n):
     return np.sin(2 * np.pi * freq * t)[None, :]        # [1, n]
 
 
-def test_bandpass_passes_in_band_kills_out_of_band():
+def test_bandpass():
     fs, n = 128.0, 2048
     x = _tone(15.0, fs, n) + _tone(2.0, fs, n)          # 15 Hz in [8,32]; 2 Hz below the band
     y = Signal.bandpass(x, 8.0, 32.0, fs)
@@ -31,7 +31,7 @@ def _rec(cont, onsets, labels):
     return BlockedRecording(np.asarray(cont, float), np.asarray(onsets), np.asarray(labels))
 
 
-def test_block_epochs_cuts_windows_and_drops_edge():
+def test_block_epochs():
     cont = np.arange(200.0).reshape(2, 100)             # 2 ch, 100 samples
     rec = _rec(cont, onsets=[10, 50, 98], labels=[0, 1, 2])   # 98+5=103 > 100 -> dropped
     X, y = Signal.block_epochs(rec, fs=1.0, tmin=0.0, tmax=5.0)
@@ -52,3 +52,31 @@ def test_block_epochs_all_invalid_returns_empty():
     rec = _rec(np.zeros((3, 10)), onsets=[9], labels=[1])     # 9+5 > 10 -> nothing valid
     X, y = Signal.block_epochs(rec, fs=1.0, tmin=0.0, tmax=5.0)
     assert X.shape == (0, 3, 5) and y.shape == (0,)
+
+
+def test_add():
+    """Test that EpochBatch.add appends epochs."""
+    from core.data.signal import EpochBatch
+    batch = EpochBatch()
+    X = np.random.default_rng(0).standard_normal((2, 3, 50)).astype(np.float32)
+    y = np.array([0, 1])
+    batch.add(X, y, ["1", "1"], ["s1", "s1"], ["0", "0"])
+    assert len(batch.Xs) > 0
+    assert len(batch.ys) > 0
+    assert len(batch.subj) == 2
+
+
+def test_stack():
+    """Test that EpochBatch.stack creates a stacked array."""
+    from core.data.signal import EpochBatch
+    batch = EpochBatch()
+    X1 = np.random.default_rng(0).standard_normal((2, 3, 50)).astype(np.float32)
+    X2 = np.random.default_rng(1).standard_normal((3, 3, 50)).astype(np.float32)
+    y1 = np.array([0, 1])
+    y2 = np.array([1, 0, 1])
+    batch.add(X1, y1, ["1", "1"], ["s1", "s1"], ["0", "0"])
+    batch.add(X2, y2, ["2", "2", "2"], ["s1", "s1", "s1"], ["0", "0", "0"])
+    X, y, meta = batch.stack()
+    assert X.shape == (5, 3, 50)
+    assert y.shape == (5,)
+    assert len(meta) == 5

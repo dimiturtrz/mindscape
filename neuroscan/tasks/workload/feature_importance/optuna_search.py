@@ -23,7 +23,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast, TypedDict
+from typing import cast
 
 import numpy as np
 import optuna
@@ -32,6 +32,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
 from core.config import REPO
 from core.data import store
+from core.data.eeg.base import EpochCfg
 from core.data.fnirs.base import FnirsCfg
 from core.features import DescriptorBank, WeightedFamilyScaler
 from neuroscan.tasks.cli import Cli
@@ -53,6 +54,7 @@ class OptunaConfig:
     weight_low: float
     weight_high: float
     fold_seeds: list[int]
+    tpe_seeds: list[int]
     k: int
 
 
@@ -145,7 +147,7 @@ class OptunaSearch:
         if args.trials:
             cfg.n_trials = args.trials
 
-        meta = store.Store.load(cfg.dataset, cast(object, FnirsCfg()))
+        meta = store.Store.load(cfg.dataset, cast(EpochCfg, FnirsCfg()))
         X, y = store.Store.gather(meta)
         groups = meta["subject"].to_numpy()
         F, fam = DescriptorBank.extract_bank(X)

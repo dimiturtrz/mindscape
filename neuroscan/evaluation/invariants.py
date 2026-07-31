@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import TypedDict
+from typing import TypedDict, cast
 
 logger = logging.getLogger(__name__)
 
@@ -49,15 +49,14 @@ class Invariants:
 
     @staticmethod
     def _acc(res: InvariantCheckDict) -> dict[int, float]:
-        from typing import cast as type_cast
         empty_dict: dict[int | str, float] = {}
-        return {int(k): float(v) for k, v in type_cast(dict[int | str, float], res.get("single_trial", empty_dict)).items()}
+        return {int(k): float(v) for k, v in cast(dict[int | str, float], res.get("single_trial", empty_dict)).items()}
 
     @staticmethod
     def _ci(res: InvariantCheckDict) -> dict[int, tuple[float, float, float]]:
-        from typing import cast as type_cast
         empty_dict: dict[int | str, tuple[float, float, float]] = {}
-        return {int(k): (float(v[0]), float(v[1]), float(v[2])) for k, v in type_cast(dict[int | str, tuple[float, float, float]], res.get("single_trial_ci", empty_dict)).items()}
+        ci_data = cast(dict[int | str, tuple[float, float, float]], res.get("single_trial_ci", empty_dict))
+        return {int(k): (float(v[0]), float(v[1]), float(v[2])) for k, v in ci_data.items()}
 
     @staticmethod
     def _bounded(res: InvariantCheckDict) -> list[str]:

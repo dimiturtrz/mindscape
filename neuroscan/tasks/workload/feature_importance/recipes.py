@@ -13,7 +13,7 @@ import json
 import logging
 
 import numpy as np
-from jaxtyping import Float, Int
+from jaxtyping import Float, Int, Shaped
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -50,7 +50,7 @@ class Recipes:
     kept)."""
 
     @classmethod
-    def _cv(cls, F: Float[np.ndarray, "n f"], fam: np.ndarray, y: Int[np.ndarray, "n"],
+    def _cv(cls, F: Float[np.ndarray, "n f"], fam: Shaped[np.ndarray, "f"], y: Int[np.ndarray, "n"],
             groups: Int[np.ndarray, "n"], families: list[str]):
         Fr = F[:, np.isin(fam, families)]
         accs: list[float] = []

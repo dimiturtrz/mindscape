@@ -13,7 +13,7 @@ from core.features.eeg.csd import CSD   # noqa: E402
 _CH = ["Fz", "Cz", "Pz", "Oz", "C3", "C4", "F3", "F4", "P3", "P4"]
 
 
-def test_csd_preserves_shape_and_is_finite():
+def test_csd_transform():
     rng = np.random.default_rng(0)
     Xe = rng.standard_normal((3, len(_CH), 500))
     out = CSD.csd_transform(Xe, _CH, 100.0)

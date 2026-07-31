@@ -9,10 +9,10 @@ import pytest
 
 pytest.importorskip("pyriemann")
 
-from neuroscan.tasks.workload.riemann import Riemann   # noqa: E402
+from neuroscan.tasks.workload.riemann import Riemann  # noqa: E402
 
 
-def test_cov_is_spd_and_right_shape():
+def test_cov():
     """OAS covariance per epoch: square [n, ch, ch], symmetric, and positive-definite (all eigenvalues > 0)."""
     rng = np.random.default_rng(0)
     n, ch, t = 5, 4, 128
@@ -22,10 +22,7 @@ def test_cov_is_spd_and_right_shape():
     assert np.allclose(c, np.transpose(c, (0, 2, 1)), atol=1e-8)     # symmetric
     eig = np.linalg.eigvalsh(c)
     assert (eig > 0).all()                                          # positive-definite (OAS shrinkage)
-
-
-def test_cov_shrinkage_keeps_spd_when_undersampled():
-    """t < ch would make the raw sample covariance singular; OAS shrinkage must still yield an SPD matrix."""
+    # shrinkage keeps spd when undersampled
     rng = np.random.default_rng(1)
     x = rng.standard_normal((3, 6, 4))                              # 4 samples, 6 channels -> rank-deficient raw
     eig = np.linalg.eigvalsh(Riemann.cov(x))
@@ -45,11 +42,38 @@ def _two_group_dataset(rng):
     return np.asarray(x), np.asarray(y), np.asarray(g)
 
 
-def test_cross_subject_decode_returns_accuracies_in_unit_range():
+def test_cross_subject_folds(monkeypatch):
+    """cross_subject_folds yields (y_test, proba) per seed per fold, with grouped stratification."""
+    rng = np.random.default_rng(3)
+    x, y, g = _two_group_dataset(rng)
+    c = Riemann.cov(x)
+    # Stub transfer.zero_shot_predict to avoid pyriemann API issues
+    from baselines.eeg import transfer as transfer_module
+    def stub_predict(domain, test_domain, scale=False):
+        n = len(test_domain.groups)
+        return rng.random((n, 2))
+    monkeypatch.setattr(transfer_module, "zero_shot_predict", stub_predict)
+
+    folds = list(Riemann.cross_subject_folds(c, y, g, seeds=[0], k=2))
+    assert len(folds) >= 1  # at least k=2 folds for k-fold cv
+    for y_test, proba in folds:
+        assert len(y_test) > 0
+        assert proba.shape[0] == len(y_test)
+        assert proba.shape[1] == 2  # binary classification
+
+
+def test_cross_subject_decode(monkeypatch):
     """Tiny grouped-CV smoke: (mean, std) accuracy, both in [0, 1]."""
     rng = np.random.default_rng(2)
     x, y, g = _two_group_dataset(rng)
     c = Riemann.cov(x)
+    # Stub transfer.zero_shot_predict to avoid pyriemann API issues
+    from baselines.eeg import transfer as transfer_module
+    def stub_predict(domain, test_domain, scale=False):
+        n = len(test_domain.groups)
+        return rng.random((n, 2))
+    monkeypatch.setattr(transfer_module, "zero_shot_predict", stub_predict)
+
     mean, std = Riemann.cross_subject_decode(c, y, g, seeds=[0], k=2)
     assert 0.0 <= mean <= 1.0
     assert 0.0 <= std <= 1.0

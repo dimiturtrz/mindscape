@@ -34,7 +34,15 @@ def test_crops_windows_match_source_slices():
             assert tidx[k * N + i] == i
 
 
-def test_standardizer_registry():
+def test_crops():
+    """Transforms.crops extracts sliding-window crops from trials."""
+    X = np.arange(4 * 2 * 10).reshape(4, 2, 10).astype(np.float32)
+    Xc, tidx = T.Transforms.crops(X, crop_len=5, n_crops=2)
+    assert Xc.shape[0] == 8  # 4 trials × 2 crops
+    assert Xc.shape[1:] == (2, 5)
+
+
+def test_standardizer():
     assert isinstance(T.Transforms.standardizer("zscore"), ZScore)
     assert isinstance(T.Transforms.standardizer("none"), Identity)
     assert isinstance(T.Transforms.standardizer("unknown"), ZScore)   # fallback

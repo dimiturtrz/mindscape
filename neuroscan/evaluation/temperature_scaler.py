@@ -38,7 +38,7 @@ class TemperatureScaler:
         self.T = float(log_t.exp().detach())
         return self
 
-    def probs(self, logits: Float[np.ndarray, "n c"], T: float | None = None) -> Float[np.ndarray, "n c"]:
+    def _probs(self, logits: Float[np.ndarray, "n c"], T: float | None = None) -> Float[np.ndarray, "n c"]:
         """Numerically-stable softmax(logits / T); T defaults to the fitted self.T."""
         z = logits / (self.T if T is None else T)
         z = z - z.max(1, keepdims=True)
@@ -46,6 +46,6 @@ class TemperatureScaler:
         return p / p.sum(1, keepdims=True)
 
     def ece(self, logits: Float[np.ndarray, "n c"], labels: Int[np.ndarray, "n"], T: float | None = None) -> float:
-        p = self.probs(logits, T)
+        p = self._probs(logits, T)
         conf, pred = p.max(1), p.argmax(1)
         return metrics.Metrics.ece(conf, (pred == labels).astype(float))[0]

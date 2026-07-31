@@ -5,7 +5,7 @@
 """
 import pytest
 
-from neuroscan.evaluation.sync_numbers import SyncNumbers, _README, _SKIP_DIRS
+from neuroscan.evaluation.sync_numbers import _README, _SKIP_DIRS, SyncNumbers
 
 _RUNS = {"csp_lda": {"acc": 0.598, "kappa": 0.464}, "eegnet": {"acc": 0.512}}
 

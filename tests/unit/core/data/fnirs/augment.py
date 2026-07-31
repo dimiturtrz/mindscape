@@ -12,7 +12,7 @@ def _paired(n=4, ch=6, t=400):
     return hbo.reshape(n, ch, t), hbr.reshape(n, ch, t)
 
 
-def test_shape_preserved_and_not_identity():
+def test_domain_randomize():
     hbo, hbr = _paired()
     ao, ar = Augment.domain_randomize(hbo, hbr, 5.0, seed=1)
     assert ao.shape == hbo.shape and ao.dtype == np.float32

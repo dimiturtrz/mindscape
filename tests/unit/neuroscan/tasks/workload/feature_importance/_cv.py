@@ -17,26 +17,17 @@ def _data(n_subj=10, per_subj=4, n_feat=3, seed=0):
     return F, y, groups
 
 
-def test_grouped_folds_count_is_seeds_times_k():
+def test_grouped_folds():
     F, y, g = _data()
     folds = list(Cv.grouped_folds(F, y, g, seeds=(0, 1, 2), k=5))
     assert len(folds) == 3 * 5                            # one fold per (seed, k) pair
-
-
-def test_folds_are_subject_disjoint():
-    F, y, g = _data()
+    # folds are subject-disjoint
     for tr, te in Cv.grouped_folds(F, y, g, seeds=(0,), k=5):
         assert set(g[tr]).isdisjoint(set(g[te]))         # no subject on both sides
-
-
-def test_each_sample_tested_once_per_seed():
-    F, y, g = _data()
+    # each sample tested once per seed
     tested = np.concatenate([te for _tr, te in Cv.grouped_folds(F, y, g, seeds=(0,), k=5)])
     assert sorted(tested.tolist()) == list(range(len(y)))  # every index in exactly one test fold
-
-
-def test_reseeding_changes_the_partition():
-    F, y, g = _data()
+    # reseeding changes the partition
     f0 = [te.tolist() for _tr, te in Cv.grouped_folds(F, y, g, seeds=(0,), k=5)]
     f1 = [te.tolist() for _tr, te in Cv.grouped_folds(F, y, g, seeds=(1,), k=5)]
     assert f0 != f1                                       # different seed -> different split

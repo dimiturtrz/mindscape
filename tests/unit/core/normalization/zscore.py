@@ -7,7 +7,7 @@ import numpy as np
 from core.normalization.zscore import ZScore
 
 
-def test_per_channel_zero_mean_unit_variance():
+def test_apply():
     rng = np.random.default_rng(0)
     X = (rng.standard_normal((8, 5, 200)) * 3.0 + 7.0).astype(np.float32)   # off-mean, non-unit scale
     out = ZScore().apply(X)

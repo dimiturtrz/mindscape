@@ -20,7 +20,8 @@ def _paired(rng, n=3, n_e=8, n_f=6, drop_node=False):
     return PairedModalities(Xe, Xf, pos_e, pos_f)
 
 
-def test_build_tensor_shape_and_finite():
+def test_build_tensor():
+    """build_tensor() returns fused feature tensor [n, C, grid, grid, T] with C=5 channels."""
     rng = np.random.default_rng(0)
     grid = 12
     X = BrainCamera.build_tensor(_paired(rng), grid=grid, series=SeriesConfig(fps=10.0, t_end=20.0))
@@ -28,7 +29,8 @@ def test_build_tensor_shape_and_finite():
     assert np.isfinite(X).all()
 
 
-def test_fused_node_series_drops_nonfinite_nodes_and_is_finite():
+def test_fused_node_series():
+    """fused_node_series() drops non-finite nodes and returns coupled feature series."""
     rng = np.random.default_rng(1)
     joint, coupling = BrainCamera.fused_node_series(_paired(rng, drop_node=True),
                                                     series=SeriesConfig(fps=10.0, t_end=20.0))
@@ -46,8 +48,8 @@ def test_fnirs_false_isolates_eeg_strength_nonnegative():
     assert (strength >= 0).all()
 
 
-def test_coverage_map_is_bounded_and_local():
-    """Coverage in [0,1]; ~1 where an EEG and an fNIRS sensor co-locate (grid centre), lower far from both."""
+def test_coverage_map():
+    """coverage_map() returns a local map in [0,1] that's high where sensors co-locate."""
     pos_e = np.array([[0.0, 0.0], [0.6, 0.6]])
     pos_f = np.array([[0.0, 0.0], [-0.6, -0.6]])
     cov = BrainCamera.coverage_map(pos_e, pos_f, grid=16)

@@ -12,7 +12,7 @@ def _sine(freq, fs, t, rng):
     return np.sin(2 * np.pi * freq * np.arange(t) / fs) + 0.01 * rng.standard_normal(t)
 
 
-def test_band_powers_shape_is_bands_times_channels():
+def test_band_powers():
     """`[n, ch, t]` -> `[n, ch*len(bands)]` (one log band-power per band per channel)."""
     rng = np.random.default_rng(0)
     n, ch, t, fs = 4, 5, 400, 100.0
