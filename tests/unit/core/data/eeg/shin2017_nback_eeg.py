@@ -54,11 +54,11 @@ def test_get_data(synthetic_mat, monkeypatch):
     assert meta["subject"].to_list() == ["1", "1", "1"]             # per-block meta carried
 
 
-def test_adapter(synthetic_mat):
-    """Test that adapter() returns a functional adapter instance."""
-    adapter = mod.Shin2017NbackEegAdapter.adapter()
-    assert adapter is not None
-    assert hasattr(adapter, "get_data") and callable(adapter.get_data)
+def test_adapter():
+    """adapter() is the factory — it builds the n-back EEG adapter with its dataset name + 3 workload classes."""
+    a = mod.Shin2017NbackEegAdapter.adapter()
+    assert isinstance(a, mod.Shin2017NbackEegAdapter)
+    assert a.name == "shin2017_nback_eeg" and a.n_classes == 3
 
 
 def test_subjects(synthetic_mat, monkeypatch):

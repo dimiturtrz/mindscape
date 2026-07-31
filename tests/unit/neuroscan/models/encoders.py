@@ -34,13 +34,12 @@ def test_register():
     def test_builder(spec):
         return torch.nn.Identity()
 
-    # Register it
+    # Register it, then build under that name — the built object must be what THIS builder returns (an
+    # Identity), proving register wired the name to the builder (not just that some encoder exists).
     EncoderRegistry.register("test_encoder_temp", test_builder)
-
-    # Verify it's in the registry by building it
     spec = EncoderSpec(n_channels=8, n_times=64, embed_dim=128)
     encoder = EncoderRegistry.build_encoder("test_encoder_temp", spec)
-    assert encoder is not None
+    assert isinstance(encoder, torch.nn.Identity)
 
 
 @pytest.mark.parametrize(("override", "link"), [

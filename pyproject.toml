@@ -209,7 +209,9 @@ ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer"
 # JointForward: the source-space fusion generator (bd shd) — exercised by tests/ (which vulture doesn't scan)
 # and pending the decode-integration wiring; the SLF001 op-namespace migration removed the internal
 # self-refs that had masked it. Test-referenced, not dead.
-ignore_names = ["model_config", "forward", "intra_op_num_threads", "proj_out", "allow_tf32", "JointForward"]
+ignore_names = ["model_config", "forward", "intra_op_num_threads", "proj_out", "allow_tf32", "JointForward",
+                "generate"]   # JointForward.generate: source-space fusion entry, needs MNE fsaverage (integration,
+                              # not unit) — awaiting the decode-integration wiring (bd shd), documented not-dead
 # <<< LOCAL-SLOT: vulture-ignore-names
 # >>> LOCAL-SLOT: vulture-scan — edit freely, the template will not overwrite intent here
 paths = ["core", "neuroscan", "baselines"]

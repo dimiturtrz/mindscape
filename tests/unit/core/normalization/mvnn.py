@@ -31,8 +31,11 @@ def test_fit():
     signal = rng.standard_normal((40, 3, 1))[np.repeat(np.arange(40), 8)]
     X = signal + _colored(rng, mix, len(conditions), 16)
     groups = np.zeros(len(conditions), dtype=int)
-    mvnn = Mvnn(groups, conditions).fit(X)
-    assert mvnn is not None
+    est = Mvnn(groups, conditions)
+    assert est.fit(X) is est                                     # fit returns self (sklearn contract)
+    # fit computes one per-group noise whitener, a [ch, ch] matrix (here: a single group over 3 channels)
+    assert set(est._whiteners) == {0}
+    assert est._whiteners[0].shape == (3, 3)
 
 
 def test_apply():

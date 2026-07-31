@@ -15,7 +15,6 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import TypedDict
 
 import numpy as np
 import torch
@@ -35,17 +34,6 @@ logger = logging.getLogger(__name__)
 _EVAL_BATCH = 512
 
 
-class CrossDatasetResult(TypedDict, total=False):
-    """Cross-dataset retrieval evaluation result."""
-    direction: str
-    eeg1_subjects: list[int]
-    eeg2_subjects: list[int]
-    n_candidates: int
-    chance_top1: float
-    single_trial: dict[int, float]
-    concept_avg: dict[int, float]
-    retrieval_metrics: dict[str, float]
-    calibration: dict[str, float]
 _LOGIT_SCALE = float(np.log(1 / 0.07))   # the CLIP temperature the encoder trains with — reuse for calibration
 
 
